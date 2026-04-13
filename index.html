@@ -207,6 +207,7 @@
 
     <div id="vrButtonWrap">
       <button id="btn-vr" disabled>🥽 VR を開始する</button>
+      <button id="btn-ar" disabled style="margin-top:10px; background:linear-gradient(135deg,#006060,#003a3a) !important; box-shadow:0 0 28px rgba(0,180,160,0.5), inset 0 1px 0 rgba(255,255,255,0.12) !important;">📱 AR を開始する</button>
     </div>
 
     <div class="divider"></div>
@@ -530,31 +531,45 @@ addLaser(ctrl0);
 addLaser(ctrl1);
 
 /* ================================================================
-   SPARK SYSTEM — Points による固定プール方式
+   SPARK SYSTEM — Points 固定プール方式（確実版）
 ================================================================ */
 const SPARK_MAX = 80;
-const _spkPositions = new Float32Array(SPARK_MAX * 3);
-const _spkColors    = new Float32Array(SPARK_MAX * 3);
+const _spkPositions = new Float32Array(SPARK_MAX * 3); // 全ゼロで初期化
+const _spkColors    = new Float32Array(SPARK_MAX * 3); // 全ゼロで初期化
 const spkGeo = new THREE.BufferGeometry();
 const _spkPosBuf = new THREE.BufferAttribute(_spkPositions, 3);
-const _spkColBuf = new THREE.BufferAttribute(_spkColors,    3);
+const _spkColBuf = new THREE.BufferAttribute(_spkColors, 3);
 _spkPosBuf.setUsage(THREE.DynamicDrawUsage);
 _spkColBuf.setUsage(THREE.DynamicDrawUsage);
 spkGeo.setAttribute('position', _spkPosBuf);
 spkGeo.setAttribute('color',    _spkColBuf);
-// drawRange は毎フレーム更新する。初期値を Infinity にしておかないと count=0 のまま
-spkGeo.setDrawRange(0, 0);
-const spkMat  = new THREE.PointsMaterial({ size: 0.05, vertexColors: true, sizeAttenuation: true, depthTest: true });
+// drawRangeは毎フレームsetするが、まずInfinityで初期化
+spkGeo.drawRange = { start: 0, count: Infinity };
+const spkMat = new THREE.PointsMaterial({
+  size: 0.06,
+  vertexColors: true,
+  sizeAttenuation: true,
+  transparent: true,
+  depthTest: false, // 常に前面に描画
+});
 const spkMesh = new THREE.Points(spkGeo, spkMat);
 scene.add(spkMesh);
 
 const _spk = Array.from({ length: SPARK_MAX }, () => ({
   active: false,
-  px: 0, py: 0, pz: 0,
+  px: 0, py: -100, pz: 0, // 非アクティブ時は画面外
   vx: 0, vy: 0, vz: 0,
   life: 0, maxLife: 1,
 }));
 let _spkHead = 0;
+
+// 初期状態：全頂点を画面外の位置に書き込んでおく（drawRange=0にするより確実）
+for (let i = 0; i < SPARK_MAX; i++) {
+  _spkPositions[i*3]   = 0;
+  _spkPositions[i*3+1] = -100;
+  _spkPositions[i*3+2] = 0;
+}
+_spkPosBuf.needsUpdate = true;
 
 function spawnSparks(origin, count) {
   for (let n = 0; n < count; n++) {
@@ -574,27 +589,40 @@ function spawnSparks(origin, count) {
 }
 
 function updateSparks(delta) {
-  let dc = 0;
+  let anyActive = false;
   for (let i = 0; i < SPARK_MAX; i++) {
-    const s = _spk[i];
-    if (!s.active) continue;
+    const s   = _spk[i];
+    const b   = i * 3;
+    if (!s.active) {
+      // 非アクティブは画面外に飛ばす
+      _spkPositions[b]   = 0;
+      _spkPositions[b+1] = -100;
+      _spkPositions[b+2] = 0;
+      continue;
+    }
+    anyActive = true;
     s.life -= delta;
-    if (s.life <= 0) { s.active = false; continue; }
+    if (s.life <= 0) {
+      s.active = false;
+      _spkPositions[b]   = 0;
+      _spkPositions[b+1] = -100;
+      _spkPositions[b+2] = 0;
+      continue;
+    }
     s.vy -= 9.8 * delta;
     s.px += s.vx * delta;
     s.py += s.vy * delta;
     s.pz += s.vz * delta;
-    const b = dc * 3;
     _spkPositions[b]   = s.px;
     _spkPositions[b+1] = s.py;
     _spkPositions[b+2] = s.pz;
     const t = Math.max(0, s.life / s.maxLife);
-    _spkColors[b]   = 1.0;              // R: 常に1
-    _spkColors[b+1] = 0.3 + t * 0.7;   // G: 新しいほど黄
-    _spkColors[b+2] = t * 0.15;         // B: わずかに白っぽく
-    dc++;
+    _spkColors[b]   = 1.0;
+    _spkColors[b+1] = 0.25 + t * 0.75;
+    _spkColors[b+2] = t * 0.1;
   }
-  spkGeo.setDrawRange(0, dc);
+  // 常に全SPARK_MAX頂点を描画（非アクティブは-100Yで不可視）
+  spkGeo.drawRange = { start: 0, count: SPARK_MAX };
   _spkPosBuf.needsUpdate = true;
   _spkColBuf.needsUpdate = true;
 }
@@ -618,6 +646,7 @@ const floor = new THREE.Mesh(floorGeo, floorMat);
 floor.rotation.x = -Math.PI / 2;
 floor.receiveShadow = true;
 scene.add(floor);
+let isARMode = false; // AR起動時にtrueになる
 
 // --- WORKBENCH (shared reference point, placed in front of player) ---
 const workbenchPos = new THREE.Vector3(0, 0.85, -1.1);
@@ -744,12 +773,16 @@ const bladeGeo = createBladeGeometry();
 const bladeMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.4, metalness: 0.9 });
 const bladeMesh = new THREE.Mesh(bladeGeo, bladeMat);
 bladeMesh.castShadow = true;
-// 刃物を作業台に寝かせる: rotation.x = -PI/2 でXZ平面に平置き
-// bladeGeo はXY平面で描かれているので、X軸回転で寝かせる
-bladeMesh.rotation.x = -Math.PI / 2;
-// 作業台天板の上に置く
-bladeMesh.position.set(-0.25, workbenchPos.y + 0.04, -1.25);
-groupShaping.add(bladeMesh);
+// bladeGeo は X:0〜0.5, Y:0〜0.09 → 中心はX:0.25, Y:0.045
+// PivotGroupを使って中心で回転できるようにする
+// bladeMesh を X:-0.25 にオフセットし、PivotGroup の原点 = 刃物中心
+const bladePivot = new THREE.Group();
+bladeMesh.position.set(-0.25, 0, 0);
+bladeMesh.rotation.x = -Math.PI / 2; // 作業台に寝かせる
+bladePivot.add(bladeMesh);
+// PivotGroupを作業台上に配置
+bladePivot.position.set(0, workbenchPos.y + 0.04, -1.25);
+groupShaping.add(bladePivot);
 
 // Zone indicators — 表(+)裏(-)歪みをスプライトで表示
 const ZONE_COUNT = CONFIG.SHAPING.ZONE_COUNT;
@@ -854,10 +887,8 @@ arrowCanvas.width = 128; arrowCanvas.height = 128;
   ac.beginPath(); ac.moveTo(64, 108); ac.lineTo(84, 84); ac.stroke();
 }
 const arrowTex    = new THREE.CanvasTexture(arrowCanvas);
-const arrowSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: arrowTex, transparent: true, depthTest: false }));
-arrowSprite.scale.set(0.12, 0.30, 1);
-arrowSprite.position.set(0.10, workbenchPos.y + 0.12, -1.1);
-groupSharpening.add(arrowSprite);
+// 矢印スプライトは不要のため追加しない
+// groupSharpening.add(arrowSprite);
 
 // 角度表示 HUD パネル（砥石の上部に常時表示）
 const angleHudCanvas = document.createElement('canvas');
@@ -903,13 +934,43 @@ function updateAngleHud(leftDeg, rightDeg, isAligned, angleDeg) {
 }
 
 // 研ぎフェーズ用刃物
-// bladeGeo は X:0〜0.5 の形状なので、中心はX:0.25
-// → Groupでラップして X:-0.25 オフセットを与え、Groupの原点が刃物の中心になるようにする
+// bladeGeo は X:0〜0.5, Y:0〜0.09 の形状
+// rotation.x = -PI/2 で寝かせると X方向に長く、Y(元)がZ方向に
+// 刃先(X=0付近)を奥(+Z)に向けるため rotation.y = PI
 const sharpenBladeGroup = new THREE.Group();
 const sharpenBladeMesh  = bladeMesh.clone();
 sharpenBladeMesh.position.set(-0.25, 0, 0); // X中心補正
-sharpenBladeMesh.rotation.set(-Math.PI / 2, 0, 0);
+// 刃先を奥(+Z方向)に向ける：rotation.x=-PI/2 + rotation.y=PI
+sharpenBladeMesh.rotation.set(-Math.PI / 2, Math.PI, 0);
 sharpenBladeGroup.add(sharpenBladeMesh);
+
+// 刃先マーカー（青い細線で刃側を明示）
+const edgeMarkerGeo = new THREE.BoxGeometry(0.50, 0.005, 0.003);
+const edgeMarkerMat = new THREE.MeshBasicMaterial({ color: 0x44aaff, transparent: true, opacity: 0.85 });
+const edgeMarker    = new THREE.Mesh(edgeMarkerGeo, edgeMarkerMat);
+// 刃先(Y=0 in original = 刃側) は rotation.y=PI後は -Z側 = 奥側
+// sharpenBladeMesh座標系でZ=-0.045付近（bladeGeo Y:0〜0.09の刃先はY=0）
+edgeMarker.position.set(0, 0.005, 0.045); // 奥側
+sharpenBladeGroup.add(edgeMarker);
+
+// ラベルスプライト「刃先→」
+const edgeLabelCanvas = document.createElement('canvas');
+edgeLabelCanvas.width = 128; edgeLabelCanvas.height = 48;
+{
+  const ec = edgeLabelCanvas.getContext('2d');
+  ec.fillStyle = 'rgba(20,100,200,0.85)';
+  ec.beginPath(); ec.roundRect(2,2,124,44,8); ec.fill();
+  ec.fillStyle = '#88ddff';
+  ec.font = 'bold 18px sans-serif';
+  ec.textAlign = 'center'; ec.textBaseline = 'middle';
+  ec.fillText('刃先 / EDGE ▶', 64, 24);
+}
+const edgeLabelTex    = new THREE.CanvasTexture(edgeLabelCanvas);
+const edgeLabelSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: edgeLabelTex, transparent: true, depthTest: false }));
+edgeLabelSprite.scale.set(0.20, 0.075, 1);
+edgeLabelSprite.position.set(0, 0.12, 0.08); // 奥側上方
+sharpenBladeGroup.add(edgeLabelSprite);
+
 sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.1);
 groupSharpening.add(sharpenBladeGroup);
 
@@ -945,17 +1006,21 @@ function makeTextCanvas(text, w, h, bg, fg, fontSize) {
   return c;
 }
 
-// Floating info panel in VR
+// Floating info panel — 正面固定（カメラに追従しない）
 const infoPanel = new THREE.Group();
 scene.add(infoPanel);
 let infoPanelMesh = null;
 function updateInfoPanel(text) {
   if (infoPanelMesh) infoPanel.remove(infoPanelMesh);
-  const c = makeTextCanvas(text, 512, 256, 'rgba(0,0,0,0.85)', '#e8c87a', 22);
+  // 解像度を上げて読みやすくする（1024x512）
+  const c   = makeTextCanvas(text, 1024, 512, 'rgba(0,0,0,0.88)', '#e8c87a', 38);
   const tex = new THREE.CanvasTexture(c);
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false });
-  infoPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.4), mat);
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, side: THREE.DoubleSide });
+  infoPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.5), mat);
   infoPanelMesh.position.set(0, 2.0, -1.3);
+  // 正面を向かせる（回転なし = ワールド座標系でZ-方向を向く）
+  infoPanelMesh.rotation.set(0, 0, 0);
   infoPanel.add(infoPanelMesh);
 }
 
@@ -1063,11 +1128,13 @@ function buildResultCanvas(score, bladeStateSnap, scores) {
 
 function showResultPanel(score, bladeStateSnap, scores) {
   if (resultPanelMesh) resultPanel.remove(resultPanelMesh);
-  const c = buildResultCanvas(score, bladeStateSnap, scores);
+  const c   = buildResultCanvas(score, bladeStateSnap, scores);
   const tex = new THREE.CanvasTexture(c);
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false });
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, side: THREE.DoubleSide });
   resultPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.75), mat);
   resultPanelMesh.position.set(0, 1.55, -1.6);
+  resultPanelMesh.rotation.set(0, 0, 0); // 正面固定
   resultPanel.add(resultPanelMesh);
   resultPanel.visible = true;
 }
@@ -1256,8 +1323,9 @@ function resetShaping() {
     z.distortion = sign * (5 + Math.random() * 15);
     updateZoneSprite(i);
   });
-  bladeMesh.position.set(-0.2, workbenchPos.y + 0.06, -1.1);
-  bladeMesh.rotation.y = 0;
+  bladePivot.position.set(0, workbenchPos.y + 0.04, -1.25);
+  bladePivot.rotation.set(0, 0, 0);
+  bladeMesh.rotation.x = -Math.PI / 2;
 }
 function resetSharpening() {
   strokeCount     = 0;
@@ -1269,15 +1337,17 @@ function resetSharpening() {
   sharpenStreak   = 0;
   sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.1);
   sharpenBladeGroup.rotation.set(0, 0, 0);
-  sharpenBladeMesh.rotation.set(-Math.PI / 2, 0, 0);
+  sharpenBladeMesh.rotation.set(-Math.PI / 2, Math.PI, 0); // 刃先を奥に
 }
 
 function setVisibility() {
-  groupForging.visible   = currentState === State.FORGING;
-  groupShaping.visible   = currentState === State.SHAPING;
+  groupForging.visible    = currentState === State.FORGING;
+  groupShaping.visible    = currentState === State.SHAPING;
   groupSharpening.visible = currentState === State.SHARPENING;
   resultBladeGroup.visible = currentState === State.RESULT;
-  resultPanel.visible    = currentState === State.RESULT;
+  resultPanel.visible     = currentState === State.RESULT;
+  // RESULT時はinfoパネルを非表示
+  infoPanel.visible = currentState !== State.RESULT;
 }
 
 function nextState() {
@@ -1323,17 +1393,21 @@ function onEnterState(state, prev) {
     resetShaping();
     // 鍛造の歪みを引き継ぐ
     bladeState.shapeDistortion = shapeDistortion;
-    // 何もしなければ symmetryError = 初期歪みの絶対値平均（高い）
-    bladeState.symmetryError = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
+    // 何もしなければ symmetryError = 初期歪みの絶対値平均（高い = 悪い）
+    // ゾーン初期歪みは±5〜20、平均は約12.5 → スコア寄与は (100-12.5)*0.3 ≈ 26点
+    // ただしAスキップで完全0点にするため、ここで最悪値100をセット
+    bladeState.symmetryError = 100;
     updateInfoPanel('フェーズ②：成形\nShaping\n\n赤いエリアを叩いて歪みを修正せよ\n（Xボタンで表裏反転）');
     updateStatusBar('成形', '打撃 0/100 | Aで終了', 0);
 
   } else if (state === State.SHARPENING) {
     resetSharpening();
-    // 成形の対称性誤差を確定
-    bladeState.symmetryError = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
-    // 何もしなければ sharpness=0（strokeScores=0）
-    updateInfoPanel('フェーズ③：研ぎ\nSharpening\n\n両手グリップで刃物を持ち左右に動かせ\n音で角度を確認しよう');
+    // 成形が完了していれば shapingComplete=true で実際のエラー値を使う
+    // 未完了（Aスキップ）の場合は bladeState.symmetryError = 100 のまま
+    if (shapingComplete) {
+      bladeState.symmetryError = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
+    }
+    updateInfoPanel('フェーズ③：研ぎ\nSharpening\n\n両手グリップで刃物を保持\n前後に動かして研ぐ');
     updateStatusBar('研ぎ', 'ストローク 0/30', 0);
 
   } else if (state === State.RESULT) {
@@ -1384,6 +1458,7 @@ let prevRightTrigger = false;
 let forgingHitCooldown = 0;
 
 function updateForging(delta) {
+  hammerGroup.visible = true; // FORGINGではハンマー表示
   const lhPos    = getLeftHandPos();
   const rhPos    = getRightHandPos();
   const leftTrig = getLeftTriggerOrGrip();
@@ -1525,26 +1600,27 @@ let prevXButton = false;
 const bladeWorldPos = new THREE.Vector3();
 
 function updateShaping(delta) {
+  hammerGroup.visible = true; // SHAPINGではハンマー表示
   const rhPos    = getRightHandPos();
   const xBtn     = getXButton();
 
   // 刃物は作業台に固定（左手追従なし）
-  // ---- 表裏反転（X軸回転）----
-  // 表: rotation.x = -PI/2（表面が上）
-  // 裏: rotation.x = +PI/2（裏面が上、刃先の向きは変わらない）
+  // ---- 表裏反転：bladePivotのY軸回転で中心を維持したまま反転 ----
+  // 表: pivotRotY = 0    (bladeMesh.rotation.x = -PI/2 で表が上)
+  // 裏: pivotRotY = PI   (Y軸180°回転で裏面が上、刃先方向は不変)
   if (xBtn && !wasXPressed) {
     bladeFlipped  = !bladeFlipped;
     bladeFlipAnim = 1.0;
   }
   wasXPressed = xBtn;
   if (bladeFlipAnim > 0) {
-    bladeFlipAnim = Math.max(0, bladeFlipAnim - delta * 4);
-    const targetRx = bladeFlipped ? Math.PI / 2 : -Math.PI / 2;
-    const prevRx   = bladeFlipped ? -Math.PI / 2 : Math.PI / 2;
-    const swing    = Math.sin(bladeFlipAnim * Math.PI); // 0→1→0
-    bladeMesh.rotation.x = prevRx + (targetRx - prevRx) * (1 - swing * 0.5 + 0.5);
+    bladeFlipAnim = Math.max(0, bladeFlipAnim - delta * 5);
+    const targetY = bladeFlipped ? Math.PI : 0;
+    const fromY   = bladeFlipped ? 0 : Math.PI;
+    const ease    = 1 - bladeFlipAnim;
+    bladePivot.rotation.y = fromY + (targetY - fromY) * ease;
   } else {
-    bladeMesh.rotation.x = bladeFlipped ? Math.PI / 2 : -Math.PI / 2;
+    bladePivot.rotation.y = bladeFlipped ? Math.PI : 0;
   }
 
   // ---- ゾーンインジケーター更新（刃物固定のため位置はそのまま、色のみ更新）----
@@ -1640,11 +1716,10 @@ function updateShaping(delta) {
 /* ================================================================
    UPDATE SHARPENING
 ================================================================ */
-// コントローラーのローカル「下向き」ベクトル（グリップを握ると手の甲が上）
-// XRコントローラー座標系: Y=上,X=右,-Z=前
-// 「刃物の傾き」は、コントローラーのX軸周りのロール角（手首の傾き）で決まる
-
 function updateSharpening(delta) {
+  // ハンマーをSHARPENINGフェーズでは非表示にする
+  hammerGroup.visible = false;
+
   const lhPos = getLeftHandPos();
   const rhPos = getRightHandPos();
 
@@ -1655,52 +1730,57 @@ function updateSharpening(delta) {
                 (getRightGamepad()?.buttons[1]?.pressed ?? false);
   const held  = lGrip && rGrip;
 
-  // 両手の中点（= 刃物グループの位置）
+  // 両手の中点
   const midX = (lhPos.x + rhPos.x) * 0.5;
   const midY = (lhPos.y + rhPos.y) * 0.5;
   const midZ = (lhPos.z + rhPos.z) * 0.5;
 
-  // ---- 各コントローラーの「水平面からの傾き」を計算 ----
+  // ---- 各コントローラーのロール角（水平面から何度傾いているか）----
+  // コントローラーのローカルY軸をワールドに変換し、XZ平面への射影でロール取得
   let leftTiltDeg  = 0;
   let rightTiltDeg = 0;
   if (leftController && rightController) {
     const lUp = new THREE.Vector3(0, 1, 0).applyQuaternion(leftController.quaternion);
     const rUp = new THREE.Vector3(0, 1, 0).applyQuaternion(rightController.quaternion);
+    // Y成分のarcsinで垂直からの傾き度を取得
+    // コントローラーを水平に持つ → lUp.y ≈ 1 → arcsin ≈ 90°
+    // 15°研ぎ角 → コントローラーを約15°傾ける
     leftTiltDeg  = Math.asin(THREE.MathUtils.clamp(lUp.y, -1, 1)) * (180 / Math.PI);
     rightTiltDeg = Math.asin(THREE.MathUtils.clamp(rUp.y, -1, 1)) * (180 / Math.PI);
   }
 
-  // ---- 両手の角度一致チェック（差が10°以内なら一致とみなす）----
-  const angleDiff  = Math.abs(leftTiltDeg - rightTiltDeg);
-  const isAligned  = angleDiff < 10;
-  // 刃物の傾き = 両手の平均角度（一致している場合のみ有効）
-  const avgTiltDeg = (leftTiltDeg + rightTiltDeg) * 0.5;
-  // 砥石に対する刃の角度 = 90° - avgTiltDeg（コントローラーが水平=90°, 傾けると角度が生まれる）
-  // 実際は: コントローラーを少し傾けた状態が刃角15°に相当するよう設定
-  // avgTiltDeg が 75° → blade angle 15° (90-75=15)
-  const bladeAngleDeg = Math.max(0, 90 - Math.abs(avgTiltDeg));
+  // ---- 両手の角度一致チェック（差が20°以内 → 緩めに判定）----
+  const angleDiff = Math.abs(leftTiltDeg - rightTiltDeg);
+  const isAligned = angleDiff < 20;
 
-  // HUD 更新（毎フレーム）
+  // 刃物の砥石面に対する実際の刃角
+  // コントローラーが水平(90°)=刃が砥石に平行=0°、傾けると刃角が増える
+  const avgTiltDeg  = (leftTiltDeg + rightTiltDeg) * 0.5;
+  // 刃先が奥(+Z)向きなので、砥石に置いたとき「刃側を砥石に押しつける」 = コントローラーを内側に傾ける
+  // 傾き量そのものを刃角とする（90°からの差ではなく傾け量）
+  const bladeAngleDeg = Math.max(0, Math.min(45, 90 - Math.abs(avgTiltDeg)));
+
+  // HUD 更新
   updateAngleHud(leftTiltDeg, rightTiltDeg, isAligned, bladeAngleDeg);
 
   if (held) {
     // 刃物グループを両手中点に移動
     sharpenBladeGroup.position.set(
       midX,
-      Math.max(midY, workbenchPos.y + 0.06),
+      Math.max(midY - 0.02, workbenchPos.y + 0.06),
       midZ
     );
 
     if (isAligned) {
-      // 両手ベクトルからグループのY回転（水平方向の向き）
-      const handVec  = new THREE.Vector3().subVectors(rhPos, lhPos).normalize();
-      const yAngle   = Math.atan2(handVec.z, handVec.x);
-      // 刃物の傾きをbladeAngleDegで設定
-      const tiltRad  = (bladeAngleDeg * Math.PI) / 180;
-      // グループを回転：Y軸で向き、X軸で傾き
-      sharpenBladeGroup.rotation.set(0, yAngle, 0);
-      // 刃物メッシュ自体のX回転で砥石面への角度を表現
-      sharpenBladeMesh.rotation.set(-Math.PI / 2 + tiltRad, 0, 0);
+      // 両手ベクトルから水平方向の向き（Y軸回転）
+      const handVec = new THREE.Vector3().subVectors(rhPos, lhPos).normalize();
+      const yAngle  = Math.atan2(handVec.z, handVec.x);
+      // 傾き：砥石に刃を当てる角度をX軸回転で表現
+      // 刃先が奥なので tiltRad は -方向（前傾き）
+      const tiltRad = -(bladeAngleDeg * Math.PI) / 180;
+      sharpenBladeGroup.rotation.y = yAngle;
+      // sharpenBladeMesh のX回転に傾きを追加（基本は -PI/2）
+      sharpenBladeMesh.rotation.set(-Math.PI / 2 + tiltRad, Math.PI, 0);
     }
 
     // ---- ストローク検出：Z軸（前後）0.015m閾値 ----
@@ -1712,7 +1792,6 @@ function updateSharpening(delta) {
 
       if (strokeCount < CONFIG.SHARPENING.TOTAL_STROKES) {
         if (!isAligned) {
-          // 角度が揃っていない = カウントしない、警告音のみ
           playSharpenBad();
         } else {
           strokeCount++;
@@ -1721,11 +1800,8 @@ function updateSharpening(delta) {
           strokeScores  += score;
           totalSharpness = strokeScores / strokeCount;
 
-          if (score > 30) {
-            playSharpenGood();
-          } else {
-            playSharpenBad();
-          }
+          if (score > 30) playSharpenGood();
+          else            playSharpenBad();
 
           if (rightController?.gamepad?.hapticActuators?.[0]) {
             rightController.gamepad.hapticActuators[0].pulse(score > 70 ? 0.5 : 0.2, 50);
@@ -1748,7 +1824,7 @@ function updateSharpening(delta) {
     // 離したら初期位置に戻す
     sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.1);
     sharpenBladeGroup.rotation.set(0, 0, 0);
-    sharpenBladeMesh.rotation.set(-Math.PI / 2, 0, 0);
+    sharpenBladeMesh.rotation.set(-Math.PI / 2, Math.PI, 0);
     prevSharpenZ  = midZ;
     lastStrokeDir = 0;
   }
@@ -1774,11 +1850,7 @@ function updateResult(delta) {
    UPDATE INTRO
 ================================================================ */
 function updateIntro(delta) {
-  // Billboard info panel
-  if (infoPanelMesh) {
-    const cam = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
-    infoPanelMesh.quaternion.copy(cam.quaternion);
-  }
+  // infoPanelは正面固定のため追従処理不要
 }
 
 /* ================================================================
@@ -1803,11 +1875,14 @@ scene.add(particles);
 ================================================================ */
 async function setupUI() {
   const btnVR    = document.getElementById('btn-vr');
+  const btnAR    = document.getElementById('btn-ar');
   const uiPanel  = document.getElementById('uiPanel');
   const xrStatus = document.getElementById('xr-status');
 
   if (navigator.xr) {
     const vrSupported = await navigator.xr.isSessionSupported('immersive-vr').catch(() => false);
+    const arSupported = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
+
     if (vrSupported) {
       btnVR.disabled    = false;
       btnVR.textContent = '🥽 VR を開始する';
@@ -1819,24 +1894,51 @@ async function setupUI() {
             requiredFeatures: ['local-floor'],
             optionalFeatures: ['bounded-floor', 'hand-tracking'],
           });
+          isARMode = false;
           renderer.xr.setSession(session);
         } catch(e) { console.error(e); }
       });
     } else {
-      btnVR.textContent = 'VR 非対応の端末です';
+      btnVR.textContent = 'VR 非対応';
+    }
+
+    if (arSupported) {
+      btnAR.disabled    = false;
+      btnAR.textContent = '📱 AR を開始する';
+      btnAR.addEventListener('click', async () => {
+        resumeAudio();
+        if (renderer.xr.isPresenting) return;
+        try {
+          const session = await navigator.xr.requestSession('immersive-ar', {
+            requiredFeatures: ['local-floor'],
+            optionalFeatures: ['hit-test'],
+          });
+          isARMode = true;
+          renderer.xr.setSession(session);
+        } catch(e) { console.error(e); }
+      });
+    } else {
+      btnAR.textContent = 'AR 非対応';
     }
   } else {
     btnVR.textContent = 'WebXR 非対応';
+    btnAR.textContent = 'WebXR 非対応';
   }
 
   renderer.xr.addEventListener('sessionstart', () => {
     uiPanel.style.display  = 'none';
     xrStatus.style.display = 'block';
+    // AR時は床・背景を非表示
+    floor.visible          = !isARMode;
+    scene.background       = isARMode ? null : new THREE.Color(0x0a0705);
+    renderer.alpha         = isARMode;
   });
   renderer.xr.addEventListener('sessionend', () => {
     uiPanel.style.display  = '';
     xrStatus.style.display = 'none';
-    scene.background = new THREE.Color(0x0a0705);
+    floor.visible          = true;
+    scene.background       = new THREE.Color(0x0a0705);
+    isARMode               = false;
   });
 
   // ヘルプ
@@ -1913,11 +2015,6 @@ renderer.setAnimationLoop((t) => {
     if (ppos[i*3+1] > 3.5) ppos[i*3+1] = 0;
   }
   particles.geometry.attributes.position.needsUpdate = true;
-
-  if (infoPanelMesh) {
-    const cam = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
-    infoPanelMesh.quaternion.copy(cam.quaternion);
-  }
 
   updateSparks(delta);
   handleGlobalInput();
