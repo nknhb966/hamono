@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -365,53 +365,67 @@ addLaser(ctrl0);
 addLaser(ctrl1);
 
 /* ================================================================
-   SPARK SYSTEM (InstancedMesh)
+   SPARK SYSTEM (InstancedMesh) — draw call 1つで火花を描画
 ================================================================ */
 const SPARK_MAX = 80;
-const sparkGeo = new THREE.SphereGeometry(0.012, 4, 4);
-const sparkMat = new THREE.MeshBasicMaterial({ color: 0xffffff }); // 白ベース、instanceColorで上書き
+const sparkGeo  = new THREE.SphereGeometry(0.014, 4, 4);
+const sparkMat  = new THREE.MeshBasicMaterial({ vertexColors: true });
 const sparkMesh = new THREE.InstancedMesh(sparkGeo, sparkMat, SPARK_MAX);
 sparkMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-// instanceColor を明示的に初期化しないと setColorAt が効かない
-sparkMesh.instanceColor = new THREE.InstancedBufferAttribute(
-  new Float32Array(SPARK_MAX * 3), 3
-);
 sparkMesh.count = 0;
 scene.add(sparkMesh);
 
-const sparks = [];
-const sparkDummy = new THREE.Object3D();
+// instanceColor を ColorArray で初期化（THREE.Color[]）
+const _sparkColorArr = new Float32Array(SPARK_MAX * 3);
+sparkMesh.instanceColor = new THREE.InstancedBufferAttribute(_sparkColorArr, 3);
+
+const sparks      = [];
+const sparkDummy  = new THREE.Object3D();
+const _sparkColor = new THREE.Color();
 
 function spawnSparks(origin, count) {
-  const toSpawn = Math.min(count, SPARK_MAX - sparks.length);
-  for (let i = 0; i < toSpawn; i++) {
+  for (let i = 0; i < count; i++) {
+    if (sparks.length >= SPARK_MAX) break;
     sparks.push({
-      pos: origin.clone().add(new THREE.Vector3((Math.random()-0.5)*0.1, Math.random()*0.1, (Math.random()-0.5)*0.1)),
-      vel: new THREE.Vector3((Math.random()-0.5)*3, Math.random()*4+1, (Math.random()-0.5)*3),
-      life: 0.4 + Math.random()*0.4,
-      maxLife: 0.4 + Math.random()*0.4,
+      pos:     origin.clone().add(new THREE.Vector3(
+                 (Math.random() - 0.5) * 0.08,
+                 Math.random() * 0.05,
+                 (Math.random() - 0.5) * 0.08)),
+      vel:     new THREE.Vector3(
+                 (Math.random() - 0.5) * 4,
+                 Math.random() * 5 + 1.5,
+                 (Math.random() - 0.5) * 4),
+      life:    0.3 + Math.random() * 0.5,
+      maxLife: 0.3 + Math.random() * 0.5,
     });
   }
 }
 
 function updateSparks(delta) {
+  // 逆順ループで splice しながら更新
   for (let i = sparks.length - 1; i >= 0; i--) {
     const s = sparks[i];
     s.life -= delta;
+    if (s.life <= 0) { sparks.splice(i, 1); continue; }
     s.vel.y -= 9.8 * delta;
     s.pos.addScaledVector(s.vel, delta);
-    if (s.life <= 0) { sparks.splice(i, 1); continue; }
+
+    const t = Math.max(0, s.life / s.maxLife);
     sparkDummy.position.copy(s.pos);
-    const t = s.life / s.maxLife;
-    sparkDummy.scale.setScalar(t * 0.8);
+    sparkDummy.scale.setScalar(0.6 + t * 0.6);
     sparkDummy.updateMatrix();
     sparkMesh.setMatrixAt(i, sparkDummy.matrix);
-    const c = new THREE.Color().setHSL(0.08 + (1-t)*0.05, 1, 0.4+t*0.3);
-    sparkMesh.setColorAt(i, c);
+
+    // 熱い色: 白→黄→オレンジ
+    _sparkColor.setHSL(0.08 * (1 - t * 0.4), 1.0, 0.5 + t * 0.4);
+    sparkMesh.setColorAt(i, _sparkColor);
   }
+
   sparkMesh.count = sparks.length;
-  sparkMesh.instanceMatrix.needsUpdate = true;
-  if (sparkMesh.instanceColor) sparkMesh.instanceColor.needsUpdate = true;
+  if (sparks.length > 0) {
+    sparkMesh.instanceMatrix.needsUpdate = true;
+    sparkMesh.instanceColor.needsUpdate  = true;
+  }
 }
 
 /* ================================================================
@@ -636,12 +650,17 @@ const shapingHammerGroup = hammerGroup.clone();
 // ============ SHARPENING OBJECTS ============
 const sharpenBench = makeWorkbench(groupSharpening);
 
-// Whetstone
+// Whetstone — 縦置き（Y軸方向が長辺）
 const stoneMat = new THREE.MeshStandardMaterial({ color: 0x8a8070, roughness: 0.95 });
-const stoneMesh = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.06, 0.12), stoneMat);
-stoneMesh.position.set(0, workbenchPos.y + 0.06, -1.1);
+const stoneMesh = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.32, 0.10), stoneMat);
+stoneMesh.position.set(0, workbenchPos.y + 0.22, -1.1); // 作業台から少し上に
 stoneMesh.receiveShadow = true;
 groupSharpening.add(stoneMesh);
+// 砥石のラベル感を出すストライプ
+const stoneTopMat = new THREE.MeshStandardMaterial({ color: 0x6a6050, roughness: 0.9 });
+const stoneTop = new THREE.Mesh(new THREE.BoxGeometry(0.102, 0.01, 0.102), stoneTopMat);
+stoneTop.position.set(0, 0.16, 0);
+stoneMesh.add(stoneTop);
 
 // Blade for sharpening (same shape)
 const sharpenBladeMesh = bladeMesh.clone();
@@ -880,10 +899,7 @@ let lastStrokeDir     = 0;
 let sharpenComplete   = false;
 let totalSharpness    = 0;
 let strokeScores      = 0;
-const leftHandMidPos  = new THREE.Vector3();
-const rightHandMidPos = new THREE.Vector3();
-const stoneFwd        = new THREE.Vector3(0, 0, 1);
-let prevSharpenZ      = 0;
+let prevSharpenX      = 0;  // X軸ストローク用
 let sharpenStreak     = 0;
 
 /* ================================================================
@@ -1030,9 +1046,9 @@ function resetForging() {
   ironInFurnace   = false;
   ironHeld        = false;
   forgingHitCount = 0;
-  shapeDistortion = 0;
+  // shapeDistortion は onEnterState で設定するためここではリセットしない
   forgingComplete = false;
-  ironMesh.position.set(0, 0.91, -1.1); // 作業台の上
+  ironMesh.position.set(0, 0.91, -1.1);
   ironMesh.material.color.set(0x555555);
   updateTempSprite(0);
 }
@@ -1051,13 +1067,15 @@ function resetShaping() {
   bladeMesh.rotation.y = 0;
 }
 function resetSharpening() {
-  strokeCount     = 0;
-  lastStrokeDir   = 0;
+  strokeCount    = 0;
+  lastStrokeDir  = 0;
   sharpenComplete = false;
-  totalSharpness  = 0;
-  strokeScores    = 0;
-  prevSharpenZ    = -1.1;
-  sharpenStreak   = 0;
+  totalSharpness = 0;
+  strokeScores   = 0;
+  prevSharpenX   = 0;
+  sharpenStreak  = 0;
+  // 刃物を砥石の初期位置に戻す
+  sharpenBladeMesh.position.set(0, workbenchPos.y + 0.22, -1.1);
 }
 
 function setVisibility() {
@@ -1083,9 +1101,14 @@ function nextState() {
 
 function retryState() {
   playTransition();
-  if (currentState === State.FORGING)    resetForging();
-  else if (currentState === State.SHAPING)   resetShaping();
-  else if (currentState === State.SHARPENING) resetSharpening();
+  if (currentState === State.FORGING) {
+    shapeDistortion = 100; // リトライ時も最悪値から再スタート
+    resetForging();
+  } else if (currentState === State.SHAPING) {
+    resetShaping();
+  } else if (currentState === State.SHARPENING) {
+    resetSharpening();
+  }
 }
 
 function onEnterState(state, prev) {
@@ -1094,23 +1117,38 @@ function onEnterState(state, prev) {
     resetForging(); resetShaping(); resetSharpening();
     updateInfoPanel('越前打刃物\nEchizen Blades\n\nAボタン / Nキーで開始');
     updateStatusBar('INTRO', 'Nキー：開始', null);
+
   } else if (state === State.FORGING) {
     resetForging();
+    // 何もしなければ shapeDistortion=100（最悪）が引き継がれるよう初期化
+    shapeDistortion = 100;
     updateInfoPanel('フェーズ①：鍛造\nForging\n\n炉で鉄を熱し、作業台で叩け\n（左手で掴む・右手でハンマー）');
     updateStatusBar('鍛造', '打撃 0/30 | 温度: 0', 0);
+
   } else if (state === State.SHAPING) {
     resetShaping();
+    // 鍛造の歪みを引き継ぐ
     bladeState.shapeDistortion = shapeDistortion;
-    updateInfoPanel('フェーズ②：成形\nShaping\n\n赤いエリアを叩いて歪みを修正せよ\n（Xボタンで反転）');
+    // 何もしなければ symmetryError = 初期歪みの絶対値平均（高い）
+    bladeState.symmetryError = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
+    updateInfoPanel('フェーズ②：成形\nShaping\n\n赤いエリアを叩いて歪みを修正せよ\n（Xボタンで表裏反転）');
     updateStatusBar('成形', '打撃 0/100 | Aで終了', 0);
+
   } else if (state === State.SHARPENING) {
     resetSharpening();
-    bladeState.symmetryError = zones.reduce((s,z)=>s+z.distortion,0)/zones.length;
-    updateInfoPanel('フェーズ③：研ぎ\nSharpening\n\n砥石の上で刃物を前後に動かせ\n音で角度を確認しよう');
+    // 成形の対称性誤差を確定
+    bladeState.symmetryError = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
+    // 何もしなければ sharpness=0（strokeScores=0）
+    updateInfoPanel('フェーズ③：研ぎ\nSharpening\n\n両手グリップで刃物を持ち左右に動かせ\n音で角度を確認しよう');
     updateStatusBar('研ぎ', 'ストローク 0/30', 0);
+
   } else if (state === State.RESULT) {
+    // strokeCount=0のとき totalSharpness=0 なので何もしなければ sharpness=0
     const efficiency = Math.max(0.5, 1 - bladeState.symmetryError * 0.01);
-    bladeState.sharpness = Math.max(0, Math.min(100, totalSharpness * efficiency));
+    bladeState.sharpness = strokeCount > 0
+      ? Math.max(0, Math.min(100, totalSharpness * efficiency))
+      : 0; // ストローク0回=0点
+
     const finalScore = Math.max(0, Math.min(100,
       (100 - bladeState.shapeDistortion) * 0.4 +
       (100 - bladeState.symmetryError)   * 0.3 +
@@ -1118,7 +1156,6 @@ function onEnterState(state, prev) {
     ));
     const scores = saveScore(finalScore);
     showResultPanel(finalScore, bladeState, scores);
-    // Animate result blade
     resultBlade.material = bladeMesh.material.clone();
     const quality = finalScore / 100;
     resultBlade.material.color.setHSL(0.15 + quality * 0.15, 0.3 + quality * 0.5, 0.4 + quality * 0.3);
@@ -1322,20 +1359,11 @@ function updateShaping(delta) {
     fakeLH.z = THREE.MathUtils.clamp(fakeLH.z, -2.5, 0.5);
   }
 
-  const lhPos    = getLeftHandPos();
   const rhPos    = getRightHandPos();
-  const leftTrig = getLeftTriggerOrGrip();
   const xBtn     = getXButton();
 
-  // ---- 刃物を左手に追従 ----
-  const lhToBlade = lhPos.distanceTo(bladeMesh.position);
-  if (leftTrig && lhToBlade < 0.4 && !bladeHeld) bladeHeld = true;
-  if (!leftTrig) bladeHeld = false;
-  if (bladeHeld) {
-    bladeMesh.position.set(lhPos.x, Math.max(lhPos.y - 0.04, 0.5), lhPos.z);
-  }
-
-  // ---- 表裏反転 ----
+  // 刃物は作業台に固定（左手追従なし）
+  // ---- 表裏反転のみ ----
   if (xBtn && !wasXPressed) {
     bladeFlipped  = !bladeFlipped;
     bladeFlipAnim = 1.0;
@@ -1460,43 +1488,47 @@ function updateSharpening(delta) {
   const lhPos = getLeftHandPos();
   const rhPos = getRightHandPos();
 
-  // 両手トリガーorグリップで刃物を掴む
+  // 両手トリガーorグリップを握っているか
   const lTrig = isVRActive()
-    ? (getLeftGamepad()?.buttons[0]?.pressed || getLeftGamepad()?.buttons[1]?.pressed || false)
+    ? ((getLeftGamepad()?.buttons[0]?.pressed  ?? false) ||
+       (getLeftGamepad()?.buttons[1]?.pressed  ?? false))
     : (keyState['Space'] || mouseHeld);
   const rTrig = isVRActive()
-    ? (getRightGamepad()?.buttons[0]?.pressed || getRightGamepad()?.buttons[1]?.pressed || false)
+    ? ((getRightGamepad()?.buttons[0]?.pressed ?? false) ||
+       (getRightGamepad()?.buttons[1]?.pressed ?? false))
     : (keyState['Space'] || mouseHeld);
 
-  const bothHeld = lTrig || rTrig; // 片手でもOK
+  const bothHeld = lTrig && rTrig; // 両手同時に握る必要あり（VR）/ 非VRはSpaceのみ
+  const anyHeld  = isVRActive() ? bothHeld : (keyState['Space'] || mouseHeld);
 
-  if (bothHeld) {
-    // 両手の中点に刃物を追従させる
+  if (anyHeld) {
+    // 両手中点に刃物追従
     const midX = (lhPos.x + rhPos.x) * 0.5;
     const midY = (lhPos.y + rhPos.y) * 0.5;
     const midZ = (lhPos.z + rhPos.z) * 0.5;
     sharpenBladeMesh.position.set(midX, midY - 0.03, midZ);
 
-    // ---- ストローク検出 ----
-    const dz  = midZ - prevSharpenZ;
-    const dir = Math.sign(dz);
+    // ---- ストローク検出：X軸方向（左右）の動き ----
+    const dx  = midX - prevSharpenX;
+    const dir = Math.sign(dx);
 
-    if (Math.abs(dz) > CONFIG.SHARPENING.STROKE_THRESHOLD && dir !== 0 && dir !== lastStrokeDir) {
+    if (Math.abs(dx) > CONFIG.SHARPENING.STROKE_THRESHOLD && dir !== 0 && dir !== lastStrokeDir) {
       lastStrokeDir = dir;
 
       if (strokeCount < CONFIG.SHARPENING.TOTAL_STROKES) {
         strokeCount++;
 
-        // 角度：両手の高さ差から計算
+        // 角度：両手の高さ差から計算（砥石に対する刃の傾き）
         const heightDiff = Math.abs(rhPos.y - lhPos.y);
         const handDist   = rhPos.distanceTo(lhPos);
         const angleDeg   = handDist > 0.01
           ? Math.abs(Math.asin(THREE.MathUtils.clamp(heightDiff / handDist, -1, 1))) * (180 / Math.PI)
-          : 15;
-        const angleErr  = Math.abs(angleDeg - CONFIG.SHARPENING.IDEAL_ANGLE);
-        const score     = Math.max(0, Math.min(100, 100 - angleErr * CONFIG.SHARPENING.ANGLE_TOLERANCE));
-        strokeScores   += score;
-        totalSharpness  = strokeScores / strokeCount;
+          : 0; // 水平=0度、動かさない=0点
+
+        const angleErr = Math.abs(angleDeg - CONFIG.SHARPENING.IDEAL_ANGLE);
+        const score    = Math.max(0, Math.min(100, 100 - angleErr * CONFIG.SHARPENING.ANGLE_TOLERANCE));
+        strokeScores  += score;
+        totalSharpness = strokeScores / strokeCount;
 
         playSharpen(angleDeg);
 
@@ -1514,7 +1546,10 @@ function updateSharpening(delta) {
         );
       }
     }
-    prevSharpenZ = midZ;
+    prevSharpenX = midX;
+  } else {
+    // グリップを離したらprevをリセット（再び握ったときにいきなりストロークが入らないよう）
+    prevSharpenX = (lhPos.x + rhPos.x) * 0.5;
   }
 
   if (strokeCount >= CONFIG.SHARPENING.TOTAL_STROKES && !sharpenComplete) {
