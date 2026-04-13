@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -365,44 +365,50 @@ addLaser(ctrl0);
 addLaser(ctrl1);
 
 /* ================================================================
-   SPARK SYSTEM (InstancedMesh) — draw call 1つで火花を描画
+   SPARK SYSTEM (InstancedMesh)
 ================================================================ */
-const SPARK_MAX = 80;
-const sparkGeo  = new THREE.SphereGeometry(0.014, 4, 4);
-const sparkMat  = new THREE.MeshBasicMaterial({ vertexColors: true });
-const sparkMesh = new THREE.InstancedMesh(sparkGeo, sparkMat, SPARK_MAX);
+const SPARK_MAX  = 80;
+const sparkGeo   = new THREE.SphereGeometry(0.016, 4, 4);
+// color:white + setColorAt が Three.js r160+ での正しい InstancedMesh カラー方法
+const sparkMat   = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const sparkMesh  = new THREE.InstancedMesh(sparkGeo, sparkMat, SPARK_MAX);
 sparkMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-sparkMesh.count = 0;
+sparkMesh.count  = 0;
 scene.add(sparkMesh);
 
-// instanceColor を ColorArray で初期化（THREE.Color[]）
-const _sparkColorArr = new Float32Array(SPARK_MAX * 3);
-sparkMesh.instanceColor = new THREE.InstancedBufferAttribute(_sparkColorArr, 3);
+// instanceColor を手動で BufferAttribute として確保
+// THREE.InstancedMesh.setColorAt() は内部で this.instanceColor を
+// THREE.InstancedBufferAttribute(Float32Array, 3) として初期化するが、
+// count=0 だと描画されないため先に埋めておく
+{
+  const colorData = new Float32Array(SPARK_MAX * 3).fill(1); // 全白で初期化
+  sparkMesh.instanceColor = new THREE.InstancedBufferAttribute(colorData, 3);
+}
 
 const sparks      = [];
-const sparkDummy  = new THREE.Object3D();
-const _sparkColor = new THREE.Color();
+const _sparkDummy = new THREE.Object3D();
+const _sparkCol   = new THREE.Color();
 
 function spawnSparks(origin, count) {
   for (let i = 0; i < count; i++) {
     if (sparks.length >= SPARK_MAX) break;
     sparks.push({
       pos:     origin.clone().add(new THREE.Vector3(
-                 (Math.random() - 0.5) * 0.08,
-                 Math.random() * 0.05,
-                 (Math.random() - 0.5) * 0.08)),
+                 (Math.random() - 0.5) * 0.1,
+                  Math.random() * 0.06,
+                 (Math.random() - 0.5) * 0.1)),
       vel:     new THREE.Vector3(
-                 (Math.random() - 0.5) * 4,
-                 Math.random() * 5 + 1.5,
-                 (Math.random() - 0.5) * 4),
-      life:    0.3 + Math.random() * 0.5,
-      maxLife: 0.3 + Math.random() * 0.5,
+                 (Math.random() - 0.5) * 5,
+                  Math.random() * 6 + 2,
+                 (Math.random() - 0.5) * 5),
+      life:    0.35 + Math.random() * 0.45,
+      maxLife: 0.35 + Math.random() * 0.45,
     });
   }
 }
 
 function updateSparks(delta) {
-  // 逆順ループで splice しながら更新
+  let alive = 0;
   for (let i = sparks.length - 1; i >= 0; i--) {
     const s = sparks[i];
     s.life -= delta;
@@ -410,17 +416,18 @@ function updateSparks(delta) {
     s.vel.y -= 9.8 * delta;
     s.pos.addScaledVector(s.vel, delta);
 
-    const t = Math.max(0, s.life / s.maxLife);
-    sparkDummy.position.copy(s.pos);
-    sparkDummy.scale.setScalar(0.6 + t * 0.6);
-    sparkDummy.updateMatrix();
-    sparkMesh.setMatrixAt(i, sparkDummy.matrix);
+    const t = Math.max(0, s.life / s.maxLife); // 1→0
+    _sparkDummy.position.copy(s.pos);
+    _sparkDummy.scale.setScalar(0.5 + t * 1.0);
+    _sparkDummy.updateMatrix();
+    // インスタンスインデックスは生き残っている順序（splice後は再インデックス不要、iで直接）
+    sparkMesh.setMatrixAt(i, _sparkDummy.matrix);
 
-    // 熱い色: 白→黄→オレンジ
-    _sparkColor.setHSL(0.08 * (1 - t * 0.4), 1.0, 0.5 + t * 0.4);
-    sparkMesh.setColorAt(i, _sparkColor);
+    // 白→黄→オレンジ (hue: 0.12→0.06, lightness: 0.9→0.5)
+    _sparkCol.setHSL(0.06 + t * 0.06, 1.0, 0.5 + t * 0.4);
+    sparkMesh.setColorAt(i, _sparkCol);
+    alive++;
   }
-
   sparkMesh.count = sparks.length;
   if (sparks.length > 0) {
     sparkMesh.instanceMatrix.needsUpdate = true;
@@ -650,22 +657,25 @@ const shapingHammerGroup = hammerGroup.clone();
 // ============ SHARPENING OBJECTS ============
 const sharpenBench = makeWorkbench(groupSharpening);
 
-// Whetstone — 縦置き（Y軸方向が長辺）
-const stoneMat = new THREE.MeshStandardMaterial({ color: 0x8a8070, roughness: 0.95 });
-const stoneMesh = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.32, 0.10), stoneMat);
-stoneMesh.position.set(0, workbenchPos.y + 0.22, -1.1); // 作業台から少し上に
+// Whetstone — 作業台の上に横置き（XZ平面上、前後方向が長辺）
+// 「縦置き」= 作業台の上で90度回転 = X軸方向が長辺
+const stoneMat  = new THREE.MeshStandardMaterial({ color: 0x9a9080, roughness: 0.9 });
+const stoneMesh = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.05, 0.13), stoneMat);
+// workbenchPos.y(0.85) + 天板半分(0.03) + 砥石半分(0.025) = 0.905
+stoneMesh.position.set(0, workbenchPos.y + 0.055, -1.1);
 stoneMesh.receiveShadow = true;
+stoneMesh.castShadow    = true;
 groupSharpening.add(stoneMesh);
-// 砥石のラベル感を出すストライプ
-const stoneTopMat = new THREE.MeshStandardMaterial({ color: 0x6a6050, roughness: 0.9 });
-const stoneTop = new THREE.Mesh(new THREE.BoxGeometry(0.102, 0.01, 0.102), stoneTopMat);
-stoneTop.position.set(0, 0.16, 0);
-stoneMesh.add(stoneTop);
+// 砥石の表面（研ぎ面）を少し色違いで表現
+const stoneSurfMat  = new THREE.MeshStandardMaterial({ color: 0xb0a898, roughness: 0.7 });
+const stoneSurf     = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.005, 0.11), stoneSurfMat);
+stoneSurf.position.set(0, 0.028, 0);
+stoneMesh.add(stoneSurf);
 
-// Blade for sharpening (same shape)
+// Blade for sharpening — 砥石の上に初期配置
 const sharpenBladeMesh = bladeMesh.clone();
-sharpenBladeMesh.position.set(-0.1, workbenchPos.y + 0.09, -1.1);
-sharpenBladeMesh.rotation.y = 0;
+sharpenBladeMesh.position.set(0, workbenchPos.y + 0.10, -1.1);
+sharpenBladeMesh.rotation.set(0, 0, 0);
 groupSharpening.add(sharpenBladeMesh);
 
 // ============ RESULT BLADE DISPLAY ============
@@ -899,7 +909,7 @@ let lastStrokeDir     = 0;
 let sharpenComplete   = false;
 let totalSharpness    = 0;
 let strokeScores      = 0;
-let prevSharpenX      = 0;  // X軸ストローク用
+let prevSharpenZ      = 0;   // Z軸（前後）ストローク用
 let sharpenStreak     = 0;
 
 /* ================================================================
@@ -1067,15 +1077,15 @@ function resetShaping() {
   bladeMesh.rotation.y = 0;
 }
 function resetSharpening() {
-  strokeCount    = 0;
-  lastStrokeDir  = 0;
+  strokeCount     = 0;
+  lastStrokeDir   = 0;
   sharpenComplete = false;
-  totalSharpness = 0;
-  strokeScores   = 0;
-  prevSharpenX   = 0;
-  sharpenStreak  = 0;
-  // 刃物を砥石の初期位置に戻す
-  sharpenBladeMesh.position.set(0, workbenchPos.y + 0.22, -1.1);
+  totalSharpness  = 0;
+  strokeScores    = 0;
+  prevSharpenZ    = 0;
+  sharpenStreak   = 0;
+  sharpenBladeMesh.position.set(0, workbenchPos.y + 0.10, -1.1);
+  sharpenBladeMesh.rotation.set(0, 0, 0);
 }
 
 function setVisibility() {
@@ -1307,10 +1317,12 @@ function updateForging(delta) {
       result = 'Good';
     }
 
-    // Update distortion
-    if (result === 'Miss')         shapeDistortion = Math.min(100, shapeDistortion + 2);
-    else if (result === 'Good')    shapeDistortion = Math.min(100, shapeDistortion + 1);
-    else if (result === 'Perfect') shapeDistortion = Math.max(0,   shapeDistortion - 0.5);
+    // 歪み更新
+    // 初期値100から始まり、Perfectを連続すると0に近づく
+    // Perfect: -5 / Good: -1 / Miss: +3
+    if (result === 'Perfect')      shapeDistortion = Math.max(0,   shapeDistortion - 5);
+    else if (result === 'Good')    shapeDistortion = Math.max(0,   shapeDistortion - 1);
+    else if (result === 'Miss')    shapeDistortion = Math.min(100, shapeDistortion + 3);
 
     // Sparks — ヘッド位置から発生
     const sparkOrigin = hammerHeadWorld.clone().add(new THREE.Vector3(0, 0.02, 0));
@@ -1498,35 +1510,39 @@ function updateSharpening(delta) {
        (getRightGamepad()?.buttons[1]?.pressed ?? false))
     : (keyState['Space'] || mouseHeld);
 
-  const bothHeld = lTrig && rTrig; // 両手同時に握る必要あり（VR）/ 非VRはSpaceのみ
-  const anyHeld  = isVRActive() ? bothHeld : (keyState['Space'] || mouseHeld);
+  // VR: 両手どちらか握ればOK / 非VR: Space or mouse
+  const anyHeld = isVRActive() ? (lTrig || rTrig) : (keyState['Space'] || mouseHeld);
+
+  // 両手中点
+  const midX = (lhPos.x + rhPos.x) * 0.5;
+  const midY = (lhPos.y + rhPos.y) * 0.5;
+  const midZ = (lhPos.z + rhPos.z) * 0.5;
 
   if (anyHeld) {
-    // 両手中点に刃物追従
-    const midX = (lhPos.x + rhPos.x) * 0.5;
-    const midY = (lhPos.y + rhPos.y) * 0.5;
-    const midZ = (lhPos.z + rhPos.z) * 0.5;
-    sharpenBladeMesh.position.set(midX, midY - 0.03, midZ);
+    // 刃物の中心を両手の中点に追従
+    sharpenBladeMesh.position.set(midX, Math.max(midY - 0.02, workbenchPos.y + 0.04), midZ);
 
-    // ---- ストローク検出：X軸方向（左右）の動き ----
-    const dx  = midX - prevSharpenX;
-    const dir = Math.sign(dx);
+    // ---- ストローク検出：Z軸（前後）の動き ----
+    const dz  = midZ - prevSharpenZ;
+    const dir = Math.sign(dz);
 
-    if (Math.abs(dx) > CONFIG.SHARPENING.STROKE_THRESHOLD && dir !== 0 && dir !== lastStrokeDir) {
+    // 閾値: 0.03m 以上動いたら1ストロークとしてカウント
+    if (Math.abs(dz) > 0.03 && dir !== 0 && dir !== lastStrokeDir) {
       lastStrokeDir = dir;
 
       if (strokeCount < CONFIG.SHARPENING.TOTAL_STROKES) {
         strokeCount++;
 
-        // 角度：両手の高さ差から計算（砥石に対する刃の傾き）
+        // 角度：両手の高さ差 / 両手間距離 から刃の傾きを計算
         const heightDiff = Math.abs(rhPos.y - lhPos.y);
-        const handDist   = rhPos.distanceTo(lhPos);
-        const angleDeg   = handDist > 0.01
-          ? Math.abs(Math.asin(THREE.MathUtils.clamp(heightDiff / handDist, -1, 1))) * (180 / Math.PI)
-          : 0; // 水平=0度、動かさない=0点
+        const handDist   = Math.max(0.01, rhPos.distanceTo(lhPos));
+        const sinVal     = THREE.MathUtils.clamp(heightDiff / handDist, 0, 1);
+        const angleDeg   = Math.asin(sinVal) * (180 / Math.PI);
 
+        // 理想角度(15°)との差でスコア計算
         const angleErr = Math.abs(angleDeg - CONFIG.SHARPENING.IDEAL_ANGLE);
-        const score    = Math.max(0, Math.min(100, 100 - angleErr * CONFIG.SHARPENING.ANGLE_TOLERANCE));
+        // 1°のズレにつき5点減点（20°以上ズレで0点）
+        const score    = Math.max(0, Math.min(100, 100 - angleErr * 5));
         strokeScores  += score;
         totalSharpness = strokeScores / strokeCount;
 
@@ -1537,7 +1553,7 @@ function updateSharpening(delta) {
         }
 
         updateInfoPanel(
-          `ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES}\n角度: ${Math.round(angleDeg)}°\nスコア: ${Math.round(score)}`
+          `ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES}\n角度: ${Math.round(angleDeg)}° (目標15°)\nスコア: ${Math.round(score)}`
         );
         updateStatusBar(
           '研ぎ',
@@ -1546,10 +1562,12 @@ function updateSharpening(delta) {
         );
       }
     }
-    prevSharpenX = midX;
+    prevSharpenZ = midZ;
+
   } else {
-    // グリップを離したらprevをリセット（再び握ったときにいきなりストロークが入らないよう）
-    prevSharpenX = (lhPos.x + rhPos.x) * 0.5;
+    // グリップを離したら prev をリセット（握り直し時の誤カウント防止）
+    prevSharpenZ  = midZ;
+    lastStrokeDir = 0;
   }
 
   if (strokeCount >= CONFIG.SHARPENING.TOTAL_STROKES && !sharpenComplete) {
