@@ -5,132 +5,278 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>越前打刃物 VR</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    background: #0a0705;
-    color: #e8d5b0;
-    font-family: 'Hiragino Mincho ProN', 'Yu Mincho', serif;
-    overflow: hidden;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+  *, *::before, *::after { box-sizing: border-box; }
+  body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
+
+  /* ═══ Three.js canvas ═══ */
+  #canvas-container { position: fixed; inset: 0; z-index: 0; }
+  #canvas-container canvas { display: block; width: 100% !important; height: 100% !important; }
+
+  /* ═══ フルスクリーン タイトルパネル ═══ */
+  #uiPanel {
+    position: fixed; inset: 0; z-index: 10;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(160,80,20,0.60) 0%, transparent 60%),
+      radial-gradient(ellipse at 70% 80%, rgba(80,40,10,0.55) 0%, transparent 60%),
+      linear-gradient(160deg, #08050a 0%, #160a04 50%, #0a0605 100%);
+    color: #fff;
+    overflow-y: auto;
   }
-  #canvas-container {
-    position: relative;
-    width: 100vw;
-    height: 100vh;
+  #uiPanel::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(circle 1px at 15% 25%, rgba(255,180,80,0.4) 0%, transparent 100%),
+      radial-gradient(circle 1px at 80% 15%, rgba(255,200,100,0.35) 0%, transparent 100%),
+      radial-gradient(circle 1px at 60% 70%, rgba(255,160,60,0.3) 0%, transparent 100%),
+      radial-gradient(circle 2px at 40% 55%, rgba(255,140,40,0.3) 0%, transparent 100%);
   }
-  canvas { display: block; }
-  #ui-overlay {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    pointer-events: none;
-    z-index: 10;
+
+  .panel-inner {
+    position: relative; z-index: 1;
+    width: min(640px, 92vw);
+    display: flex; flex-direction: column; align-items: center; gap: 0;
+    padding: 24px 0 32px;
   }
-  #top-bar {
-    position: fixed;
-    top: 0; left: 0; right: 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 20px;
-    background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%);
-    pointer-events: all;
-    z-index: 20;
+
+  /* タイトル */
+  .main-title {
+    font-size: clamp(28px,5vw,52px); font-weight: 900; letter-spacing: 4px;
+    text-align: center; margin: 0 0 8px;
+    background: linear-gradient(90deg, #ffe0a0 0%, #ffb040 40%, #ff8020 70%, #ffe0a0 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    filter: drop-shadow(0 0 18px rgba(255,140,40,0.7));
+    animation: titleGlow 3s ease-in-out infinite alternate;
   }
-  #title-text {
-    font-size: 18px;
-    letter-spacing: 0.2em;
-    color: #e8c87a;
-    text-shadow: 0 0 20px rgba(232,200,122,0.5);
+  @keyframes titleGlow {
+    from { filter: drop-shadow(0 0 14px rgba(255,120,30,0.5)); }
+    to   { filter: drop-shadow(0 0 30px rgba(255,180,60,0.95)); }
   }
-  #btn-group {
-    display: flex;
-    gap: 8px;
+  .sub-title {
+    font-size: clamp(12px,1.8vw,16px); color: rgba(255,200,130,0.75);
+    letter-spacing: 2px; margin: 0 0 26px; text-align: center;
   }
-  .ui-btn {
-    padding: 8px 16px;
-    border: 1px solid rgba(232,200,122,0.4);
-    background: rgba(0,0,0,0.6);
-    color: #e8c87a;
-    font-family: inherit;
-    font-size: 13px;
-    cursor: pointer;
-    border-radius: 4px;
-    transition: all 0.2s;
-    letter-spacing: 0.05em;
+
+  /* VR ボタンラッパー */
+  #vrButtonWrap { width: 100%; margin-bottom: 10px; }
+  #vrButtonWrap button {
+    display: block; width: 100%; padding: 18px 0;
+    font-size: clamp(16px,2.5vw,22px); font-weight: 800; letter-spacing: 1px;
+    background: linear-gradient(135deg, #b84500, #7a2800);
+    color: #fff; border: none; border-radius: 12px; cursor: pointer;
+    box-shadow: 0 0 32px rgba(200,80,20,0.7), inset 0 1px 0 rgba(255,255,255,0.15);
+    transition: box-shadow .2s, transform .1s;
   }
-  .ui-btn:hover {
-    background: rgba(232,200,122,0.15);
-    border-color: rgba(232,200,122,0.8);
-    box-shadow: 0 0 12px rgba(232,200,122,0.3);
+  #vrButtonWrap button:hover {
+    box-shadow: 0 0 48px rgba(220,100,30,0.95); transform: translateY(-1px);
   }
-  .ui-btn:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
+  #vrButtonWrap button:disabled {
+    background: linear-gradient(135deg, #3a2a1a, #2a1a0a);
+    color: rgba(255,255,255,0.4); cursor: not-allowed; box-shadow: none;
   }
-  #status-bar {
-    position: fixed;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 20px;
-    align-items: center;
-    background: rgba(0,0,0,0.7);
-    border: 1px solid rgba(232,200,122,0.2);
-    border-radius: 8px;
-    padding: 10px 24px;
-    font-size: 14px;
-    color: #e8c87a;
-    pointer-events: none;
-    z-index: 20;
-    letter-spacing: 0.1em;
+
+  /* 区切り線 */
+  .divider {
+    width: 100%; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,160,60,0.4), transparent);
+    margin: 16px 0 18px;
   }
-  #status-bar .sep { color: rgba(232,200,122,0.3); }
-  #mouse-hint {
-    position: fixed;
-    bottom: 70px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 11px;
-    color: rgba(232,200,122,0.4);
-    letter-spacing: 0.15em;
-    pointer-events: none;
-    z-index: 20;
+
+  /* ボタン行 */
+  .btn-row {
+    width: 100%; display: flex; gap: 10px; margin-top: 4px;
   }
-  #xr-mode-btns {
-    display: flex;
-    gap: 6px;
+  .action-btn {
+    flex: 1; padding: 13px 0; font-size: clamp(13px,1.8vw,16px); font-weight: 700;
+    border: none; border-radius: 9px; cursor: pointer; transition: opacity .15s, transform .1s;
+    letter-spacing: 0.5px;
+  }
+  .action-btn:hover { opacity: .85; transform: translateY(-1px); }
+  .btn-help    { background: linear-gradient(135deg, #7a4500, #b86000); color: #fff; }
+  .btn-records { background: linear-gradient(135deg, #5a2000, #9a4010); color: #fff; }
+
+  /* ═══ 記録モーダル ═══ */
+  #recordsModal {
+    display: none; position: fixed; inset: 0; z-index: 100;
+    background: rgba(0,0,0,0.88);
+    align-items: center; justify-content: center;
+  }
+  #recordsModal.open { display: flex; }
+  .rmodal-box {
+    width: min(520px, 94vw); max-height: 88vh;
+    background: linear-gradient(150deg, #120a04, #0a0800);
+    border: 1px solid rgba(255,160,60,0.35);
+    border-radius: 16px; padding: 20px 22px 18px;
+    position: relative; color: #ffe0b0;
+    display: flex; flex-direction: column; gap: 12px;
+    overflow-y: auto;
+  }
+  .rmodal-close {
+    position: absolute; top: 12px; right: 16px;
+    background: none; border: none; color: rgba(255,180,80,0.6);
+    font-size: 26px; cursor: pointer; line-height: 1;
+  }
+  .rmodal-close:hover { color: #fff; }
+  .rmodal-title {
+    font-size: clamp(16px,2.2vw,20px); font-weight: 900; text-align: center;
+    color: #ffb840; letter-spacing: 2px; padding-right: 30px;
+  }
+  .rmodal-entries {
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .rmodal-entry {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 12px; border-radius: 8px;
+    background: rgba(255,255,255,0.05);
+  }
+  .rmodal-entry.gold   { border-left: 3px solid #ffd700; }
+  .rmodal-entry.silver { border-left: 3px solid #c0c0c0; }
+  .rmodal-entry.bronze { border-left: 3px solid #cd7f32; }
+  .rmodal-entry.other  { border-left: 3px solid rgba(255,160,60,0.4); }
+  .entry-rank-score { font-weight: 800; font-size: clamp(14px,1.6vw,17px); color: #ffe0a0; }
+  .entry-date { font-size: clamp(10px,1vw,12px); color: rgba(255,180,80,0.6); }
+  .rmodal-no-data { color: rgba(255,180,80,0.45); font-size: 13px; text-align: center; padding: 12px 0; }
+  .rmodal-footer {
+    display: flex; justify-content: center; padding-top: 4px;
+    border-top: 1px solid rgba(255,160,60,0.15);
+  }
+  .rmodal-reset-all-btn {
+    border: 1px solid rgba(255,80,60,0.5);
+    background: rgba(160,30,20,0.25); color: rgba(255,140,120,0.95);
+    border-radius: 8px; padding: 8px 28px; font-size: 13px; font-weight: 800;
+    cursor: pointer; transition: background .15s;
+  }
+  .rmodal-reset-all-btn:hover { background: rgba(200,40,30,0.45); }
+
+  /* ═══ 操作説明モーダル ═══ */
+  #modal {
+    display: none; position: fixed; inset: 0; z-index: 100;
+    background: rgba(0,0,0,0.88);
+    align-items: center; justify-content: center;
+  }
+  #modal.open { display: flex; }
+  .modal-box {
+    width: min(580px, 92vw); max-height: 82vh; overflow-y: auto;
+    background: linear-gradient(150deg, #120a04, #0a0800);
+    border: 1px solid rgba(255,160,60,0.35);
+    border-radius: 16px; padding: 28px 28px 24px;
+    position: relative; color: #ffe0b0;
+  }
+  .modal-close {
+    position: absolute; top: 14px; right: 18px;
+    background: none; border: none; color: rgba(255,180,80,0.6);
+    font-size: 26px; cursor: pointer; line-height: 1;
+  }
+  .modal-close:hover { color: #fff; }
+  .modal-title-h {
+    font-size: clamp(17px,2.2vw,22px); font-weight: 900; text-align: center;
+    color: #ffb840; letter-spacing: 2px; margin-bottom: 20px; padding-right: 28px;
+  }
+  .modal-content { font-size: 14px; line-height: 1.9; color: #ffe0b0; }
+  .modal-content h3 { font-size: 15px; color: #ffb840; margin: 14px 0 6px; font-weight: 800; }
+  .modal-content .tag {
+    display: inline-block; background: rgba(180,80,20,0.35);
+    border: 1px solid rgba(255,140,60,0.45);
+    border-radius: 5px; padding: 1px 8px; font-size: 12px;
+    margin: 0 2px; color: #ffb840; font-weight: 700;
+  }
+  .modal-content ul { margin: 6px 0 12px; padding-left: 20px; }
+  .modal-content li { margin: 3px 0; }
+
+  /* ═══ XR中オーバーレイ（ステータス） ═══ */
+  #xr-status {
+    display: none;
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    z-index: 15; background: rgba(0,0,0,0.65);
+    border: 1px solid rgba(255,160,60,0.3); border-radius: 10px;
+    padding: 8px 22px; color: #ffb840; font-size: 13px; letter-spacing: 0.1em;
+    pointer-events: none; white-space: nowrap;
   }
 </style>
 </head>
 <body>
-<div id="canvas-container">
-  <div id="ui-overlay"></div>
-</div>
-<div id="top-bar">
-  <div id="title-text">越前打刃物</div>
-  <div id="btn-group">
-    <div id="xr-mode-btns">
-      <button class="ui-btn" id="btn-vr" disabled>VR開始</button>
-      <button class="ui-btn" id="btn-ar" disabled>AR開始</button>
-      <button class="ui-btn" id="btn-exit-xr" style="display:none">XR終了</button>
+
+<!-- Three.js canvas -->
+<div id="canvas-container"></div>
+
+<!-- ═══ タイトルパネル ═══ -->
+<div id="uiPanel">
+  <div class="panel-inner">
+    <p class="main-title">越前打刃物</p>
+    <p class="sub-title">Echizen Blades — 鍛冶職人 VR 体験</p>
+
+    <div id="vrButtonWrap">
+      <button id="btn-vr" disabled>🥽 VR を開始する</button>
     </div>
-    <button class="ui-btn" id="btn-reset">スコアリセット</button>
+
+    <div class="divider"></div>
+
+    <div class="btn-row">
+      <button class="action-btn btn-help"    id="helpBtn">📖 操作方法</button>
+      <button class="action-btn btn-records" id="recordsBtn">🏆 スコア記録</button>
+    </div>
   </div>
 </div>
-<div id="status-bar">
+
+<!-- XR 中ステータス表示 -->
+<div id="xr-status">
   <span id="state-label">INTRO</span>
-  <span class="sep">|</span>
-  <span id="phase-info">Nキー：次へ進む</span>
-  <span class="sep">|</span>
+  <span style="color:rgba(255,160,60,0.4)"> | </span>
+  <span id="phase-info"></span>
+  <span style="color:rgba(255,160,60,0.4)"> | </span>
   <span id="score-display">Score: -</span>
 </div>
-<div id="mouse-hint" id="mouse-hint">マウスクリック：打撃 | N：次フェーズ | P：リトライ | WASD：左手移動 | X：左手X</div>
+
+<!-- ═══ スコア記録モーダル ═══ -->
+<div id="recordsModal">
+  <div class="rmodal-box">
+    <button class="rmodal-close" id="recordsModalClose">×</button>
+    <div class="rmodal-title">🏆 スコア記録</div>
+    <div class="rmodal-entries" id="rec-entries"></div>
+    <div class="rmodal-footer">
+      <button class="rmodal-reset-all-btn" id="recordsResetAll">🗑 全ての記録をリセット</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 操作説明モーダル ═══ -->
+<div id="modal">
+  <div class="modal-box">
+    <button class="modal-close" id="modalClose">×</button>
+    <div class="modal-title-h">📖 操作方法</div>
+    <div class="modal-content">
+      <h3>🔥 フェーズ① 鍛造 (Forging)</h3>
+      <ul>
+        <li><span class="tag">左グリップ</span> 鉄を掴む／離す</li>
+        <li>鉄を炉に入れると温度上昇・赤熱</li>
+        <li>作業台に置いて <span class="tag">右トリガー</span> でハンマー打撃</li>
+        <li>温度が高いほど効果的。冷えると Miss になります</li>
+        <li>30回打撃でフェーズ終了</li>
+      </ul>
+      <h3>🔨 フェーズ② 成形 (Shaping)</h3>
+      <ul>
+        <li><span class="tag">右トリガー</span> で赤いゾーンを叩いて歪みを修正</li>
+        <li><span class="tag">左X ボタン</span> で刃物を表裏反転</li>
+        <li>表(+)の歪みは表から、裏(-)の歪みは裏から叩く</li>
+        <li>ゾーンの数値が 0 に近づくほど良い成形</li>
+      </ul>
+      <h3>⚔️ フェーズ③ 研ぎ (Sharpening)</h3>
+      <ul>
+        <li><span class="tag">両手グリップ</span> で刃物を保持</li>
+        <li>砥石の上で前後に動かしてストロークをカウント</li>
+        <li>目標角度 <strong>15°</strong> を維持して研ぐ</li>
+        <li>両手の角度が揃っていない場合は判定されません</li>
+        <li>「シャーッ」という音が正しい研ぎのサイン</li>
+        <li>30ストロークで完了</li>
+      </ul>
+      <h3>🎮 共通操作</h3>
+      <ul>
+        <li><span class="tag">右A ボタン</span> 次のフェーズへ進む</li>
+        <li><span class="tag">右B ボタン</span> 現在フェーズをリトライ</li>
+      </ul>
+    </div>
+  </div>
+</div>
 
 <script type="importmap">
 {
@@ -911,7 +1057,7 @@ function buildResultCanvas(score, bladeStateSnap, scores) {
   ctx.fillStyle = 'rgba(232,200,122,0.4)';
   ctx.font = '16px serif';
   ctx.textAlign = 'center';
-  ctx.fillText('Aボタン / Nキーで再プレイ', W/2, H - 30);
+  ctx.fillText('Aボタンで再プレイ', W/2, H - 30);
   return c;
 }
 
@@ -948,9 +1094,12 @@ function saveScore(score) {
    UI HTML UPDATES
 ================================================================ */
 function updateStatusBar(label, info, score) {
-  document.getElementById('state-label').textContent = label;
-  document.getElementById('phase-info').textContent = info;
-  if (score !== null) document.getElementById('score-display').textContent = `Score: ${Math.round(score)}`;
+  const sl = document.getElementById('state-label');
+  const pi = document.getElementById('phase-info');
+  const sd = document.getElementById('score-display');
+  if (sl) sl.textContent = label;
+  if (pi) pi.textContent = info;
+  if (sd && score !== null) sd.textContent = `Score: ${Math.round(score)}`;
 }
 
 /* ================================================================
@@ -1008,81 +1157,43 @@ let wasAPressed  = false;
 let wasBPressed  = false;
 let wasXPressed  = false;
 
-// Mouse / keyboard fallback
-const mouse = new THREE.Vector2();
-const raycaster = new THREE.Raycaster();
-let mouseHeld = false;
-const fakeLH = new THREE.Vector3(-0.4, 1.3, -1.0); // fake left hand pos
-const fakeRH = new THREE.Vector3(0.3, 1.3, -1.0);  // fake right hand pos
-let prevFakeRH = fakeRH.clone();
-const keyState = {};
-window.addEventListener('keydown', e => { keyState[e.code] = true; });
-window.addEventListener('keyup',   e => { keyState[e.code] = false; });
-window.addEventListener('mousemove', e => {
-  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-  // Move fake right hand based on mouse
-  fakeRH.set(mouse.x * 0.6 + 0.1, 1.3 + mouse.y * 0.2, -1.0);
-});
-window.addEventListener('mousedown', e => { mouseHeld = true; resumeAudio(); });
-window.addEventListener('mouseup',   e => { mouseHeld = false; });
-
 function isVRActive() { return renderer.xr.isPresenting; }
 
 /* ================================================================
-   HELPER: Get right controller world position
+   HELPER: Get controller world position (VR only)
 ================================================================ */
-const tempVec  = new THREE.Vector3(); // 汎用
-const tempVecL = new THREE.Vector3(); // 左手専用
-const tempVecR = new THREE.Vector3(); // 右手専用
+const tempVec  = new THREE.Vector3();
+const tempVecL = new THREE.Vector3();
+const tempVecR = new THREE.Vector3();
 function getRightHandPos() {
-  if (isVRActive() && rightController) {
-    rightController.getWorldPosition(tempVecR);
-    return tempVecR;
-  }
-  return fakeRH;
+  if (rightController) { rightController.getWorldPosition(tempVecR); return tempVecR; }
+  return new THREE.Vector3(0.3, 1.3, -1.0);
 }
 function getLeftHandPos() {
-  if (isVRActive() && leftController) {
-    leftController.getWorldPosition(tempVecL);
-    return tempVecL;
-  }
-  return fakeLH;
+  if (leftController) { leftController.getWorldPosition(tempVecL); return tempVecL; }
+  return new THREE.Vector3(-0.3, 1.3, -1.0);
 }
 function getRightTrigger() {
-  if (isVRActive()) {
-    const gp = getRightGamepad();
-    if (gp) return gp.buttons[0]?.pressed ?? false;
-    return false;
-  }
-  return mouseHeld;
+  const gp = getRightGamepad();
+  return gp ? (gp.buttons[0]?.pressed ?? false) : false;
 }
 function getLeftTriggerOrGrip() {
-  if (isVRActive()) {
-    const gp = getLeftGamepad();
-    if (gp) return (gp.buttons[0]?.pressed ?? false) || (gp.buttons[1]?.pressed ?? false);
-    return false;
-  }
-  return keyState['ShiftLeft'] || keyState['ShiftRight'];
+  const gp = getLeftGamepad();
+  return gp ? ((gp.buttons[0]?.pressed ?? false) || (gp.buttons[1]?.pressed ?? false)) : false;
 }
 // --- 安全なgamepad取得ヘルパー ---
 // rightController/leftControllerはconnectedイベント後に確定するが、
 // XRセッション開始直後はnullのことがある。
 // そのためctrl0/ctrl1のgamepadも直接参照し、handednessで右/左を判定する。
 function getRightGamepad() {
-  // 優先: rightControllerが確定していればそちらを使う
   if (rightController?.gamepad) return rightController.gamepad;
-  // フォールバック: ctrl0/ctrl1のどちらかがrightならそちらを使う
   for (const c of [ctrl0, ctrl1]) {
     if (c?.gamepad && c.gamepad.hand === 'right') return c.gamepad;
   }
-  // さらにフォールバック: XR入力ソースを直接走査
-  if (isVRActive()) {
-    const session = renderer.xr.getSession();
-    if (session) {
-      for (const src of session.inputSources) {
-        if (src.handedness === 'right' && src.gamepad) return src.gamepad;
-      }
+  const session = renderer.xr.getSession();
+  if (session) {
+    for (const src of session.inputSources) {
+      if (src.handedness === 'right' && src.gamepad) return src.gamepad;
     }
   }
   return null;
@@ -1092,48 +1203,31 @@ function getLeftGamepad() {
   for (const c of [ctrl0, ctrl1]) {
     if (c?.gamepad && c.gamepad.hand === 'left') return c.gamepad;
   }
-  if (isVRActive()) {
-    const session = renderer.xr.getSession();
-    if (session) {
-      for (const src of session.inputSources) {
-        if (src.handedness === 'left' && src.gamepad) return src.gamepad;
-      }
+  const session = renderer.xr.getSession();
+  if (session) {
+    for (const src of session.inputSources) {
+      if (src.handedness === 'left' && src.gamepad) return src.gamepad;
     }
   }
   return null;
 }
 
 function getAButton() {
-  if (isVRActive()) {
-    const gp = getRightGamepad();
-    if (gp) return gp.buttons[4]?.pressed ?? false;
-    return false;
-  }
-  return keyState['KeyN'] ?? false;
+  const gp = getRightGamepad();
+  return gp ? (gp.buttons[4]?.pressed ?? false) : false;
 }
 function getBButton() {
-  if (isVRActive()) {
-    const gp = getRightGamepad();
-    if (gp) return gp.buttons[5]?.pressed ?? false;
-    return false;
-  }
-  return keyState['KeyP'] ?? false;
+  const gp = getRightGamepad();
+  return gp ? (gp.buttons[5]?.pressed ?? false) : false;
 }
 function getXButton() {
-  if (isVRActive()) {
-    const gp = getLeftGamepad();
-    if (gp) return gp.buttons[4]?.pressed ?? false;
-    return false;
-  }
-  return keyState['KeyX'] ?? false;
+  const gp = getLeftGamepad();
+  return gp ? (gp.buttons[4]?.pressed ?? false) : false;
 }
 function getBothGrips() {
-  if (isVRActive()) {
-    const lg = getLeftGamepad()?.buttons[1]?.pressed ?? false;
-    const rg = getRightGamepad()?.buttons[1]?.pressed ?? false;
-    return lg || rg;
-  }
-  return keyState['Space'] ?? false;
+  const lg = getLeftGamepad()?.buttons[1]?.pressed  ?? false;
+  const rg = getRightGamepad()?.buttons[1]?.pressed ?? false;
+  return lg || rg;
 }
 
 /* ================================================================
@@ -1215,8 +1309,8 @@ function onEnterState(state, prev) {
   if (state === State.INTRO) {
     bladeState = { shapeDistortion: 0, symmetryError: 0, sharpness: 0 };
     resetForging(); resetShaping(); resetSharpening();
-    updateInfoPanel('越前打刃物\nEchizen Blades\n\nAボタン / Nキーで開始');
-    updateStatusBar('INTRO', 'Nキー：開始', null);
+    updateInfoPanel('越前打刃物\nEchizen Blades\n\nAボタンで開始');
+    updateStatusBar('INTRO', 'Aボタン：開始', null);
 
   } else if (state === State.FORGING) {
     resetForging();
@@ -1290,18 +1384,8 @@ let prevRightTrigger = false;
 let forgingHitCooldown = 0;
 
 function updateForging(delta) {
-  // Fake WASD for left hand movement
-  if (!isVRActive()) {
-    if (keyState['KeyA']) fakeLH.x -= delta * 0.8;
-    if (keyState['KeyD']) fakeLH.x += delta * 0.8;
-    if (keyState['KeyW']) fakeLH.z -= delta * 0.8;
-    if (keyState['KeyS']) fakeLH.z += delta * 0.8;
-    fakeLH.x = THREE.MathUtils.clamp(fakeLH.x, -2, 2);
-    fakeLH.z = THREE.MathUtils.clamp(fakeLH.z, -2.5, 0.5);
-  }
-
-  const lhPos = getLeftHandPos();
-  const rhPos = getRightHandPos();
+  const lhPos    = getLeftHandPos();
+  const rhPos    = getRightHandPos();
   const leftTrig = getLeftTriggerOrGrip();
 
   // Update iron BB
@@ -1323,8 +1407,8 @@ function updateForging(delta) {
     ironMesh.position.set(lhPos.x, Math.max(lhPos.y - 0.04, 0.5), lhPos.z);
   }
 
-  // ---- ハンマーをコントローラーに追従させる（当たり判定より前に更新）----
-  if (isVRActive()) {
+  // ---- ハンマーをコントローラーに追従させる ----
+  {
     let targetGrip = null;
     if (rightController === ctrl0) targetGrip = grip0;
     else if (rightController === ctrl1) targetGrip = grip1;
@@ -1333,18 +1417,7 @@ function updateForging(delta) {
       if (hammerGroup.parent) hammerGroup.parent.remove(hammerGroup);
       attachTo.add(hammerGroup);
     }
-    // ローカル位置・回転を毎フレーム固定（一度だけだと他の処理で上書きされる場合があるため）
-    // コントローラー座標系：-Z = 前方、Y = 上
-    // 柄をZ軸（前後）方向に立てる → rotation.x = 0（Y軸が柄方向）
-    // ヘッドが「前方下」に来るよう: rotation.x = PI/2 にして柄をZ軸方向に
-    hammerGroup.position.set(0, 0, -0.05);   // コントローラー先端から少し前
-    hammerGroup.rotation.set(Math.PI / 2, 0, 0); // 柄がZ軸方向（前後）、ヘッドが-Z先端
-  } else {
-    if (hammerGroup.parent !== scene) {
-      if (hammerGroup.parent) hammerGroup.parent.remove(hammerGroup);
-      scene.add(hammerGroup);
-    }
-    hammerGroup.position.copy(rhPos);
+    hammerGroup.position.set(0, 0, -0.05);
     hammerGroup.rotation.set(Math.PI / 2, 0, 0);
   }
 
@@ -1393,9 +1466,9 @@ function updateForging(delta) {
     forgingHitCooldown = 0.25;
     forgingHitCount++;
 
-    const isTiming  = ironOnWorkbench;
-    const isVelocity = rightVelocity > CONFIG.FORGING.VELOCITY_THRESHOLD || !isVRActive();
-    const isHit     = hammerHitsIron;
+    const isTiming   = ironOnWorkbench;
+    const isVelocity = rightVelocity > CONFIG.FORGING.VELOCITY_THRESHOLD;
+    const isHit      = hammerHitsIron;
     const hotEnough = ironTemperature >= CONFIG.FORGING.MISS_THRESHOLD;
 
     let result = 'Miss';
@@ -1427,7 +1500,7 @@ function updateForging(delta) {
     else playHammerMiss();
 
     // VR haptics
-    if (isVRActive() && rightController?.gamepad?.hapticActuators?.[0]) {
+    if (rightController?.gamepad?.hapticActuators?.[0]) {
       rightController.gamepad.hapticActuators[0].pulse(result === 'Perfect' ? 0.8 : 0.3, 80);
     }
 
@@ -1436,7 +1509,7 @@ function updateForging(delta) {
 
     if (forgingHitCount >= CONFIG.FORGING.TOTAL_HITS) {
       forgingComplete = true;
-      updateInfoPanel(`鍛造完了！\nAボタン / Nキーで次へ\n歪み: ${Math.round(shapeDistortion)}`);
+      updateInfoPanel(`鍛造完了！\nAボタンで次へ\n歪み: ${Math.round(shapeDistortion)}`);
       playComplete();
     }
   }
@@ -1452,15 +1525,6 @@ let prevXButton = false;
 const bladeWorldPos = new THREE.Vector3();
 
 function updateShaping(delta) {
-  if (!isVRActive()) {
-    if (keyState['KeyA']) fakeLH.x -= delta * 0.8;
-    if (keyState['KeyD']) fakeLH.x += delta * 0.8;
-    if (keyState['KeyW']) fakeLH.z -= delta * 0.8;
-    if (keyState['KeyS']) fakeLH.z += delta * 0.8;
-    fakeLH.x = THREE.MathUtils.clamp(fakeLH.x, -2, 2);
-    fakeLH.z = THREE.MathUtils.clamp(fakeLH.z, -2.5, 0.5);
-  }
-
   const rhPos    = getRightHandPos();
   const xBtn     = getXButton();
 
@@ -1498,12 +1562,6 @@ function updateShaping(delta) {
   currRightPos.copy(rhPos);
   rightVelocity = prevRightPos.distanceTo(currRightPos) / Math.max(delta, 0.001);
   shapingHitCooldown = Math.max(0, shapingHitCooldown - delta);
-
-  // ---- ハンマービジュアル（非VR） ----
-  if (!isVRActive()) {
-    hammerGroup.position.copy(rhPos);
-    hammerGroup.rotation.set(Math.PI / 2, 0, 0);
-  }
 
   // ---- 打撃判定 ----
   const shapingTrig = getRightTrigger();
@@ -1560,7 +1618,7 @@ function updateShaping(delta) {
       spawnSparks(rhPos.clone(), 3);
     }
 
-    if (isVRActive() && rightController?.gamepad?.hapticActuators?.[0]) {
+    if (rightController?.gamepad?.hapticActuators?.[0]) {
       rightController.gamepad.hapticActuators[0].pulse(0.4, 60);
     }
 
@@ -1573,7 +1631,7 @@ function updateShaping(delta) {
   if (shapingHitCount >= CONFIG.SHAPING.MAX_HITS && !shapingComplete) {
     shapingComplete = true;
     const avg = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
-    updateInfoPanel(`成形完了！\nAボタン / Nキーで次へ\n対称性誤差: ${Math.round(avg)}`);
+    updateInfoPanel(`成形完了！\nAボタンで次へ\n対称性誤差: ${Math.round(avg)}`);
     bladeState.symmetryError = avg;
     playComplete();
   }
@@ -1591,16 +1649,11 @@ function updateSharpening(delta) {
   const rhPos = getRightHandPos();
 
   // ---- グリップ判定：両手同時 ----
-  const lGrip = isVRActive()
-    ? ((getLeftGamepad()?.buttons[0]?.pressed  ?? false) ||
-       (getLeftGamepad()?.buttons[1]?.pressed  ?? false))
-    : mouseHeld;
-  const rGrip = isVRActive()
-    ? ((getRightGamepad()?.buttons[0]?.pressed ?? false) ||
-       (getRightGamepad()?.buttons[1]?.pressed ?? false))
-    : mouseHeld;
-
-  const held = isVRActive() ? (lGrip && rGrip) : mouseHeld;
+  const lGrip = (getLeftGamepad()?.buttons[0]?.pressed  ?? false) ||
+                (getLeftGamepad()?.buttons[1]?.pressed  ?? false);
+  const rGrip = (getRightGamepad()?.buttons[0]?.pressed ?? false) ||
+                (getRightGamepad()?.buttons[1]?.pressed ?? false);
+  const held  = lGrip && rGrip;
 
   // 両手の中点（= 刃物グループの位置）
   const midX = (lhPos.x + rhPos.x) * 0.5;
@@ -1608,22 +1661,13 @@ function updateSharpening(delta) {
   const midZ = (lhPos.z + rhPos.z) * 0.5;
 
   // ---- 各コントローラーの「水平面からの傾き」を計算 ----
-  // VR: コントローラーのクォータニオンから取得
-  // 非VR: マウス位置から模擬
   let leftTiltDeg  = 0;
   let rightTiltDeg = 0;
-
-  if (isVRActive() && leftController && rightController) {
-    // コントローラーのローカルY軸（上方向）をワールド空間で取得
+  if (leftController && rightController) {
     const lUp = new THREE.Vector3(0, 1, 0).applyQuaternion(leftController.quaternion);
     const rUp = new THREE.Vector3(0, 1, 0).applyQuaternion(rightController.quaternion);
-    // 水平面（XZ平面）から何度傾いているか = Y成分のarcsin
     leftTiltDeg  = Math.asin(THREE.MathUtils.clamp(lUp.y, -1, 1)) * (180 / Math.PI);
     rightTiltDeg = Math.asin(THREE.MathUtils.clamp(rUp.y, -1, 1)) * (180 / Math.PI);
-  } else {
-    // 非VR: マウスY位置で両手同じ角度を模擬
-    leftTiltDeg  = (mouse.y + 1) * 45 - 45; // -45°〜+45°
-    rightTiltDeg = leftTiltDeg;
   }
 
   // ---- 両手の角度一致チェック（差が10°以内なら一致とみなす）----
@@ -1683,7 +1727,7 @@ function updateSharpening(delta) {
             playSharpenBad();
           }
 
-          if (isVRActive() && rightController?.gamepad?.hapticActuators?.[0]) {
+          if (rightController?.gamepad?.hapticActuators?.[0]) {
             rightController.gamepad.hapticActuators[0].pulse(score > 70 ? 0.5 : 0.2, 50);
           }
 
@@ -1711,7 +1755,7 @@ function updateSharpening(delta) {
 
   if (strokeCount >= CONFIG.SHARPENING.TOTAL_STROKES && !sharpenComplete) {
     sharpenComplete = true;
-    updateInfoPanel(`研ぎ完了！\nAボタン / Nキーで結果へ\n鋭さ: ${Math.round(totalSharpness)}点`);
+    updateInfoPanel(`研ぎ完了！\nAボタンで結果へ\n鋭さ: ${Math.round(totalSharpness)}点`);
     playComplete();
   }
 }
@@ -1755,71 +1799,96 @@ const particles = new THREE.Points(particleGeo, particleMat);
 scene.add(particles);
 
 /* ================================================================
-   XR BUTTON SETUP
+   XR & UI SETUP
 ================================================================ */
-async function setupXRButtons() {
-  const btnVR = document.getElementById('btn-vr');
-  const btnAR = document.getElementById('btn-ar');
-  const btnExitXR = document.getElementById('btn-exit-xr');
+async function setupUI() {
+  const btnVR    = document.getElementById('btn-vr');
+  const uiPanel  = document.getElementById('uiPanel');
+  const xrStatus = document.getElementById('xr-status');
 
   if (navigator.xr) {
     const vrSupported = await navigator.xr.isSessionSupported('immersive-vr').catch(() => false);
-    const arSupported = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
-
     if (vrSupported) {
-      btnVR.disabled = false;
+      btnVR.disabled    = false;
+      btnVR.textContent = '🥽 VR を開始する';
       btnVR.addEventListener('click', async () => {
         resumeAudio();
         if (renderer.xr.isPresenting) return;
-        const session = await navigator.xr.requestSession('immersive-vr', {
-          requiredFeatures: ['local-floor'],
-          optionalFeatures: ['bounded-floor', 'hand-tracking'],
-        });
-        renderer.xr.setSession(session);
-        btnVR.style.display = 'none';
-        btnAR.style.display = 'none';
-        btnExitXR.style.display = 'inline-block';
+        try {
+          const session = await navigator.xr.requestSession('immersive-vr', {
+            requiredFeatures: ['local-floor'],
+            optionalFeatures: ['bounded-floor', 'hand-tracking'],
+          });
+          renderer.xr.setSession(session);
+        } catch(e) { console.error(e); }
       });
+    } else {
+      btnVR.textContent = 'VR 非対応の端末です';
     }
-    if (arSupported) {
-      btnAR.disabled = false;
-      btnAR.addEventListener('click', async () => {
-        resumeAudio();
-        if (renderer.xr.isPresenting) return;
-        const session = await navigator.xr.requestSession('immersive-ar', {
-          requiredFeatures: ['local-floor', 'hit-test'],
-        });
-        renderer.xr.setSession(session);
-        scene.background = null;
-        btnVR.style.display = 'none';
-        btnAR.style.display = 'none';
-        btnExitXR.style.display = 'inline-block';
-      });
-    }
+  } else {
+    btnVR.textContent = 'WebXR 非対応';
   }
 
+  renderer.xr.addEventListener('sessionstart', () => {
+    uiPanel.style.display  = 'none';
+    xrStatus.style.display = 'block';
+  });
   renderer.xr.addEventListener('sessionend', () => {
-    btnVR.style.display = 'inline-block';
-    btnAR.style.display = 'inline-block';
-    btnExitXR.style.display = 'none';
+    uiPanel.style.display  = '';
+    xrStatus.style.display = 'none';
     scene.background = new THREE.Color(0x0a0705);
   });
 
-  btnExitXR.addEventListener('click', () => {
-    if (renderer.xr.isPresenting) renderer.xr.getSession()?.end();
+  // ヘルプ
+  document.getElementById('helpBtn').addEventListener('click', () =>
+    document.getElementById('modal').classList.add('open'));
+  document.getElementById('modalClose').addEventListener('click', () =>
+    document.getElementById('modal').classList.remove('open'));
+  document.getElementById('modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('modal'))
+      document.getElementById('modal').classList.remove('open');
+  });
+
+  // スコア記録
+  document.getElementById('recordsBtn').addEventListener('click', () => {
+    renderScoreModal();
+    document.getElementById('recordsModal').classList.add('open');
+  });
+  document.getElementById('recordsModalClose').addEventListener('click', () =>
+    document.getElementById('recordsModal').classList.remove('open'));
+  document.getElementById('recordsModal').addEventListener('click', e => {
+    if (e.target === document.getElementById('recordsModal'))
+      document.getElementById('recordsModal').classList.remove('open');
+  });
+  document.getElementById('recordsResetAll').addEventListener('click', () => {
+    if (confirm('全てのスコアをリセットしますか？')) {
+      localStorage.removeItem('echizen_scores');
+      renderScoreModal();
+    }
   });
 }
-setupXRButtons();
 
-/* ================================================================
-   RESET BUTTON
-================================================================ */
-document.getElementById('btn-reset').addEventListener('click', () => {
-  if (confirm('スコアデータをリセットしますか？\nReset all scores?')) {
-    localStorage.removeItem('echizen_scores');
-    alert('リセット完了');
+function renderScoreModal() {
+  const scores  = loadScores();
+  const entries = document.getElementById('rec-entries');
+  entries.innerHTML = '';
+  if (!scores.length) {
+    entries.innerHTML = '<div class="rmodal-no-data">まだ記録がありません</div>';
+    return;
   }
-});
+  const medals = ['gold','silver','bronze'];
+  scores.forEach((s, i) => {
+    const cls = medals[i] || 'other';
+    const el  = document.createElement('div');
+    el.className = `rmodal-entry ${cls}`;
+    el.innerHTML = `
+      <span class="entry-rank-score">${['🥇','🥈','🥉','4位','5位'][i]||((i+1)+'位')} &nbsp; ${Math.round(s.score)} 点</span>
+      <span class="entry-date">${s.date}</span>`;
+    entries.appendChild(el);
+  });
+}
+
+setupUI();
 
 /* ================================================================
    INITIAL STATE
@@ -1838,50 +1907,30 @@ renderer.setAnimationLoop((t) => {
   const delta = Math.min((t - lastTime) / 1000, 0.033);
   lastTime = t;
 
-  // Animate ambient particles
   const ppos = particles.geometry.attributes.position.array;
   for (let i = 0; i < particleCount; i++) {
     ppos[i*3+1] += delta * (0.1 + Math.random()*0.05);
-    if (ppos[i*3+1] > 3.5) { ppos[i*3+1] = 0; }
+    if (ppos[i*3+1] > 3.5) ppos[i*3+1] = 0;
   }
   particles.geometry.attributes.position.needsUpdate = true;
 
-  // Billboard info panel to camera
   if (infoPanelMesh) {
     const cam = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
     infoPanelMesh.quaternion.copy(cam.quaternion);
   }
 
-  // Update sparks
   updateSparks(delta);
-
-  // Global input
   handleGlobalInput();
 
-  // Phase-specific
   switch(currentState) {
-    case State.INTRO:       updateIntro(delta);       break;
-    case State.FORGING:     updateForging(delta);     break;
-    case State.SHAPING:     updateShaping(delta);     break;
-    case State.SHARPENING:  updateSharpening(delta);  break;
-    case State.RESULT:      updateResult(delta);      break;
+    case State.INTRO:      updateIntro(delta);      break;
+    case State.FORGING:    updateForging(delta);    break;
+    case State.SHAPING:    updateShaping(delta);    break;
+    case State.SHARPENING: updateSharpening(delta); break;
+    case State.RESULT:     updateResult(delta);     break;
   }
 
   renderer.render(scene, camera);
-});
-
-/* ================================================================
-   KEYBOARD CAMERA CONTROL (non-VR)
-================================================================ */
-window.addEventListener('keydown', (e) => {
-  if (isVRActive()) return;
-  const speed = 0.15;
-  switch(e.code) {
-    case 'ArrowUp':    camera.position.z -= speed; break;
-    case 'ArrowDown':  camera.position.z += speed; break;
-    case 'ArrowLeft':  camera.position.x -= speed; break;
-    case 'ArrowRight': camera.position.x += speed; break;
-  }
 });
 
 </script>
