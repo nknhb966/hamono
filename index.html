@@ -152,7 +152,7 @@ const CONFIG = {
     TOTAL_HITS: 30,
     VELOCITY_THRESHOLD: 0.8,
     FORGE_HEAT_RATE: 25,       // per second in furnace
-    COOL_RATE: 8,              // per second in air
+    COOL_RATE: 2,              // per second in air（ゆっくり冷える）
     HOT_THRESHOLD: 60,
     MISS_THRESHOLD: 30,
     SPARK_COUNT_PERFECT: 80,
@@ -1114,16 +1114,46 @@ function updateForging(delta) {
   ironInFurnace   = ironInFurnaceNow;
   ironOnWorkbench = ironOnWorkbenchNow;
 
-  // Grab logic: left hand near iron
+  // Grab logic: 左手が鉄に近くてトリガー/グリップを引いたら掴む
   const lhToIron = lhPos.distanceTo(ironMesh.position);
   if (leftTrig && lhToIron < 0.35 && !ironHeld) ironHeld = true;
   if (!leftTrig) ironHeld = false;
 
-  // Move iron with left hand
+  // 鉄を左手に追従させる
   if (ironHeld) {
-    ironMesh.position.set(lhPos.x, lhPos.y, lhPos.z);
-    ironMesh.position.y = Math.max(ironMesh.position.y, 0.5);
+    ironMesh.position.set(lhPos.x, Math.max(lhPos.y - 0.04, 0.5), lhPos.z);
   }
+
+  // ---- ハンマーをコントローラーに追従させる（当たり判定より前に更新）----
+  if (isVRActive()) {
+    let targetGrip = null;
+    if (rightController === ctrl0) targetGrip = grip0;
+    else if (rightController === ctrl1) targetGrip = grip1;
+    const attachTo = targetGrip ?? rightController;
+    if (attachTo && hammerGroup.parent !== attachTo) {
+      if (hammerGroup.parent) hammerGroup.parent.remove(hammerGroup);
+      attachTo.add(hammerGroup);
+    }
+    // ローカル位置・回転を毎フレーム固定（一度だけだと他の処理で上書きされる場合があるため）
+    // コントローラー座標系：-Z = 前方、Y = 上
+    // 柄をZ軸（前後）方向に立てる → rotation.x = 0（Y軸が柄方向）
+    // ヘッドが「前方下」に来るよう: rotation.x = PI/2 にして柄をZ軸方向に
+    hammerGroup.position.set(0, 0, -0.05);   // コントローラー先端から少し前
+    hammerGroup.rotation.set(Math.PI / 2, 0, 0); // 柄がZ軸方向（前後）、ヘッドが-Z先端
+  } else {
+    if (hammerGroup.parent !== scene) {
+      if (hammerGroup.parent) hammerGroup.parent.remove(hammerGroup);
+      scene.add(hammerGroup);
+    }
+    hammerGroup.position.copy(rhPos);
+    hammerGroup.rotation.set(Math.PI / 2, 0, 0);
+  }
+
+  // ---- ハンマーヘッドのワールド座標を取得して当たり判定 ----
+  // hammerHeadはhammerGroupの子で position.set(0, -0.18, 0)
+  // rotation.x = PI/2 適用後のワールド座標を取得
+  const hammerHeadWorld = new THREE.Vector3();
+  hammerHead.getWorldPosition(hammerHeadWorld);
 
   // Temperature update
   if (ironInFurnace) {
@@ -1148,24 +1178,25 @@ function updateForging(delta) {
   // 温度スプライト更新（毎フレーム）
   updateTempSprite(ironTemperature);
 
-  // Velocity（ハンマー追従より前に計算）
+  // Velocity
   prevRightPos.copy(currRightPos);
   currRightPos.copy(rhPos);
   rightVelocity = prevRightPos.distanceTo(currRightPos) / Math.max(delta, 0.001);
 
   forgingHitCooldown = Math.max(0, forgingHitCooldown - delta);
 
-  // Hit detection
+  // Hit detection — ハンマーヘッドが鉄のBBに当たっているか
   const rightTrig = getRightTrigger();
-  const hammerNearIron = rhPos.distanceTo(ironMesh.position) < 0.22;
+  const hammerHitsIron = ironBB.containsPoint(hammerHeadWorld) ||
+                         hammerHeadWorld.distanceTo(ironMesh.position) < 0.14;
 
   if (rightTrig && !prevRightTrigger && forgingHitCooldown <= 0 && forgingHitCount < CONFIG.FORGING.TOTAL_HITS) {
     forgingHitCooldown = 0.25;
     forgingHitCount++;
 
-    const isTiming = ironOnWorkbench;
+    const isTiming  = ironOnWorkbench;
     const isVelocity = rightVelocity > CONFIG.FORGING.VELOCITY_THRESHOLD || !isVRActive();
-    const isHit = hammerNearIron;
+    const isHit     = hammerHitsIron;
     const hotEnough = ironTemperature >= CONFIG.FORGING.MISS_THRESHOLD;
 
     let result = 'Miss';
@@ -1178,12 +1209,12 @@ function updateForging(delta) {
     }
 
     // Update distortion
-    if (result === 'Miss')    shapeDistortion = Math.min(100, shapeDistortion + 2);
+    if (result === 'Miss')         shapeDistortion = Math.min(100, shapeDistortion + 2);
     else if (result === 'Good')    shapeDistortion = Math.min(100, shapeDistortion + 1);
     else if (result === 'Perfect') shapeDistortion = Math.max(0,   shapeDistortion - 0.5);
 
-    // Sparks
-    const sparkOrigin = ironMesh.position.clone().add(new THREE.Vector3(0, 0.05, 0));
+    // Sparks — ヘッド位置から発生
+    const sparkOrigin = hammerHeadWorld.clone().add(new THREE.Vector3(0, 0.02, 0));
     const sparkCount = result === 'Perfect' ? CONFIG.FORGING.SPARK_COUNT_PERFECT :
                        result === 'Good'    ? CONFIG.FORGING.SPARK_COUNT_GOOD :
                                               CONFIG.FORGING.SPARK_COUNT_MISS;
@@ -1199,7 +1230,6 @@ function updateForging(delta) {
       rightController.gamepad.hapticActuators[0].pulse(result === 'Perfect' ? 0.8 : 0.3, 80);
     }
 
-    // Info panel flash
     updateInfoPanel(`打撃 ${forgingHitCount}/${CONFIG.FORGING.TOTAL_HITS}\n${result}\n温度: ${Math.round(ironTemperature)}°\n歪み: ${Math.round(shapeDistortion)}`);
     updateStatusBar('鍛造', `打撃 ${forgingHitCount}/${CONFIG.FORGING.TOTAL_HITS} | 温度: ${Math.round(ironTemperature)}°`, 100 - shapeDistortion);
 
@@ -1210,35 +1240,6 @@ function updateForging(delta) {
     }
   }
   prevRightTrigger = rightTrig;
-
-  // ---- ハンマーをコントローラーに追従させる ----
-  if (isVRActive()) {
-    // gripはコントローラーの「握り位置」を表す → grip0/grip1 を使う
-    // rightControllerはray originなのでグリップ位置とズレる場合がある
-    // → rightControllerの親(xrRig)経由で正しいgrip objectを探す
-    let targetGrip = null;
-    if (rightController === ctrl0) targetGrip = grip0;
-    else if (rightController === ctrl1) targetGrip = grip1;
-
-    const attachTo = targetGrip ?? rightController;
-    if (attachTo && hammerGroup.parent !== attachTo) {
-      if (hammerGroup.parent) hammerGroup.parent.remove(hammerGroup);
-      attachTo.add(hammerGroup);
-      // コントローラーのローカル空間で柄がY軸方向に沿うよう設定
-      // ヘッドが手の平の下（-Y）に来るように少し上にずらす
-      hammerGroup.position.set(0, 0.04, 0);
-      hammerGroup.rotation.set(0, 0, 0);
-    }
-  } else {
-    // 非VR: シーンに置いてfakeRHをワールド座標で追従
-    if (hammerGroup.parent !== scene) {
-      if (hammerGroup.parent) hammerGroup.parent.remove(hammerGroup);
-      scene.add(hammerGroup);
-    }
-    hammerGroup.position.copy(rhPos);
-    // 非VRでは少しハンマーを手前下に傾けて見やすくする
-    hammerGroup.rotation.set(0.3, 0, 0);
-  }
 }
 
 /* ================================================================
