@@ -467,28 +467,66 @@ furnace.add(furnaceHole);
 furnace.position.set(-1.1, 0.9, -1.2);
 groupForging.add(furnace);
 
-// Iron piece
+// Iron piece — 最初から作業台の上に配置
 const ironMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8, metalness: 0.7 });
 const ironMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.06, 0.06), ironMat);
 ironMesh.castShadow = true;
-ironMesh.position.set(-1.1, 0.94, -1.2);
+// workbenchPos.y(0.85) + 天板厚み半分(0.03) + 鉄厚み半分(0.03) = 0.91
+ironMesh.position.set(0, 0.91, -1.1);
 groupForging.add(ironMesh);
 
+// 温度表示スプライト（鉄の真上に追従）
+const tempCanvas = document.createElement('canvas');
+tempCanvas.width = 128; tempCanvas.height = 64;
+const tempCtx = tempCanvas.getContext('2d');
+const tempTex = new THREE.CanvasTexture(tempCanvas);
+const tempSprite = new THREE.Sprite(
+  new THREE.SpriteMaterial({ map: tempTex, transparent: true, depthTest: false })
+);
+tempSprite.scale.set(0.28, 0.14, 1);
+tempSprite.position.set(0, 0.20, 0); // ironMeshからの相対位置
+ironMesh.add(tempSprite);
+
+function updateTempSprite(temp) {
+  tempCtx.clearRect(0, 0, 128, 64);
+  tempCtx.fillStyle = 'rgba(0,0,0,0.70)';
+  tempCtx.beginPath();
+  tempCtx.roundRect(4, 6, 120, 52, 10);
+  tempCtx.fill();
+  const hue = temp < 30 ? 200 : temp < 60 ? 30 : 10;
+  tempCtx.fillStyle = `hsl(${hue},100%,72%)`;
+  tempCtx.font = 'bold 30px monospace';
+  tempCtx.textAlign = 'center';
+  tempCtx.textBaseline = 'middle';
+  tempCtx.fillText(`${Math.round(temp)}\u00b0`, 64, 33);
+  tempTex.needsUpdate = true;
+}
+
 // Hammer (right hand visual)
+// VRコントローラー座標系：
+//   +Y = グリップ上方向、-Z = コントローラー先端方向
+// ハンマーは「柄を握る」イメージ：
+//   柄をY軸方向、ヘッドを-Y（下）に配置
+// groupは scene に置き、VR時は rightController の子にする
 const hammerGroup = new THREE.Group();
 const hammerHandle = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.015, 0.015, 0.35, 8),
-  new THREE.MeshStandardMaterial({ color: 0x4a2e10, roughness: 0.8 })
+  new THREE.CylinderGeometry(0.013, 0.016, 0.30, 8),
+  new THREE.MeshStandardMaterial({ color: 0x5a3515, roughness: 0.85 })
 );
-hammerHandle.rotation.x = Math.PI / 2;
+// 柄をY軸方向（コントローラーのグリップ軸）に沿わせる
+// ハンドルの中心をコントローラー原点に合わせる
+hammerHandle.position.set(0, 0, 0);
 const hammerHead = new THREE.Mesh(
-  new THREE.BoxGeometry(0.08, 0.06, 0.08),
-  new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.6, metalness: 0.8 })
+  new THREE.BoxGeometry(0.09, 0.065, 0.065),
+  new THREE.MeshStandardMaterial({ color: 0x606060, roughness: 0.5, metalness: 0.85 })
 );
-hammerHead.position.set(0, 0, -0.2);
+// ヘッドを柄の下端（-Y）に付ける
+hammerHead.position.set(0, -0.18, 0);
 hammerGroup.add(hammerHandle);
 hammerGroup.add(hammerHead);
-hammerGroup.position.set(0, -0.05, -0.2);
+// コントローラーに子として追加したとき、手の平の中心から下にヘッドが来るよう微調整
+// localPositionはVR追加時にリセットするので初期値は0
+hammerGroup.position.set(0, 0, 0);
 
 // Left hand tong visual
 const tongGroup = new THREE.Group();
@@ -936,8 +974,9 @@ function resetForging() {
   forgingHitCount = 0;
   shapeDistortion = 0;
   forgingComplete = false;
-  ironMesh.position.set(-1.1, 0.94, -1.2);
+  ironMesh.position.set(0, 0.91, -1.1); // 作業台の上
   ironMesh.material.color.set(0x555555);
+  updateTempSprite(0);
 }
 function resetShaping() {
   shapingHitCount = 0;
@@ -1106,12 +1145,10 @@ function updateForging(delta) {
     : new THREE.Color(0x000000);
   ironMesh.material.emissiveIntensity = ironTemperature > 50 ? 1 : 0;
 
-  // Attach hammer to right hand
-  const rhInScene = rhPos.clone();
-  hammerGroup.position.copy(rhInScene);
-  hammerGroup.position.y -= 0.05;
+  // 温度スプライト更新（毎フレーム）
+  updateTempSprite(ironTemperature);
 
-  // Velocity
+  // Velocity（ハンマー追従より前に計算）
   prevRightPos.copy(currRightPos);
   currRightPos.copy(rhPos);
   rightVelocity = prevRightPos.distanceTo(currRightPos) / Math.max(delta, 0.001);
@@ -1174,12 +1211,33 @@ function updateForging(delta) {
   }
   prevRightTrigger = rightTrig;
 
-  // Attach visuals if in VR
-  if (isVRActive() && rightController) {
-    if (hammerGroup.parent !== rightController) rightController.add(hammerGroup);
+  // ---- ハンマーをコントローラーに追従させる ----
+  if (isVRActive()) {
+    // gripはコントローラーの「握り位置」を表す → grip0/grip1 を使う
+    // rightControllerはray originなのでグリップ位置とズレる場合がある
+    // → rightControllerの親(xrRig)経由で正しいgrip objectを探す
+    let targetGrip = null;
+    if (rightController === ctrl0) targetGrip = grip0;
+    else if (rightController === ctrl1) targetGrip = grip1;
+
+    const attachTo = targetGrip ?? rightController;
+    if (attachTo && hammerGroup.parent !== attachTo) {
+      if (hammerGroup.parent) hammerGroup.parent.remove(hammerGroup);
+      attachTo.add(hammerGroup);
+      // コントローラーのローカル空間で柄がY軸方向に沿うよう設定
+      // ヘッドが手の平の下（-Y）に来るように少し上にずらす
+      hammerGroup.position.set(0, 0.04, 0);
+      hammerGroup.rotation.set(0, 0, 0);
+    }
   } else {
-    if (hammerGroup.parent !== scene) scene.add(hammerGroup);
+    // 非VR: シーンに置いてfakeRHをワールド座標で追従
+    if (hammerGroup.parent !== scene) {
+      if (hammerGroup.parent) hammerGroup.parent.remove(hammerGroup);
+      scene.add(hammerGroup);
+    }
     hammerGroup.position.copy(rhPos);
+    // 非VRでは少しハンマーを手前下に傾けて見やすくする
+    hammerGroup.rotation.set(0.3, 0, 0);
   }
 }
 
