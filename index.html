@@ -368,10 +368,14 @@ addLaser(ctrl1);
    SPARK SYSTEM (InstancedMesh)
 ================================================================ */
 const SPARK_MAX = 80;
-const sparkGeo = new THREE.SphereGeometry(0.01, 4, 4);
-const sparkMat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
+const sparkGeo = new THREE.SphereGeometry(0.012, 4, 4);
+const sparkMat = new THREE.MeshBasicMaterial({ color: 0xffffff }); // 白ベース、instanceColorで上書き
 const sparkMesh = new THREE.InstancedMesh(sparkGeo, sparkMat, SPARK_MAX);
 sparkMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+// instanceColor を明示的に初期化しないと setColorAt が効かない
+sparkMesh.instanceColor = new THREE.InstancedBufferAttribute(
+  new Float32Array(SPARK_MAX * 3), 3
+);
 sparkMesh.count = 0;
 scene.add(sparkMesh);
 
@@ -559,19 +563,71 @@ bladeMesh.position.set(-0.2, workbenchPos.y + 0.06, -1.1);
 bladeMesh.rotation.y = Math.PI / 6;
 groupShaping.add(bladeMesh);
 
-// Zone indicators (overlay meshes on blade)
+// Zone indicators — 表(+)裏(-)歪みをスプライトで表示
 const ZONE_COUNT = CONFIG.SHAPING.ZONE_COUNT;
-const zoneIndicators = [];
+const zoneIndicators = []; // 色ボックス
+const zoneSprites    = []; // 数値スプライト
 const zones = [];
+
+// ゾーンごとのCanvasスプライトを生成
+function makeZoneCanvas() {
+  const c = document.createElement('canvas');
+  c.width = 96; c.height = 48;
+  return c;
+}
+function updateZoneSprite(idx) {
+  const z = zones[idx];
+  const c = zoneSprites[idx]._canvas;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 96, 48);
+  // 歪み値（表が正、裏が負）
+  const val = Math.round(z.distortion); // -50〜+50
+  const sign = val >= 0 ? '+' : '';
+  const hue  = val > 0 ? 0 : (val < 0 ? 220 : 120); // + = 赤, 0 = 緑, - = 青
+  const light = Math.abs(val) > 5 ? 60 : 40;
+  ctx.fillStyle = `rgba(0,0,0,0.7)`;
+  ctx.beginPath(); ctx.roundRect(2, 4, 92, 40, 6); ctx.fill();
+  ctx.fillStyle = `hsl(${hue},100%,${light}%)`;
+  ctx.font = 'bold 22px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`${sign}${val}`, 48, 24);
+  zoneSprites[idx]._tex.needsUpdate = true;
+}
+
 for (let i = 0; i < ZONE_COUNT; i++) {
   const t = i / (ZONE_COUNT - 1);
-  const zoneIndMat = new THREE.MeshBasicMaterial({ color: 0x0066ff, transparent: true, opacity: 0.35, depthTest: false });
+
+  // 色ボックス
+  const zoneIndMat = new THREE.MeshBasicMaterial({
+    color: 0x0066ff, transparent: true, opacity: 0.35, depthTest: false
+  });
   const zoneInd = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.04, 0.025), zoneIndMat);
   const bladeX = -0.22 + t * 0.46;
   zoneInd.position.set(bladeX, workbenchPos.y + 0.065, -1.1);
   groupShaping.add(zoneInd);
   zoneIndicators.push(zoneInd);
-  zones.push({ distortion: 5 + Math.random() * 15, worldX: bladeX });
+
+  // 数値スプライト
+  const canvas = makeZoneCanvas();
+  const tex    = new THREE.CanvasTexture(canvas);
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false })
+  );
+  sprite.scale.set(0.10, 0.05, 1);
+  sprite.position.set(bladeX, workbenchPos.y + 0.13, -1.1);
+  sprite._canvas = canvas;
+  sprite._tex    = tex;
+  groupShaping.add(sprite);
+  zoneSprites.push(sprite);
+
+  // 初期歪み：表(+)・裏(-)をランダムに
+  const initSign = Math.random() > 0.5 ? 1 : -1;
+  zones.push({
+    distortion: initSign * (5 + Math.random() * 15), // -20〜+20
+    bladeX,
+  });
+  updateZoneSprite(i);
 }
 
 // Shaping hammer (same visual, different group)
@@ -861,18 +917,20 @@ function isVRActive() { return renderer.xr.isPresenting; }
 /* ================================================================
    HELPER: Get right controller world position
 ================================================================ */
-const tempVec = new THREE.Vector3();
+const tempVec  = new THREE.Vector3(); // 汎用
+const tempVecL = new THREE.Vector3(); // 左手専用
+const tempVecR = new THREE.Vector3(); // 右手専用
 function getRightHandPos() {
   if (isVRActive() && rightController) {
-    rightController.getWorldPosition(tempVec);
-    return tempVec;
+    rightController.getWorldPosition(tempVecR);
+    return tempVecR;
   }
   return fakeRH;
 }
 function getLeftHandPos() {
   if (isVRActive() && leftController) {
-    leftController.getWorldPosition(tempVec);
-    return tempVec;
+    leftController.getWorldPosition(tempVecL);
+    return tempVecL;
   }
   return fakeLH;
 }
@@ -984,7 +1042,11 @@ function resetShaping() {
   bladeFlipped    = false;
   bladeFlipAnim   = 0;
   shapingComplete = false;
-  zones.forEach(z => { z.distortion = 5 + Math.random() * 15; });
+  zones.forEach((z, i) => {
+    const sign = Math.random() > 0.5 ? 1 : -1;
+    z.distortion = sign * (5 + Math.random() * 15);
+    updateZoneSprite(i);
+  });
   bladeMesh.position.set(-0.2, workbenchPos.y + 0.06, -1.1);
   bladeMesh.rotation.y = 0;
 }
@@ -1260,114 +1322,133 @@ function updateShaping(delta) {
     fakeLH.z = THREE.MathUtils.clamp(fakeLH.z, -2.5, 0.5);
   }
 
-  const lhPos = getLeftHandPos();
-  const rhPos = getRightHandPos();
+  const lhPos    = getLeftHandPos();
+  const rhPos    = getRightHandPos();
   const leftTrig = getLeftTriggerOrGrip();
-  const xBtn = getXButton();
+  const xBtn     = getXButton();
 
-  // Grab blade
-  const lhToBlade = lhPos.distanceTo(bladeMesh.position.clone().add(new THREE.Vector3(0,0.05,0)));
-  if (leftTrig && lhToBlade < 0.4) bladeHeld = true;
+  // ---- 刃物を左手に追従 ----
+  const lhToBlade = lhPos.distanceTo(bladeMesh.position);
+  if (leftTrig && lhToBlade < 0.4 && !bladeHeld) bladeHeld = true;
   if (!leftTrig) bladeHeld = false;
   if (bladeHeld) {
-    bladeMesh.position.set(lhPos.x, lhPos.y - 0.04, lhPos.z);
+    bladeMesh.position.set(lhPos.x, Math.max(lhPos.y - 0.04, 0.5), lhPos.z);
   }
 
-  // Flip animation
+  // ---- 表裏反転 ----
   if (xBtn && !wasXPressed) {
-    bladeFlipped = !bladeFlipped;
+    bladeFlipped  = !bladeFlipped;
     bladeFlipAnim = 1.0;
   }
   wasXPressed = xBtn;
   if (bladeFlipAnim > 0) {
     bladeFlipAnim = Math.max(0, bladeFlipAnim - delta * 4);
-    bladeMesh.rotation.z = Math.PI * (bladeFlipped ? 1 : 0) + Math.sin(bladeFlipAnim * Math.PI) * 0.3;
+    bladeMesh.rotation.z = Math.PI * (bladeFlipped ? 1 : 0) + Math.sin(bladeFlipAnim * Math.PI) * 0.5;
   } else {
     bladeMesh.rotation.z = bladeFlipped ? Math.PI : 0;
   }
 
-  // Update zone indicator positions to follow blade
-  bladeMesh.getWorldPosition(bladeWorldPos);
-  zoneIndicators.forEach((zi, i) => {
-    const t = i / (ZONE_COUNT - 1);
-    zi.position.set(
-      bladeMesh.position.x - 0.22 + t * 0.46,
-      bladeMesh.position.y + 0.02,
-      bladeMesh.position.z
-    );
-  });
+  // ---- ゾーンインジケーターを刃物に追従 ----
+  for (let i = 0; i < ZONE_COUNT; i++) {
+    const t  = i / (ZONE_COUNT - 1);
+    const bx = bladeMesh.position.x - 0.22 + t * 0.46;
+    const by = bladeMesh.position.y;
+    const bz = bladeMesh.position.z;
 
-  // Zone colors based on distortion
-  zones.forEach((z, i) => {
-    const d = THREE.MathUtils.clamp(z.distortion / 30, 0, 1);
-    const col = new THREE.Color().setHSL(0.6 * (1 - d), 0.9, 0.4);
-    zoneIndicators[i].material.color.copy(col);
-    zoneIndicators[i].material.opacity = 0.3 + d * 0.4;
-  });
+    zoneIndicators[i].position.set(bx, by + 0.025, bz);
+    zoneSprites[i].position.set(bx, by + 0.10, bz);
 
-  // Hammer velocity
+    // 歪みに応じて色更新（+ = 赤, 0 = 緑, - = 青）
+    const d    = zones[i].distortion;          // -50〜+50
+    const abs  = Math.abs(d);
+    const norm = THREE.MathUtils.clamp(abs / 25, 0, 1);
+    const hue  = d > 0 ? 0 : (d < 0 ? 0.66 : 0.33);
+    zoneIndicators[i].material.color.setHSL(hue, 0.9, 0.25 + norm * 0.35);
+    zoneIndicators[i].material.opacity = 0.25 + norm * 0.5;
+  }
+
+  // ---- ハンマー速度 ----
   prevRightPos.copy(currRightPos);
   currRightPos.copy(rhPos);
   rightVelocity = prevRightPos.distanceTo(currRightPos) / Math.max(delta, 0.001);
   shapingHitCooldown = Math.max(0, shapingHitCooldown - delta);
 
-  // Hammer visual
+  // ---- ハンマービジュアル（非VR） ----
   if (!isVRActive()) {
-    shapingHammerGroup.position.copy(rhPos);
+    hammerGroup.position.copy(rhPos);
+    hammerGroup.rotation.set(Math.PI / 2, 0, 0);
   }
 
+  // ---- 打撃判定 ----
   const shapingTrig = getRightTrigger();
   if (shapingTrig && !prevShapingTrigger && shapingHitCooldown <= 0 && shapingHitCount < CONFIG.SHAPING.MAX_HITS) {
     shapingHitCooldown = 0.18;
     shapingHitCount++;
 
-    // Find nearest zone
-    let nearestIdx = 0;
+    // 最も近いゾーンを検索
+    let nearestIdx  = 0;
     let nearestDist = Infinity;
-    zoneIndicators.forEach((zi, i) => {
-      const d = rhPos.distanceTo(zi.position);
+    for (let i = 0; i < ZONE_COUNT; i++) {
+      const d = rhPos.distanceTo(zoneIndicators[i].position);
       if (d < nearestDist) { nearestDist = d; nearestIdx = i; }
-    });
-
-    const power = THREE.MathUtils.clamp(
-      (rightVelocity || 1.2) * CONFIG.SHAPING.HIT_POWER_SCALE,
-      CONFIG.SHAPING.HIT_POWER_SCALE * 0.5,
-      CONFIG.SHAPING.HIT_POWER_SCALE * 3
-    );
-
-    if (nearestDist < 0.25) {
-      // Correct zone hit
-      zones[nearestIdx].distortion = Math.max(0, zones[nearestIdx].distortion - power * 10);
-      // Penalize others slightly
-      zones.forEach((z, i) => {
-        if (i !== nearestIdx) z.distortion = Math.min(40, z.distortion + CONFIG.SHAPING.SMALL_PENALTY);
-      });
-
-      const result = zones[nearestIdx].distortion < 5 ? 'Perfect' : 'Good';
-      if (result === 'Perfect') playHammerPerfect();
-      else playHammerGood();
-      spawnSparks(rhPos.clone(), result === 'Perfect' ? 30 : 15);
-    } else {
-      playHammerMiss();
-      // Wrong zone: penalize all a bit
-      zones.forEach(z => { z.distortion = Math.min(40, z.distortion + 0.5); });
     }
 
-    // VR haptics
+    if (nearestDist < 0.28) {
+      // ---- 歪み修正ロジック ----
+      // 表向き(bladeFlipped=false): +歪みを叩くと減少（+方向の歪みを修正）
+      // 裏向き(bladeFlipped=true) : -歪みを叩くと増加（-方向の歪みを修正）
+      const d   = zones[nearestIdx].distortion;
+      const pow = THREE.MathUtils.clamp(
+        (rightVelocity || 1.5) * CONFIG.SHAPING.HIT_POWER_SCALE * 10,
+        0.5, 8
+      );
+
+      if (!bladeFlipped) {
+        // 表から叩く → + 歪みを削る（正の値を0に近づける）
+        if (d > 0) {
+          zones[nearestIdx].distortion = Math.max(0, d - pow);
+        } else {
+          // 既に0以下 = 叩きすぎ → 歪みが悪化
+          zones[nearestIdx].distortion = Math.max(-50, d - pow * 0.3);
+        }
+      } else {
+        // 裏から叩く → - 歪みを削る（負の値を0に近づける）
+        if (d < 0) {
+          zones[nearestIdx].distortion = Math.min(0, d + pow);
+        } else {
+          zones[nearestIdx].distortion = Math.min(50, d + pow * 0.3);
+        }
+      }
+
+      updateZoneSprite(nearestIdx);
+
+      const absNow = Math.abs(zones[nearestIdx].distortion);
+      const result = absNow < 2 ? 'Perfect' : 'Good';
+      if (result === 'Perfect') playHammerPerfect();
+      else playHammerGood();
+      spawnSparks(rhPos.clone(), result === 'Perfect' ? 50 : 20);
+
+    } else {
+      // ゾーン外を叩いた
+      playHammerMiss();
+      spawnSparks(rhPos.clone(), 3);
+    }
+
     if (isVRActive() && rightController?.gamepad?.hapticActuators?.[0]) {
       rightController.gamepad.hapticActuators[0].pulse(0.4, 60);
     }
 
-    const avgDistortion = zones.reduce((s, z) => s + z.distortion, 0) / zones.length;
-    updateInfoPanel(`打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS}\n平均歪み: ${Math.round(avgDistortion)}\nXボタン：反転 | Aで終了`);
-    updateStatusBar('成形', `打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS} | 歪み: ${Math.round(avgDistortion)}`, 100 - avgDistortion);
+    const avgAbs = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
+    updateInfoPanel(`打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS}\n平均歪み: ${Math.round(avgAbs)}\nX：表裏反転 | A：終了`);
+    updateStatusBar('成形', `打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS} | 歪み: ${Math.round(avgAbs)}`, 100 - avgAbs);
   }
   prevShapingTrigger = shapingTrig;
 
-  if (shapingHitCount >= CONFIG.SHAPING.MAX_HITS) {
+  if (shapingHitCount >= CONFIG.SHAPING.MAX_HITS && !shapingComplete) {
     shapingComplete = true;
-    const avg = zones.reduce((s,z)=>s+z.distortion,0)/zones.length;
+    const avg = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
     updateInfoPanel(`成形完了！\nAボタン / Nキーで次へ\n対称性誤差: ${Math.round(avg)}`);
+    bladeState.symmetryError = avg;
     playComplete();
   }
 }
@@ -1376,84 +1457,70 @@ function updateShaping(delta) {
    UPDATE SHARPENING
 ================================================================ */
 function updateSharpening(delta) {
-  const bothGrips = getBothGrips();
-
-  // Get both hand positions (or mouse for non-VR)
   const lhPos = getLeftHandPos();
   const rhPos = getRightHandPos();
 
-  if (!isVRActive()) {
-    // Spacebar simulates gripping; mouse movement = strokes
-    if (keyState['Space'] || mouseHeld) {
-      const currZ = fakeRH.z;
-      const dz = currZ - prevSharpenZ;
-      const dir = Math.sign(dz);
-      if (dir !== 0 && dir !== lastStrokeDir && Math.abs(dz) > CONFIG.SHARPENING.STROKE_THRESHOLD) {
-        lastStrokeDir = dir;
-        strokeCount++;
-        const angle = 10 + Math.random() * 20; // simulate angle
-        const angleErr = Math.abs(angle - CONFIG.SHARPENING.IDEAL_ANGLE);
-        const angleScore = Math.max(0, 100 - angleErr * 10);
-        strokeScores += angleScore;
-        totalSharpness = strokeScores / Math.max(1, strokeCount);
-        playSharpen(angle);
-        updateInfoPanel(`ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES}\n角度: ${Math.round(angle)}°\nスコア: ${Math.round(angleScore)}`);
-        updateStatusBar('研ぎ', `ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES} | ${Math.round(totalSharpness)}点`, totalSharpness);
-        if (isVRActive() && rightController?.gamepad?.hapticActuators?.[0]) {
-          rightController.gamepad.hapticActuators[0].pulse(angleScore > 70 ? 0.5 : 0.2, 50);
-        }
-      }
-      prevSharpenZ = currZ;
-    }
-  } else {
-    // VR: use midpoint of both hands
-    if (bothGrips && leftController && rightController) {
-      leftController.getWorldPosition(tempVec);
-      const lp = tempVec.clone();
-      rightController.getWorldPosition(tempVec);
-      const rp = tempVec.clone();
-      const mid = lp.clone().add(rp).multiplyScalar(0.5);
+  // 両手トリガーorグリップで刃物を掴む
+  const lTrig = isVRActive()
+    ? (getLeftGamepad()?.buttons[0]?.pressed || getLeftGamepad()?.buttons[1]?.pressed || false)
+    : (keyState['Space'] || mouseHeld);
+  const rTrig = isVRActive()
+    ? (getRightGamepad()?.buttons[0]?.pressed || getRightGamepad()?.buttons[1]?.pressed || false)
+    : (keyState['Space'] || mouseHeld);
 
-      // Project onto stone forward axis
-      const stoneWorldFwd = stoneFwd.clone();
-      const projZ = mid.z;
-      const dz = projZ - prevSharpenZ;
-      const dir = Math.sign(dz);
+  const bothHeld = lTrig || rTrig; // 片手でもOK
 
-      if (Math.abs(dz) > CONFIG.SHARPENING.STROKE_THRESHOLD && dir !== 0 && dir !== lastStrokeDir) {
-        lastStrokeDir = dir;
+  if (bothHeld) {
+    // 両手の中点に刃物を追従させる
+    const midX = (lhPos.x + rhPos.x) * 0.5;
+    const midY = (lhPos.y + rhPos.y) * 0.5;
+    const midZ = (lhPos.z + rhPos.z) * 0.5;
+    sharpenBladeMesh.position.set(midX, midY - 0.03, midZ);
+
+    // ---- ストローク検出 ----
+    const dz  = midZ - prevSharpenZ;
+    const dir = Math.sign(dz);
+
+    if (Math.abs(dz) > CONFIG.SHARPENING.STROKE_THRESHOLD && dir !== 0 && dir !== lastStrokeDir) {
+      lastStrokeDir = dir;
+
+      if (strokeCount < CONFIG.SHARPENING.TOTAL_STROKES) {
         strokeCount++;
 
-        // Estimate blade tilt angle from hand height difference
-        const heightDiff = rp.y - lp.y;
-        const dist       = rp.distanceTo(lp);
-        const angleDeg   = dist > 0.01 ? Math.abs(Math.asin(heightDiff / dist)) * (180 / Math.PI) : 15;
-        const angleErr   = Math.abs(angleDeg - CONFIG.SHARPENING.IDEAL_ANGLE);
-        const score      = Math.max(0, Math.min(100, 100 - angleErr * CONFIG.SHARPENING.ANGLE_TOLERANCE));
-        strokeScores    += score;
-        totalSharpness   = strokeScores / Math.max(1, strokeCount);
+        // 角度：両手の高さ差から計算
+        const heightDiff = Math.abs(rhPos.y - lhPos.y);
+        const handDist   = rhPos.distanceTo(lhPos);
+        const angleDeg   = handDist > 0.01
+          ? Math.abs(Math.asin(THREE.MathUtils.clamp(heightDiff / handDist, -1, 1))) * (180 / Math.PI)
+          : 15;
+        const angleErr  = Math.abs(angleDeg - CONFIG.SHARPENING.IDEAL_ANGLE);
+        const score     = Math.max(0, Math.min(100, 100 - angleErr * CONFIG.SHARPENING.ANGLE_TOLERANCE));
+        strokeScores   += score;
+        totalSharpness  = strokeScores / strokeCount;
 
         playSharpen(angleDeg);
-        if (rightController?.gamepad?.hapticActuators?.[0]) {
+
+        if (isVRActive() && rightController?.gamepad?.hapticActuators?.[0]) {
           rightController.gamepad.hapticActuators[0].pulse(score > 70 ? 0.6 : 0.2, 60);
         }
-        updateInfoPanel(`ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES}\n角度: ${Math.round(angleDeg)}°\nスコア: ${Math.round(score)}`);
-        updateStatusBar('研ぎ', `ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES} | ${Math.round(totalSharpness)}点`, totalSharpness);
+
+        updateInfoPanel(
+          `ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES}\n角度: ${Math.round(angleDeg)}°\nスコア: ${Math.round(score)}`
+        );
+        updateStatusBar(
+          '研ぎ',
+          `ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES} | ${Math.round(totalSharpness)}点`,
+          totalSharpness
+        );
       }
-      prevSharpenZ = mid.z;
     }
+    prevSharpenZ = midZ;
   }
 
   if (strokeCount >= CONFIG.SHARPENING.TOTAL_STROKES && !sharpenComplete) {
     sharpenComplete = true;
     updateInfoPanel(`研ぎ完了！\nAボタン / Nキーで結果へ\n鋭さ: ${Math.round(totalSharpness)}点`);
     playComplete();
-  }
-
-  // Animate sharpening blade on stone
-  if (!sharpenComplete) {
-    const t = Date.now() * 0.001;
-    sharpenBladeMesh.position.z = -1.1 + Math.sin(t * 3) * 0.04;
   }
 }
 
