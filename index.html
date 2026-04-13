@@ -2,1393 +2,1284 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>越前打刃物 | Echizen Blade Crafting</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>越前打刃物 | Echizen Hamono VR</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:#0d0500;overflow:hidden;font-family:'Noto Sans JP',sans-serif}
-#c{width:100vw;height:100vh;display:block}
-#hud{
-  position:fixed;top:0;left:0;right:0;pointer-events:none;
-  display:flex;justify-content:space-between;padding:14px 18px;z-index:10;
-}
-.hud-box{
-  background:rgba(0,0,0,.72);color:#ffd080;border-radius:10px;
-  padding:8px 14px;font:13px/1.7 monospace;border:1px solid rgba(200,134,10,.3);
-  max-width:55%;
-}
-#ui-btns{
-  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
-  display:flex;gap:10px;z-index:20;
-}
-.xr-btn{
-  padding:10px 22px;border:2px solid #c8860a;border-radius:8px;
-  background:rgba(200,134,10,.12);color:#ffd080;font:bold 14px sans-serif;
-  cursor:pointer;letter-spacing:1px;transition:.2s;
-}
-.xr-btn:hover{background:rgba(200,134,10,.35);}
-.reset-btn{
-  padding:10px 22px;border:2px solid #555;border-radius:8px;
-  background:rgba(80,80,80,.15);color:#999;font:bold 13px sans-serif;
-  cursor:pointer;transition:.2s;
-}
-.reset-btn:hover{background:rgba(80,80,80,.35);}
-#kb-hint{
-  position:fixed;bottom:70px;right:16px;color:#666;
-  font:11px/1.7 monospace;pointer-events:none;z-index:10;
-  background:rgba(0,0,0,.5);padding:8px 12px;border-radius:6px;
-}
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden; }
+  #canvas-container { width: 100vw; height: 100vh; }
+  #hud {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 10;
+  }
+  #browser-ui {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 8px; z-index: 20; pointer-events: all;
+  }
+  .ui-btn {
+    background: rgba(30,30,30,0.85); color: #ddd; border: 1px solid #555;
+    padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    backdrop-filter: blur(4px); transition: background 0.2s;
+  }
+  .ui-btn:hover { background: rgba(60,60,60,0.9); }
+  .ui-btn.danger { border-color: #c44; color: #f88; }
+  .ui-btn.danger:hover { background: rgba(80,20,20,0.9); }
+  #vr-mode-btn { border-color: #48a; color: #8df; }
+  #ar-mode-btn { border-color: #4a8; color: #8fd; }
+  #nonvr-hint {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    background: rgba(20,20,20,0.8); color: #aaa; font-size: 12px;
+    padding: 6px 14px; border-radius: 20px; border: 1px solid #333;
+    pointer-events: none; z-index: 20; text-align: center; line-height: 1.6;
+  }
+  #phase-indicator {
+    position: fixed; top: 16px; right: 16px;
+    background: rgba(20,20,20,0.7); color: #ccc; font-size: 12px;
+    padding: 6px 12px; border-radius: 16px; border: 1px solid #444;
+    z-index: 20; pointer-events: none;
+  }
 </style>
 </head>
 <body>
-<canvas id="c"></canvas>
-<div id="hud">
-  <div class="hud-box" id="hud-l">越前打刃物</div>
-  <div class="hud-box" id="hud-r">非VRモード</div>
+<div id="canvas-container"></div>
+<div id="phase-indicator" id="phase-indicator">INTRO</div>
+<div id="nonvr-hint">
+  Non-VR Mode | Mouse: ハンマー操作 / Click: 打撃 | WASD: 左手移動 | N: Aボタン | P: Bボタン | X: 左手X | Arrow: 視点
 </div>
-<div id="ui-btns">
-  <button class="xr-btn" id="btn-vr">🥽 VR</button>
-  <button class="xr-btn" id="btn-ar">📱 AR</button>
-  <button class="reset-btn" id="btn-reset">🗑 スコアリセット</button>
-</div>
-<div id="kb-hint">
-  N : 次へ（Aボタン）<br>
-  P : やり直し（Bボタン）<br>
-  Click : 右手打撃<br>
-  WASD : 左手移動<br>
-  X : 左手Xボタン（反転）<br>
-  Q/E : 左手トリガー/グリップ<br>
-  ↑↓←→ : 視点移動
+<div id="browser-ui">
+  <button class="ui-btn" id="vr-mode-btn">▶ Enter VR</button>
+  <button class="ui-btn" id="ar-mode-btn">◈ Enter AR</button>
+  <button class="ui-btn danger" id="reset-btn">🗑 スコアリセット</button>
 </div>
 
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.164.0/build/three.module.js"
-  }
-}
-</script>
-<script type="module">
-import * as THREE from 'three';
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ============================================================
+// 越前打刃物 VR App
+// Three.js r128 + WebXR
+// ============================================================
 
-// ════════════════════════════════════════════════════════════
-//  CONSTANTS & CONFIG
-// ════════════════════════════════════════════════════════════
-const CFG = {
+// ─── CONSTANTS ───────────────────────────────────────────────
+const PARAMS = {
   FORGING: {
-    totalHits: 30,
-    heatRate: 200,        // °/sec in furnace
-    coolRate: 40,         // °/sec ambient
-    minHitTemp: 500,      // below = forced Miss
-    velocityThreshold: 0.8,
-    sparks: { perfect: 60, good: 30, miss: 5 },
+    TOTAL_HITS: 30,
+    TEMP_HEAT_RATE: 25,      // per second in furnace
+    TEMP_COOL_RATE: 8,       // per second in air
+    TEMP_MIN_FORGE: 40,      // minimum temp to forge
+    VELOCITY_THRESHOLD: 1.2,
+    SPARK_COUNT: 80,
+    DISTORTION_MISS: 2,
+    DISTORTION_GOOD: 1,
+    DISTORTION_PERFECT: -0.5,
   },
   SHAPING: {
-    maxHits: 100,
-    zoneCount: 5,
-    power: { min: 0.5, max: 8 },
-    penalty: 0.25,
-    velScale: 4,
+    MAX_HITS: 100,
+    ZONE_COUNT: 6,
+    SMALL_PENALTY: 0.3,
+    POWER_MIN: 1,
+    POWER_MAX: 6,
+    POWER_SCALE: 3,
   },
   SHARPENING: {
-    totalStrokes: 30,
-    strokeThreshold: 0.04,
-    angleOptimal: 15,  // degrees
-    angleWeight: 8,
+    TOTAL_STROKES: 30,
+    STROKE_DIST_THRESHOLD: 0.05,
+    ANGLE_ERROR_SCALE: 10,
   },
 };
 
-// ════════════════════════════════════════════════════════════
-//  STATE MACHINE
-// ════════════════════════════════════════════════════════════
+// ─── STATE MACHINE ───────────────────────────────────────────
 const State = {
-  INTRO:'INTRO', FORGING:'FORGING', SHAPING:'SHAPING',
-  SHARPENING:'SHARPENING', RESULT:'RESULT',
+  INTRO: 'INTRO', FORGING: 'FORGING', SHAPING: 'SHAPING',
+  SHARPENING: 'SHARPENING', RESULT: 'RESULT',
 };
 let currentState = State.INTRO;
-let transitioning = false;
 
-// Shared blade quality data across phases
-const bladeState = { shapeDistortion:0, symmetryError:0, sharpness:0 };
+// ─── BLADE DATA ──────────────────────────────────────────────
+let bladeState = { shapeDistortion: 0, symmetryError: 0, sharpness: 0 };
 
-// ════════════════════════════════════════════════════════════
-//  RENDERER + SCENE
-// ════════════════════════════════════════════════════════════
-const canvas = document.getElementById('c');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
+// ─── THREE.JS SETUP ──────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.xr.enabled = true;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.getElementById('canvas-container').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x100502);
-scene.fog = new THREE.FogExp2(0x100502, 0.1);
+scene.background = new THREE.Color(0x0a0a14);
+scene.fog = new THREE.Fog(0x0a0a14, 8, 20);
 
-const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.01, 50);
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 50);
 camera.position.set(0, 1.6, 0);
 
-// ── Lighting ──
-const ambientLight = new THREE.AmbientLight(0x331100, 1.0);
-scene.add(ambientLight);
-const sunLight = new THREE.DirectionalLight(0xffaa44, 1.5);
-sunLight.position.set(2, 5, 3);
-sunLight.castShadow = true;
-sunLight.shadow.mapSize.set(1024,1024);
-scene.add(sunLight);
-const forgeGlow = new THREE.PointLight(0xff3300, 0, 4);
-forgeGlow.position.set(-0.8, 1.1, -1.5);
-scene.add(forgeGlow);
-
-// ── Floor ──
-const floorMesh = new THREE.Mesh(
-  new THREE.PlaneGeometry(20, 20),
-  new THREE.MeshLambertMaterial({ color:0x160800 })
-);
-floorMesh.rotation.x = -Math.PI/2;
-floorMesh.receiveShadow = true;
-scene.add(floorMesh);
-
-// ── XR Rig (holds controllers) ──
+// XR Rig
 const xrRig = new THREE.Group();
+xrRig.position.set(0, 0, 0);
 scene.add(xrRig);
+xrRig.add(camera);
 
-// ════════════════════════════════════════════════════════════
-//  WEB AUDIO
-// ════════════════════════════════════════════════════════════
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ─── LIGHTING ────────────────────────────────────────────────
+const ambientLight = new THREE.AmbientLight(0x1a1a2e, 1.5);
+scene.add(ambientLight);
+const dirLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+dirLight.position.set(2, 4, 2);
+dirLight.castShadow = true;
+scene.add(dirLight);
+// Forge glow light (dynamic)
+const forgeLight = new THREE.PointLight(0xff4400, 0, 3);
+forgeLight.position.set(-1.5, 0.8, -1.5);
+scene.add(forgeLight);
+
+// ─── WEB AUDIO ───────────────────────────────────────────────
 let audioCtx = null;
-
 function ensureAudio() {
-  if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  if(audioCtx.state === 'suspended') audioCtx.resume();
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 }
-
-// Distortion curve for metallic hit sound
-function makeDistCurve(amount) {
-  const n = 256, c = new Float32Array(n);
-  for(let i=0;i<n;i++){const x=i*2/n-1; c[i]=x*(Math.PI+amount)/(Math.PI+amount*Math.abs(x));}
-  return c;
-}
-
-function playHit(quality) { // 0=miss 1=good 2=perfect
+function playTone(freq, type, duration, gain = 0.3, decay = true) {
   ensureAudio();
-  const t = audioCtx.currentTime;
   const osc = audioCtx.createOscillator();
-  const shaper = audioCtx.createWaveShaper();
-  const gain = audioCtx.createGain();
-  shaper.curve = makeDistCurve(200);
-  osc.connect(shaper); shaper.connect(gain); gain.connect(audioCtx.destination);
-  osc.frequency.value = [100, 220, 380][quality];
-  osc.type = 'sawtooth';
-  const vol = [0.06, 0.2, 0.45][quality];
-  gain.gain.setValueAtTime(vol, t);
-  gain.gain.exponentialRampToValueAtTime(0.0001, t + [0.15, 0.25, 0.4][quality]);
-  osc.start(t); osc.stop(t + 0.5);
+  const gainNode = audioCtx.createGain();
+  osc.connect(gainNode); gainNode.connect(audioCtx.destination);
+  osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+  gainNode.gain.setValueAtTime(gain, audioCtx.currentTime);
+  if (decay) gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+  osc.start(); osc.stop(audioCtx.currentTime + duration);
 }
-
-function playSharpening(angle) {
+function playHammer(quality) {
+  // quality: 'perfect', 'good', 'miss'
   ensureAudio();
-  const t = audioCtx.currentTime;
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.connect(gain); gain.connect(audioCtx.destination);
-  const err = Math.abs(angle - CFG.SHARPENING.angleOptimal);
-  osc.frequency.value = 900 + (1 - Math.min(err/30,1)) * 600; // higher pitch = better angle
-  osc.type = 'sawtooth';
-  gain.gain.setValueAtTime(0.12, t);
-  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
-  osc.start(t); osc.stop(t + 0.2);
+  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.15, audioCtx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) {
+    const t = i / audioCtx.sampleRate;
+    const env = Math.exp(-t * (quality === 'perfect' ? 12 : quality === 'good' ? 20 : 40));
+    d[i] = (Math.random() * 2 - 1) * env * (quality === 'miss' ? 0.3 : 1);
+  }
+  const src = audioCtx.createBufferSource();
+  const gainNode = audioCtx.createGain();
+  gainNode.gain.value = quality === 'perfect' ? 0.6 : quality === 'good' ? 0.4 : 0.15;
+  src.buffer = buf; src.connect(gainNode); gainNode.connect(audioCtx.destination);
+  src.start();
+  if (quality === 'perfect') playTone(180, 'sine', 0.3, 0.2);
+  if (quality === 'good') playTone(120, 'sine', 0.2, 0.1);
 }
-
+function playSharpen(angleScore) {
+  ensureAudio();
+  const freq = 400 + (angleScore / 100) * 600;
+  playTone(freq, 'sawtooth', 0.08, 0.12, true);
+}
 function playTransition() {
   ensureAudio();
-  const t = audioCtx.currentTime;
-  [440, 554, 659, 880].forEach((f, i) => {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain); gain.connect(audioCtx.destination);
-    osc.frequency.value = f; osc.type = 'sine';
-    gain.gain.setValueAtTime(0, t + i*0.1);
-    gain.gain.linearRampToValueAtTime(0.3, t + i*0.1 + 0.06);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + i*0.1 + 0.6);
-    osc.start(t + i*0.1); osc.stop(t + i*0.1 + 0.7);
+  [440, 550, 660].forEach((f, i) => {
+    setTimeout(() => playTone(f, 'sine', 0.3, 0.2), i * 100);
   });
 }
-
-function playHeatCrackle() {
-  ensureAudio();
-  const t = audioCtx.currentTime;
-  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate*0.4, audioCtx.sampleRate);
-  const d = buf.getChannelData(0);
-  for(let i=0;i<d.length;i++) d[i] = (Math.random()*2-1)*0.15;
-  const src = audioCtx.createBufferSource();
-  const filter = audioCtx.createBiquadFilter();
-  const gain = audioCtx.createGain();
-  filter.type = 'highpass'; filter.frequency.value = 1000;
-  src.buffer = buf;
-  src.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
-  gain.gain.setValueAtTime(0.08, t);
-  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
-  src.start(t);
+function playVibrate(ctrl, duration = 50, intensity = 0.5) {
+  if (ctrl?.gamepad?.hapticActuators?.[0]) {
+    ctrl.gamepad.hapticActuators[0].pulse(intensity, duration);
+  }
 }
 
-function playResult(score) {
-  ensureAudio();
-  const t = audioCtx.currentTime;
-  const scale = score>70 ? [523,659,784,1047] : score>40 ? [440,523,659] : [330,392,494];
-  scale.forEach((f, i) => {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain); gain.connect(audioCtx.destination);
-    osc.frequency.value = f; osc.type = 'sine';
-    const start = t + i*0.18;
-    gain.gain.setValueAtTime(0, start);
-    gain.gain.linearRampToValueAtTime(0.35, start+0.06);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start+1.2);
-    osc.start(start); osc.stop(start+1.3);
+// ─── CONTROLLER SETUP ────────────────────────────────────────
+let rightController = null, leftController = null;
+
+// Try to use XRControllerModelFactory if available (CDN not loaded, use fallback)
+const ctrl0 = renderer.xr.getController(0);
+const ctrl1 = renderer.xr.getController(1);
+const grip0 = renderer.xr.getControllerGrip(0);
+const grip1 = renderer.xr.getControllerGrip(1);
+
+function makeRayLine(color = 0x88aaff) {
+  const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.5 });
+  const geo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1)
+  ]);
+  return new THREE.Line(geo, mat);
+}
+const ray0 = makeRayLine(); ctrl0.add(ray0);
+const ray1 = makeRayLine(0xffaa88); ctrl1.add(ray1);
+
+renderer.xr.addEventListener('sessionstart', () => {
+  [ctrl0, ctrl1, grip0, grip1].forEach(obj => {
+    if (obj.parent !== xrRig) {
+      if (obj.parent) obj.parent.remove(obj);
+      xrRig.add(obj);
+    }
   });
-}
+});
 
-// ════════════════════════════════════════════════════════════
-//  SPARK SYSTEM  (InstancedMesh, max 80, gravity physics)
-// ════════════════════════════════════════════════════════════
+function onCtrlConnected(e) {
+  const ctrl = e.target, hand = e.data.handedness;
+  if (hand === 'right') rightController = ctrl;
+  else if (hand === 'left') leftController = ctrl;
+}
+function onCtrlDisconnected(e) {
+  if (e.target === rightController) rightController = null;
+  if (e.target === leftController) leftController = null;
+}
+[ctrl0, ctrl1].forEach(c => {
+  c.addEventListener('connected', onCtrlConnected);
+  c.addEventListener('disconnected', onCtrlDisconnected);
+});
+scene.add(ctrl0, ctrl1, grip0, grip1);
+
+// Controller visual (simple capsule)
+function makeCtrlMesh(color) {
+  const g = new THREE.CylinderGeometry(0.02, 0.01, 0.12, 8);
+  const m = new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.3 });
+  const mesh = new THREE.Mesh(g, m);
+  mesh.rotation.x = Math.PI / 2;
+  return mesh;
+}
+ctrl0.add(makeCtrlMesh(0x336699));
+ctrl1.add(makeCtrlMesh(0x996633));
+
+// ─── SPARK SYSTEM (InstancedMesh) ────────────────────────────
 const SPARK_MAX = 80;
-const sparkGeo  = new THREE.SphereGeometry(0.007, 4, 4);
-const sparkMat  = new THREE.MeshBasicMaterial({ color:0xffaa00 });
+const sparkGeo = new THREE.SphereGeometry(0.008, 4, 4);
+const sparkMat = new THREE.MeshBasicMaterial({ color: 0xffaa22 });
 const sparkMesh = new THREE.InstancedMesh(sparkGeo, sparkMat, SPARK_MAX);
-sparkMesh.count = 0;
 sparkMesh.frustumCulled = false;
 scene.add(sparkMesh);
-// Pre-init instanceColor to avoid first-frame issues
-sparkMesh.instanceColor = new THREE.InstancedBufferAttribute(
-  new Float32Array(SPARK_MAX * 3), 3
-);
 
-const sparks = Array.from({length:SPARK_MAX}, () => ({
-  active:false, life:0, maxLife:0,
-  pos: new THREE.Vector3(),
-  vel: new THREE.Vector3(),
+const sparks = Array.from({ length: SPARK_MAX }, () => ({
+  active: false, pos: new THREE.Vector3(), vel: new THREE.Vector3(),
+  life: 0, maxLife: 0,
 }));
-const _sm = new THREE.Matrix4();
-const _sc = new THREE.Color();
+const _sparkMatrix = new THREE.Matrix4();
+const _sparkColor = new THREE.Color();
 
-function emitSparks(origin, count) {
-  let n = 0;
-  for(let i=0; i<SPARK_MAX && n<count; i++) {
-    if(!sparks[i].active) {
+function emitSparks(origin, count, intensity) {
+  let emitted = 0;
+  for (let i = 0; i < SPARK_MAX && emitted < count; i++) {
+    if (!sparks[i].active) {
       const s = sparks[i];
       s.active = true;
       s.pos.copy(origin);
       s.vel.set(
-        (Math.random()-0.5)*3.5,
-        Math.random()*3.5 + 0.5,
-        (Math.random()-0.5)*3.5
+        (Math.random() - 0.5) * intensity * 2,
+        Math.random() * intensity * 2,
+        (Math.random() - 0.5) * intensity * 2
       );
-      s.maxLife = 0.35 + Math.random()*0.45;
-      s.life = s.maxLife;
-      n++;
+      s.life = 0;
+      s.maxLife = 0.3 + Math.random() * 0.4;
+      emitted++;
     }
   }
 }
 
 function updateSparks(delta) {
-  let cnt = 0;
-  for(let i=0; i<SPARK_MAX; i++) {
+  for (let i = 0; i < SPARK_MAX; i++) {
     const s = sparks[i];
-    if(!s.active) continue;
-    s.life -= delta;
-    if(s.life <= 0) { s.active = false; continue; }
-    s.vel.y -= 9.8 * delta;
+    if (!s.active) {
+      _sparkMatrix.makeScale(0, 0, 0);
+      sparkMesh.setMatrixAt(i, _sparkMatrix);
+      continue;
+    }
+    s.life += delta;
+    if (s.life >= s.maxLife) { s.active = false; continue; }
+    s.vel.y -= 3 * delta; // gravity
     s.pos.addScaledVector(s.vel, delta);
-    const t = s.life / s.maxLife;
-    const scale = t * 0.9 + 0.1;
-    _sm.makeScale(scale, scale, scale).setPosition(s.pos);
-    sparkMesh.setMatrixAt(cnt, _sm);
-    _sc.setHSL(0.08 - (1-t)*0.06, 1.0, 0.45 + t*0.35);
-    sparkMesh.setColorAt(cnt, _sc);
-    cnt++;
+    const scale = (1 - s.life / s.maxLife) * 0.8;
+    _sparkMatrix.makeTranslation(s.pos.x, s.pos.y, s.pos.z);
+    _sparkMatrix.scale(new THREE.Vector3(scale, scale, scale));
+    sparkMesh.setMatrixAt(i, _sparkMatrix);
+    const heat = 1 - s.life / s.maxLife;
+    _sparkColor.setHSL(0.08 * heat, 1, 0.5 + heat * 0.3);
+    sparkMesh.setColorAt(i, _sparkColor);
   }
-  sparkMesh.count = cnt;
   sparkMesh.instanceMatrix.needsUpdate = true;
-  sparkMesh.instanceColor.needsUpdate = true;
+  if (sparkMesh.instanceColor) sparkMesh.instanceColor.needsUpdate = true;
 }
 
-// ════════════════════════════════════════════════════════════
-//  CONTROLLERS
-// ════════════════════════════════════════════════════════════
-const ctrl0 = renderer.xr.getController(0);
-const ctrl1 = renderer.xr.getController(1);
+// ─── SCENE OBJECTS (shared) ──────────────────────────────────
+// Groups for each phase
+const forgingGroup = new THREE.Group();
+const shapingGroup = new THREE.Group();
+const sharpeningGroup = new THREE.Group();
+const introGroup = new THREE.Group();
+const resultGroup = new THREE.Group();
+scene.add(forgingGroup, shapingGroup, sharpeningGroup, introGroup, resultGroup);
 
-function makeCtrlVisual(isRight) {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(0.03, 0.12, 0.03),
-    new THREE.MeshLambertMaterial({ color: isRight ? 0x445577 : 0x553322 })
-  );
-  g.add(body);
-  if(isRight) {
-    // Hammer head
-    const head = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.035, 0.04, 0.1, 8),
-      new THREE.MeshLambertMaterial({ color:0x888899 })
-    );
-    head.rotation.z = Math.PI/2;
-    head.position.set(0, 0.1, 0);
-    g.add(head);
-  }
-  // Laser pointer
-  const laser = new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-0.5)]),
-    new THREE.LineBasicMaterial({ color:0xffffff, transparent:true, opacity:0.25 })
-  );
-  g.add(laser);
-  return g;
-}
-ctrl0.add(makeCtrlVisual(false));
-ctrl1.add(makeCtrlVisual(true));
-xrRig.add(ctrl0);
-xrRig.add(ctrl1);
-
-let rightController = null;
-let leftController  = null;
-
-function onCtrlConnected(e) {
-  const hand = e.data.handedness;
-  if(hand === 'right') rightController = e.target;
-  else if(hand === 'left') leftController = e.target;
-}
-function onCtrlDisconnected(e) {
-  if(e.target === rightController) rightController = null;
-  if(e.target === leftController)  leftController  = null;
-}
-ctrl0.addEventListener('connected', onCtrlConnected);
-ctrl0.addEventListener('disconnected', onCtrlDisconnected);
-ctrl1.addEventListener('connected', onCtrlConnected);
-ctrl1.addEventListener('disconnected', onCtrlDisconnected);
-
-renderer.xr.addEventListener('sessionstart', () => {
-  [ctrl0,ctrl1].forEach(c => {
-    if(c.parent !== xrRig){ if(c.parent) c.parent.remove(c); xrRig.add(c); }
-  });
-});
-
-// Controller velocity tracking (world units/sec estimate)
-const _rPrevPos = new THREE.Vector3();
-const _lPrevPos = new THREE.Vector3();
-let rVel = 0, lVel = 0;
-
-// ════════════════════════════════════════════════════════════
-//  PHASE OBJECT GROUPS  (toggled by state)
-// ════════════════════════════════════════════════════════════
-const G = {
-  intro:      new THREE.Group(),
-  forging:    new THREE.Group(),
-  shaping:    new THREE.Group(),
-  sharpening: new THREE.Group(),
-  result:     new THREE.Group(),
-};
-Object.values(G).forEach(g => { g.visible=false; scene.add(g); });
-
-// ════════════════════════════════════════════════════════════
-//  BUILD: FORGE SCENE
-// ════════════════════════════════════════════════════════════
-// Furnace
-const furnaceGroup = new THREE.Group();
-furnaceGroup.add(new THREE.Mesh(
-  new THREE.CylinderGeometry(0.28, 0.33, 0.65, 12),
-  new THREE.MeshLambertMaterial({ color:0x2a1a0a })
-));
-const furnaceGlow = new THREE.Mesh(
-  new THREE.CircleGeometry(0.14, 12),
-  new THREE.MeshBasicMaterial({ color:0xff5500, side:THREE.DoubleSide })
-);
-furnaceGlow.rotation.x = -Math.PI/2;
-furnaceGlow.position.y = 0.33;
-furnaceGroup.add(furnaceGlow);
-furnaceGroup.position.set(-0.85, 0.32, -1.6);
-G.forging.add(furnaceGroup);
-
-// Shared workbench factory
-function makeWorkbench(color=0x4a2800) {
-  const g = new THREE.Group();
-  const top = new THREE.Mesh(
-    new THREE.BoxGeometry(0.85, 0.06, 0.45),
-    new THREE.MeshLambertMaterial({ color })
-  );
-  top.castShadow = true; top.receiveShadow = true;
-  g.add(top);
-  const legMat = new THREE.MeshLambertMaterial({ color:0x331500 });
-  [[-0.36,-0.19,-0.18],[0.36,-0.19,-0.18],[-0.36,-0.19,0.18],[0.36,-0.19,0.18]]
-  .forEach(([x,y,z]) => {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.06,0.38,0.06), legMat);
-    leg.position.set(x,y,z); leg.castShadow=true; g.add(leg);
-  });
-  return g;
+// Helper: create text sprite
+function makeTextSprite(text, opts = {}) {
+  const { size = 64, color = '#fff', bg = 'rgba(0,0,0,0.7)', width = 256, height = 64 } = opts;
+  const canvas = document.createElement('canvas');
+  canvas.width = width; canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = color;
+  ctx.font = `${size}px sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, width / 2, height / 2);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(width / 256, height / 256, 1);
+  return sprite;
 }
 
-const wb1 = makeWorkbench(); wb1.position.set(0, 0.58, -1.6); G.forging.add(wb1);
-const wb2 = makeWorkbench(); wb2.position.set(0, 0.58, -1.6); G.shaping.add(wb2);
-const wb3 = makeWorkbench(0x3a3a3a); wb3.position.set(0, 0.58, -1.6); G.sharpening.add(wb3);
-
-// Iron billet (forging)
-const ironMesh = new THREE.Mesh(
-  new THREE.BoxGeometry(0.14, 0.045, 0.32),
-  new THREE.MeshLambertMaterial({ color:0x777777 })
-);
-ironMesh.castShadow = true;
-ironMesh.position.set(-0.85, 0.66, -1.6);
-G.forging.add(ironMesh);
-
-// Temperature label in world space (canvas sprite)
-const tempCanvasEl = document.createElement('canvas');
-tempCanvasEl.width = 128; tempCanvasEl.height = 48;
-const tempCtx = tempCanvasEl.getContext('2d');
-const tempTex = new THREE.CanvasTexture(tempCanvasEl);
-const tempLabel = new THREE.Mesh(
-  new THREE.PlaneGeometry(0.28, 0.1),
-  new THREE.MeshBasicMaterial({ map:tempTex, transparent:true, depthWrite:false })
-);
-tempLabel.position.set(-0.85, 1.0, -1.6);
-G.forging.add(tempLabel);
-
-function drawTempLabel(temp) {
-  const ctx = tempCtx;
-  ctx.clearRect(0,0,128,48);
-  ctx.fillStyle = 'rgba(0,0,0,0.75)';
-  ctx.beginPath(); ctx.roundRect(2,2,124,44,8); ctx.fill();
-  ctx.fillStyle = tempToHex(temp);
-  ctx.font = 'bold 22px monospace';
+// ─── INTRO SCENE ─────────────────────────────────────────────
+function buildIntro() {
+  introGroup.clear();
+  // Title panel
+  const panelGeo = new THREE.PlaneGeometry(2, 1.2);
+  const canvas = document.createElement('canvas');
+  canvas.width = 512; canvas.height = 307;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#0a0a1e';
+  ctx.fillRect(0, 0, 512, 307);
+  ctx.fillStyle = '#c8a040';
+  ctx.font = 'bold 48px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(`${Math.round(temp)}°C`, 64, 32);
-  tempTex.needsUpdate = true;
+  ctx.fillText('越前打刃物', 256, 90);
+  ctx.fillStyle = '#8899cc';
+  ctx.font = '22px sans-serif';
+  ctx.fillText('Echizen Hamono VR', 256, 145);
+  ctx.fillStyle = '#667';
+  ctx.font = '16px sans-serif';
+  ctx.fillText('鍛造 → 成形 → 研ぎ', 256, 190);
+  ctx.fillStyle = '#4a8';
+  ctx.font = '18px sans-serif';
+  ctx.fillText('【A ボタン / N キー】でスタート', 256, 250);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide });
+  const panel = new THREE.Mesh(panelGeo, mat);
+  panel.position.set(0, 1.5, -2);
+  introGroup.add(panel);
+
+  // Decorative knife display
+  const bladeGeo = new THREE.BoxGeometry(0.06, 0.01, 0.35);
+  const bladeMat = new THREE.MeshStandardMaterial({ color: 0xaabbcc, metalness: 0.9, roughness: 0.2 });
+  const blade = new THREE.Mesh(bladeGeo, bladeMat);
+  blade.position.set(0, 1.0, -1.8);
+  introGroup.add(blade);
+  // Spin animation tag
+  blade.userData.spin = true;
+
+  // Floor
+  const floorGeo = new THREE.PlaneGeometry(10, 10);
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x111118, roughness: 0.9 });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  introGroup.add(floor);
 }
 
-// ════════════════════════════════════════════════════════════
-//  BUILD: SHAPING SCENE
-// ════════════════════════════════════════════════════════════
-const ZONE_N = CFG.SHAPING.zoneCount;
+// ─── FORGING SCENE ───────────────────────────────────────────
+let forgingData = {
+  hitCount: 0, shapeDistortion: 0, temperature: 0,
+  ironOnWorkbench: false, ironInFurnace: false,
+  ironPos: new THREE.Vector3(-1.5, 0.95, -1.5),
+  hammerPos: new THREE.Vector3(0.3, 1.0, -0.5),
+  prevHammerPos: new THREE.Vector3(),
+  hammerSpeed: 0, triggerWasPressed: false,
+  lastHitTime: 0,
+};
+let forgingObjects = {};
 
-// Blade base (knife-like silhouette using custom BufferGeometry)
-function createBladeGeo() {
-  const geo = new THREE.BufferGeometry();
-  // Simple blade: rectangular spine + tapered edge, 5mm thick
-  const L = 0.32, W = 0.055, H = 0.012;
-  // Using BoxGeometry-like vertices but with edge taper
-  const verts = [];
-  const segments = 10;
-  for(let i=0; i<=segments; i++) {
-    const t = i/segments;
-    const z = -L/2 + t*L;
-    const w = W * (1 - t*0.25); // slightly narrower at tip
-    verts.push(-w/2, H/2, z,   w/2, H/2, z);   // top
-    verts.push(-w/4, -H/2, z,  w/4, -H/2, z);  // edge (tapered inward)
-  }
-  const indices = [];
-  for(let i=0;i<segments;i++) {
-    const b = i*4;
-    // top face
-    indices.push(b,b+4,b+5, b,b+5,b+1);
-    // bottom/edge face
-    indices.push(b+2,b+6,b+7, b+2,b+7,b+3);
-    // left side
-    indices.push(b,b+2,b+6, b,b+6,b+4);
-    // right side
-    indices.push(b+1,b+5,b+7, b+1,b+7,b+3);
-  }
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-  geo.setIndex(indices);
-  geo.computeVertexNormals();
-  return geo;
-}
+function buildForging() {
+  forgingGroup.clear();
+  forgingObjects = {};
+  const fd = forgingData;
+  fd.hitCount = 0; fd.shapeDistortion = 0; fd.temperature = 0;
+  fd.ironOnWorkbench = false; fd.ironInFurnace = true;
+  fd.ironPos.set(-1.5, 0.95, -1.5);
 
-const bladeMeshShaping = new THREE.Mesh(
-  createBladeGeo(),
-  new THREE.MeshLambertMaterial({ color:0x8899bb, metalness:0.6 })
-);
-bladeMeshShaping.position.set(0, 0.645, -1.6);
-bladeMeshShaping.castShadow = true;
-G.shaping.add(bladeMeshShaping);
-
-// Zone overlay meshes + data
-const zoneData = [];
-for(let i=0; i<ZONE_N; i++) {
-  const mat = new THREE.MeshBasicMaterial({
-    color:0x0044ff, transparent:true, opacity:0.45, depthWrite:false
-  });
-  const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(0.08, 0.025, 0.058),
-    mat
+  // Floor
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(6, 6),
+    new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.95 })
   );
-  const zz = -0.135 + i*(0.32/(ZONE_N-1))*0.97;
-  mesh.position.set(0, 0.655, -1.6 + zz);
-  G.shaping.add(mesh);
-  zoneData.push({ distortion:20, mesh, mat, zz });
-}
+  floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true;
+  forgingGroup.add(floor);
 
-function updateZoneColors() {
-  zoneData.forEach(z => {
-    const t = Math.min(z.distortion/50, 1); // 0=good(blue), 1=bad(red)
-    z.mat.color.setRGB(t, 0.1*(1-t), 1-t);
-    z.mat.opacity = 0.25 + t*0.5;
-  });
-}
-
-function computeSymmetryError() {
-  const avg = zoneData.reduce((s,z) => s+z.distortion, 0) / ZONE_N;
-  return Math.min(100, avg);
-}
-
-// ════════════════════════════════════════════════════════════
-//  BUILD: SHARPENING SCENE
-// ════════════════════════════════════════════════════════════
-const stoneGroup = new THREE.Group();
-const whetstone = new THREE.Mesh(
-  new THREE.BoxGeometry(0.13, 0.045, 0.38),
-  new THREE.MeshLambertMaterial({ color:0xbbbbbb })
-);
-stoneGroup.add(whetstone);
-
-const bladeMeshSharp = new THREE.Mesh(
-  createBladeGeo(),
-  new THREE.MeshLambertMaterial({ color:0x9aabcc })
-);
-bladeMeshSharp.position.y = 0.032;
-stoneGroup.add(bladeMeshSharp);
-stoneGroup.position.set(0, 0.632, -1.6);
-G.sharpening.add(stoneGroup);
-
-// ════════════════════════════════════════════════════════════
-//  BUILD: INTRO + RESULT PANELS  (canvas textures)
-// ════════════════════════════════════════════════════════════
-function makePanelMesh(w, h, canvasW, canvasH) {
-  const el = document.createElement('canvas');
-  el.width = canvasW; el.height = canvasH;
-  const tex = new THREE.CanvasTexture(el);
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(w, h),
-    new THREE.MeshBasicMaterial({ map:tex, transparent:true, depthWrite:false })
+  // Furnace (left back)
+  const furnaceBase = new THREE.Mesh(
+    new THREE.BoxGeometry(0.8, 0.6, 0.8),
+    new THREE.MeshStandardMaterial({ color: 0x332211, roughness: 0.9 })
   );
-  return { mesh, canvas:el, ctx:el.getContext('2d'), tex };
+  furnaceBase.position.set(-1.5, 0.3, -1.5);
+  furnaceBase.castShadow = true;
+  forgingGroup.add(furnaceBase);
+  // Furnace opening glow
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0xff4400 });
+  const glowMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.3), glowMat);
+  glowMesh.position.set(-1.5, 0.6, -1.12);
+  forgingGroup.add(glowMesh);
+  forgingObjects.furnaceGlow = glowMesh;
+  // Furnace AABB
+  forgingObjects.furnaceBox = new THREE.Box3(
+    new THREE.Vector3(-1.9, 0.5, -1.9), new THREE.Vector3(-1.1, 1.2, -1.1)
+  );
+
+  // Workbench (center-right)
+  const wbMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.9, 0.1, 0.5),
+    new THREE.MeshStandardMaterial({ color: 0x3a2810, roughness: 0.8 })
+  );
+  wbMesh.position.set(0, 0.85, -1.2);
+  wbMesh.castShadow = true; wbMesh.receiveShadow = true;
+  forgingGroup.add(wbMesh);
+  // Anvil on workbench
+  const anvil = new THREE.Mesh(
+    new THREE.BoxGeometry(0.5, 0.12, 0.28),
+    new THREE.MeshStandardMaterial({ color: 0x333344, roughness: 0.5, metalness: 0.5 })
+  );
+  anvil.position.set(0, 0.96, -1.2);
+  forgingGroup.add(anvil);
+  forgingObjects.workbenchBox = new THREE.Box3(
+    new THREE.Vector3(-0.3, 0.85, -1.5), new THREE.Vector3(0.3, 1.15, -0.9)
+  );
+
+  // Iron billet
+  const ironMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.08, 0.04, 0.2),
+    new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.6, metalness: 0.4 })
+  );
+  ironMesh.position.copy(fd.ironPos);
+  forgingGroup.add(ironMesh);
+  forgingObjects.ironMesh = ironMesh;
+  forgingObjects.ironBox = new THREE.Box3();
+
+  // Hammer (attached to right controller / mouse)
+  const hammerGroup = new THREE.Group();
+  const hammerHead = new THREE.Mesh(
+    new THREE.BoxGeometry(0.06, 0.06, 0.1),
+    new THREE.MeshStandardMaterial({ color: 0x555566, roughness: 0.4, metalness: 0.7 })
+  );
+  const hammerHandle = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.01, 0.01, 0.3, 8),
+    new THREE.MeshStandardMaterial({ color: 0x5a3a18, roughness: 0.9 })
+  );
+  hammerHandle.position.y = -0.18;
+  hammerGroup.add(hammerHead, hammerHandle);
+  forgingGroup.add(hammerGroup);
+  forgingObjects.hammerGroup = hammerGroup;
+  forgingObjects.hammerBox = new THREE.Box3();
+
+  // HUD: progress bar + temperature display
+  const hudCanvas = document.createElement('canvas');
+  hudCanvas.width = 256; hudCanvas.height = 128;
+  const hudCtx = hudCanvas.getContext('2d');
+  const hudTex = new THREE.CanvasTexture(hudCanvas);
+  const hudMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.8, 0.4),
+    new THREE.MeshBasicMaterial({ map: hudTex, transparent: true, side: THREE.DoubleSide })
+  );
+  hudMesh.position.set(0.8, 1.5, -1.5);
+  forgingGroup.add(hudMesh);
+  forgingObjects.hudMesh = hudMesh;
+  forgingObjects.hudCanvas = hudCanvas;
+  forgingObjects.hudCtx = hudCtx;
+  forgingObjects.hudTex = hudTex;
 }
 
-// Intro panel
-const introP = makePanelMesh(1.5, 0.8, 512, 272);
-introP.mesh.position.set(0, 1.65, -2.1);
-G.intro.add(introP.mesh);
+function drawForgingHUD() {
+  const fd = forgingData;
+  const ctx = forgingObjects.hudCtx;
+  const canvas = forgingObjects.hudCanvas;
+  if (!ctx) return;
+  ctx.clearRect(0, 0, 256, 128);
+  ctx.fillStyle = 'rgba(10,10,20,0.85)';
+  ctx.fillRect(0, 0, 256, 128);
 
-// Result panel
-const resultP = makePanelMesh(1.25, 1.35, 512, 554);
-resultP.mesh.position.set(0, 1.55, -2.1);
-G.result.add(resultP.mesh);
+  // Temperature bar
+  const tempColor = fd.temperature < 40 ? '#445' :
+    fd.temperature < 60 ? '#aa4400' :
+    fd.temperature < 80 ? '#ff6600' : '#ffcc00';
+  ctx.fillStyle = '#334'; ctx.fillRect(10, 10, 236, 20);
+  ctx.fillStyle = tempColor;
+  ctx.fillRect(10, 10, 236 * (fd.temperature / 100), 20);
+  ctx.fillStyle = '#fff'; ctx.font = '14px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(`🌡 ${Math.round(fd.temperature)}°`, 14, 24);
 
-// Rotating blade in result scene
-const resultBlade = new THREE.Mesh(
-  createBladeGeo(),
-  new THREE.MeshLambertMaterial({ color:0x99aacc })
-);
-resultBlade.position.set(0, 0.9, -2.0);
-resultBlade.scale.set(2, 2, 2);
-G.result.add(resultBlade);
-// Extra point light for result
-const resultLight = new THREE.PointLight(0x4488ff, 3, 3);
-resultLight.position.set(0, 1.5, -1.5);
-G.result.add(resultLight);
+  // Hit counter
+  ctx.fillStyle = '#aac'; ctx.font = '16px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(`打撃: ${fd.hitCount} / ${PARAMS.FORGING.TOTAL_HITS}`, 128, 60);
 
-// ── Canvas helpers ──
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y);
-  ctx.quadraticCurveTo(x+w,y,x+w,y+r); ctx.lineTo(x+w,y+h-r);
-  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h); ctx.lineTo(x+r,y+h);
-  ctx.quadraticCurveTo(x,y+h,x,y+h-r); ctx.lineTo(x,y+r);
-  ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
+  // Distortion
+  const distColor = fd.shapeDistortion < 30 ? '#4c8' : fd.shapeDistortion < 60 ? '#fa4' : '#f44';
+  ctx.fillStyle = '#334'; ctx.fillRect(10, 75, 236, 16);
+  ctx.fillStyle = distColor;
+  ctx.fillRect(10, 75, 236 * (fd.shapeDistortion / 100), 16);
+  ctx.fillStyle = '#aaa'; ctx.font = '12px sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText(`歪み: ${Math.round(fd.shapeDistortion)}%`, 14, 87);
+
+  ctx.fillStyle = '#667'; ctx.font = '11px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('A:次へ  B:やり直し', 128, 112);
+  forgingObjects.hudTex.needsUpdate = true;
 }
 
-function drawIntroPanel() {
-  const { ctx, canvas:cv, tex } = introP;
-  const W=cv.width, H=cv.height;
-  ctx.clearRect(0,0,W,H);
-  ctx.fillStyle='rgba(5,2,0,0.9)';
-  roundRect(ctx,6,6,W-12,H-12,18); ctx.fill();
-  ctx.strokeStyle='rgba(200,134,10,0.7)'; ctx.lineWidth=2;
-  roundRect(ctx,6,6,W-12,H-12,18); ctx.stroke();
-  ctx.textAlign='center';
-  // Title
-  ctx.fillStyle='#ffd080';
-  ctx.font='bold 42px serif';
-  ctx.fillText('越前打刃物', W/2, 68);
-  ctx.font='18px sans-serif'; ctx.fillStyle='#cc9944';
-  ctx.fillText('Echizen Blade Crafting', W/2, 96);
-  // Divider
-  ctx.strokeStyle='rgba(200,134,10,0.35)'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(50,112); ctx.lineTo(W-50,112); ctx.stroke();
-  // Phases
-  const phases = ['🔥 鍛造 FORGING','⚒  成形 SHAPING','🪨 研ぎ SHARPENING'];
-  phases.forEach((p,i) => {
-    ctx.fillStyle='#997755';
-    ctx.font='15px sans-serif';
-    ctx.fillText(p, W/2, 138+i*26);
-  });
-  // Start hint
-  ctx.fillStyle='#ffcc66';
-  ctx.font='bold 17px sans-serif';
-  ctx.fillText('Aボタン / N キーでスタート', W/2, 230);
-  ctx.fillStyle='#666';
-  ctx.font='13px sans-serif';
-  ctx.fillText('Press A or N to start', W/2, 252);
-  tex.needsUpdate=true;
-}
+function updateForging(delta) {
+  const fd = forgingData;
 
-function drawResultPanel(score) {
-  const { ctx, canvas:cv, tex } = resultP;
-  const W=cv.width, H=cv.height;
-  ctx.clearRect(0,0,W,H);
+  // Iron material temperature color
+  if (forgingObjects.ironMesh) {
+    const t = fd.temperature / 100;
+    const col = new THREE.Color();
+    col.setHSL(0.06 * (1 - t), 0.9, 0.15 + t * 0.5);
+    forgingObjects.ironMesh.material.color.copy(col);
+    forgingObjects.ironMesh.material.emissive = new THREE.Color(1, t * 0.5, 0).multiplyScalar(t * 0.8);
+  }
 
-  // Background
-  ctx.fillStyle='rgba(4,2,0,0.94)';
-  roundRect(ctx,8,8,W-16,H-16,18); ctx.fill();
-  const borderColor = score>=85?'#ffd700': score>=65?'#c0c0c0':'#cd7f32';
-  ctx.strokeStyle=borderColor; ctx.lineWidth=3;
-  roundRect(ctx,8,8,W-16,H-16,18); ctx.stroke();
+  // Forge light intensity
+  forgeLight.intensity = fd.ironInFurnace ? 2 + Math.sin(Date.now() * 0.005) * 0.5 : 0.3;
 
-  // Title rank
-  const rank = getTitle(score);
-  ctx.textAlign='center';
-  ctx.fillStyle=borderColor;
-  ctx.font='bold 20px serif';
-  ctx.fillText(rank, W/2, 46);
-
-  // Score number (large)
-  ctx.font='bold 80px serif';
-  ctx.fillStyle='#ffffff';
-  ctx.fillText(score, W/2, 130);
-  ctx.font='bold 22px sans-serif'; ctx.fillStyle='#aaa';
-  ctx.fillText('点', W/2+52, 130);
-
-  // Section divider
-  ctx.strokeStyle='#333'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(30,150); ctx.lineTo(W-30,150); ctx.stroke();
-
-  // Per-phase scores with bar
-  const items = [
-    { label:'🔨 鍛造', val:Math.round(100-bladeState.shapeDistortion) },
-    { label:'⚒  成形', val:Math.round(100-bladeState.symmetryError) },
-    { label:'🪨 研ぎ', val:Math.round(bladeState.sharpness) },
-  ];
-  items.forEach((d,i) => {
-    const y=178+i*56;
-    const pct=d.val/100;
-    const hsl=`hsl(${pct*120},75%,55%)`;
-    ctx.fillStyle='#777'; ctx.font='14px monospace'; ctx.textAlign='left';
-    ctx.fillText(d.label, 30, y);
-    ctx.fillStyle=hsl; ctx.font='bold 18px monospace'; ctx.textAlign='right';
-    ctx.fillText(d.val+'/100', W-30, y);
-    // bar bg
-    ctx.fillStyle='#1a1a1a';
-    ctx.fillRect(30, y+5, W-60, 12);
-    // bar fill
-    ctx.fillStyle=hsl;
-    ctx.fillRect(30, y+5, (W-60)*pct, 12);
-    ctx.textAlign='left';
-  });
-
-  // Divider 2
-  ctx.strokeStyle='#333'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(30,352); ctx.lineTo(W-30,352); ctx.stroke();
-
-  // Ranking
-  ctx.fillStyle='#ffd080'; ctx.font='bold 14px sans-serif'; ctx.textAlign='center';
-  ctx.fillText('🏆 TOP 5 ランキング', W/2, 374);
-  const scores = loadScores();
-  const rankColors=['#ffd700','#c0c0c0','#cd7f32','#999','#777'];
-  if(scores.length===0) {
-    ctx.fillStyle='#555'; ctx.font='13px sans-serif';
-    ctx.fillText('まだ記録なし / No records yet', W/2, 408);
+  // Temperature update
+  if (fd.ironInFurnace) {
+    fd.temperature = Math.min(100, fd.temperature + PARAMS.FORGING.TEMP_HEAT_RATE * delta);
   } else {
-    scores.forEach((s,i) => {
-      const y=400+i*30;
-      ctx.fillStyle=rankColors[i]||'#777';
-      ctx.font=`${i===0?'bold ':''}13px monospace`;
-      ctx.textAlign='left'; ctx.fillText(`${i+1}位`, 30, y);
-      ctx.fillStyle='#fff'; ctx.font=`${i===0?'bold ':''}15px monospace`;
-      ctx.textAlign='center'; ctx.fillText(s.score+'点', W/2-20, y);
-      ctx.fillStyle='#666'; ctx.font='11px monospace';
-      ctx.textAlign='right'; ctx.fillText(s.date, W-28, y);
-    });
+    fd.temperature = Math.max(0, fd.temperature - PARAMS.FORGING.TEMP_COOL_RATE * delta);
   }
 
-  // Retry hint
-  ctx.fillStyle='#444'; ctx.font='12px sans-serif'; ctx.textAlign='center';
-  ctx.fillText('Aボタン / N でリトライ', W/2, 536);
+  // Iron AABB
+  if (forgingObjects.ironMesh) {
+    forgingObjects.ironBox.setFromObject(forgingObjects.ironMesh);
+  }
 
-  tex.needsUpdate=true;
+  // Get right-hand hammer position
+  let hammerWorldPos = forgingData.hammerPos.clone();
+  if (rightController) {
+    rightController.getWorldPosition(hammerWorldPos);
+  }
+  // Hammer velocity
+  const hammerDelta = hammerWorldPos.clone().sub(forgingData.prevHammerPos);
+  fd.hammerSpeed = hammerDelta.length() / delta;
+  forgingData.prevHammerPos.copy(hammerWorldPos);
+  if (forgingObjects.hammerGroup) {
+    forgingObjects.hammerGroup.position.copy(hammerWorldPos);
+  }
+  forgingObjects.hammerBox.setFromObject(forgingObjects.hammerGroup);
+
+  // Trigger press detection
+  const trigPressed = rightController?.gamepad?.buttons[0]?.pressed || mouseState.clicked;
+  if (trigPressed && !fd.triggerWasPressed && fd.hitCount < PARAMS.FORGING.TOTAL_HITS) {
+    fd.hitCount++;
+    const isTiming = fd.ironOnWorkbench;
+    const isVelocity = fd.hammerSpeed > PARAMS.FORGING.VELOCITY_THRESHOLD;
+    const isHit = forgingObjects.hammerBox.intersectsBox(forgingObjects.ironBox);
+
+    let result;
+    if (isTiming && isVelocity && isHit) result = 'perfect';
+    else if (isTiming && (isVelocity || isHit)) result = 'good';
+    else result = 'miss';
+
+    // Distortion
+    if (result === 'miss') fd.shapeDistortion = Math.min(100, fd.shapeDistortion + PARAMS.FORGING.DISTORTION_MISS);
+    else if (result === 'good') fd.shapeDistortion = Math.min(100, fd.shapeDistortion + PARAMS.FORGING.DISTORTION_GOOD);
+    else fd.shapeDistortion = Math.max(0, fd.shapeDistortion + PARAMS.FORGING.DISTORTION_PERFECT);
+
+    // Sparks
+    if (isTiming) {
+      const cnt = result === 'perfect' ? 20 : result === 'good' ? 10 : 2;
+      const inten = result === 'perfect' ? 1.5 : result === 'good' ? 0.8 : 0.2;
+      emitSparks(forgingObjects.ironMesh.position, cnt, inten);
+    }
+    playHammer(result);
+    if (result !== 'miss') playVibrate(rightController, 60, result === 'perfect' ? 0.8 : 0.4);
+
+    // Temp penalty on low-temp hit
+    if (fd.temperature < PARAMS.FORGING.TEMP_MIN_FORGE && fd.ironOnWorkbench) {
+      fd.shapeDistortion = Math.min(100, fd.shapeDistortion + 1.5);
+    }
+  }
+  fd.triggerWasPressed = trigPressed;
+  mouseState.clicked = false;
+
+  // Left trigger/grip: grab iron
+  const leftTrig = leftController?.gamepad?.buttons[0]?.pressed ||
+                   leftController?.gamepad?.buttons[1]?.pressed || keyState['z'];
+  // Simple zone-based placement
+  if (leftTrig) {
+    // Iron follows a virtual point between controllers / keyboard
+    let leftPos = new THREE.Vector3(-0.3, 1.0, -0.8);
+    if (leftController) leftController.getWorldPosition(leftPos);
+    forgingObjects.ironMesh?.position.copy(leftPos);
+    fd.ironPos.copy(leftPos);
+
+    // Check placement
+    fd.ironInFurnace = forgingObjects.furnaceBox.containsPoint(leftPos);
+    fd.ironOnWorkbench = forgingObjects.workbenchBox.containsPoint(leftPos);
+  }
+
+  drawForgingHUD();
 }
 
-// ════════════════════════════════════════════════════════════
-//  SCORE SYSTEM
-// ════════════════════════════════════════════════════════════
+// ─── SHAPING SCENE ───────────────────────────────────────────
+let shapingData = {
+  hitCount: 0,
+  zones: [],
+  symmetryError: 0,
+  hammerPos: new THREE.Vector3(0.3, 1.0, -0.5),
+  prevHammerPos: new THREE.Vector3(),
+  hammerSpeed: 0,
+  triggerWasPressed: false,
+  isFlipped: false, xBtnWasPressed: false,
+  bladeMesh: null,
+};
+let shapingObjects = {};
+
+function buildShaping() {
+  shapingGroup.clear();
+  shapingObjects = {};
+  const sd = shapingData;
+  sd.hitCount = 0; sd.isFlipped = false; sd.symmetryError = 0;
+
+  // Floor
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(6, 6),
+    new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.95 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  shapingGroup.add(floor);
+
+  // Workbench
+  const wb = new THREE.Mesh(
+    new THREE.BoxGeometry(1.2, 0.1, 0.6),
+    new THREE.MeshStandardMaterial({ color: 0x3a2810, roughness: 0.8 })
+  );
+  wb.position.set(0, 0.85, -1.2);
+  shapingGroup.add(wb);
+
+  // Blade model: knife-like shape using merged boxes
+  const bladeGroup = new THREE.Group();
+  bladeGroup.position.set(0, 0.96, -1.2);
+
+  // Zone count
+  const zoneCount = PARAMS.SHAPING.ZONE_COUNT;
+  sd.zones = [];
+  const zoneWidth = 0.5 / zoneCount;
+
+  for (let i = 0; i < zoneCount; i++) {
+    const thickness = 0.014 - i * 0.001; // taper
+    const height = 0.045 - Math.abs(i - zoneCount / 2) * 0.003;
+    const geo = new THREE.BoxGeometry(zoneWidth, height, thickness);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x88aacc, roughness: 0.3, metalness: 0.8 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.x = (i - zoneCount / 2 + 0.5) * zoneWidth;
+    bladeGroup.add(mesh);
+    const box3 = new THREE.Box3();
+    sd.zones.push({ mesh, mat, distortion: Math.random() * 15 + 5, box3 });
+  }
+
+  // Handle
+  const handleGeo = new THREE.BoxGeometry(0.14, 0.025, 0.025);
+  const handleMat = new THREE.MeshStandardMaterial({ color: 0x3a1a08, roughness: 0.9 });
+  const handle = new THREE.Mesh(handleGeo, handleMat);
+  handle.position.x = -(0.25 + 0.07);
+  bladeGroup.add(handle);
+
+  shapingGroup.add(bladeGroup);
+  shapingObjects.bladeGroup = bladeGroup;
+
+  // Hammer
+  const hammerGroup = new THREE.Group();
+  hammerGroup.add(new THREE.Mesh(
+    new THREE.BoxGeometry(0.06, 0.06, 0.1),
+    new THREE.MeshStandardMaterial({ color: 0x555566, roughness: 0.4, metalness: 0.7 })
+  ));
+  shapingGroup.add(hammerGroup);
+  shapingObjects.hammerGroup = hammerGroup;
+  shapingObjects.hammerBox = new THREE.Box3();
+
+  // HUD
+  const hudCanvas = document.createElement('canvas');
+  hudCanvas.width = 256; hudCanvas.height = 128;
+  const hudTex = new THREE.CanvasTexture(hudCanvas);
+  const hudMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.8, 0.4),
+    new THREE.MeshBasicMaterial({ map: hudTex, transparent: true, side: THREE.DoubleSide })
+  );
+  hudMesh.position.set(0.8, 1.5, -1.5);
+  shapingGroup.add(hudMesh);
+  shapingObjects.hudMesh = hudMesh;
+  shapingObjects.hudCanvas = hudCanvas;
+  shapingObjects.hudCtx = hudCanvas.getContext('2d');
+  shapingObjects.hudTex = hudTex;
+}
+
+function drawShapingHUD() {
+  const sd = shapingData;
+  const ctx = shapingObjects.hudCtx;
+  if (!ctx) return;
+  const canvas = shapingObjects.hudCanvas;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = 'rgba(10,10,20,0.85)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#aac'; ctx.font = '16px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(`打撃: ${sd.hitCount} / ${PARAMS.SHAPING.MAX_HITS}`, 128, 35);
+  ctx.fillStyle = '#667'; ctx.font = '12px sans-serif';
+  ctx.fillText(`対称誤差: ${Math.round(sd.symmetryError)}%`, 128, 60);
+  ctx.fillStyle = '#4a8'; ctx.font = '11px sans-serif';
+  ctx.fillText('赤=要修正 / 青=良好', 128, 85);
+  ctx.fillStyle = '#667'; ctx.font = '11px sans-serif';
+  ctx.fillText('A:次へ  B:やり直し  X:反転', 128, 108);
+  shapingObjects.hudTex.needsUpdate = true;
+}
+
+function updateShaping(delta) {
+  const sd = shapingData;
+
+  // Update zone colors
+  for (const z of sd.zones) {
+    const t = Math.min(z.distortion / 100, 1);
+    z.mat.color.setRGB(0.1 + t * 0.7, 0.3 + (1 - t) * 0.4, 0.6 + (1 - t) * 0.3);
+    z.mat.emissive.setRGB(t * 0.3, 0, 0);
+    z.box3.setFromObject(z.mesh);
+  }
+
+  // Flip with X button
+  const xPressed = leftController?.gamepad?.buttons[4]?.pressed || keyState['x'];
+  if (xPressed && !sd.xBtnWasPressed && shapingObjects.bladeGroup) {
+    sd.isFlipped = !sd.isFlipped;
+    const targetRot = sd.isFlipped ? Math.PI : 0;
+    shapingObjects.bladeGroup.rotation.z = targetRot;
+    playTone(600, 'sine', 0.2, 0.15);
+  }
+  sd.xBtnWasPressed = xPressed;
+
+  // Hammer position
+  let hammerWorldPos = sd.hammerPos.clone();
+  if (rightController) rightController.getWorldPosition(hammerWorldPos);
+  const hammerDelta = hammerWorldPos.clone().sub(sd.prevHammerPos);
+  sd.hammerSpeed = hammerDelta.length() / delta;
+  sd.prevHammerPos.copy(hammerWorldPos);
+  if (shapingObjects.hammerGroup) shapingObjects.hammerGroup.position.copy(hammerWorldPos);
+  shapingObjects.hammerBox.setFromObject(shapingObjects.hammerGroup);
+
+  // Trigger
+  const trigPressed = rightController?.gamepad?.buttons[0]?.pressed || mouseState.clicked;
+  if (trigPressed && !sd.triggerWasPressed && sd.hitCount < PARAMS.SHAPING.MAX_HITS) {
+    sd.hitCount++;
+    // Find hit zone
+    let hitZone = null;
+    for (const z of sd.zones) {
+      if (shapingObjects.hammerBox.intersectsBox(z.box3)) { hitZone = z; break; }
+    }
+    const power = THREE.MathUtils.clamp(
+      sd.hammerSpeed * PARAMS.SHAPING.POWER_SCALE,
+      PARAMS.SHAPING.POWER_MIN,
+      PARAMS.SHAPING.POWER_MAX
+    );
+    if (hitZone) {
+      hitZone.distortion = Math.max(0, hitZone.distortion - power);
+      for (const z of sd.zones) {
+        if (z !== hitZone) {
+          z.distortion = Math.min(100, z.distortion + PARAMS.SHAPING.SMALL_PENALTY);
+        }
+      }
+      emitSparks(shapingObjects.hammerGroup.position, 8, 0.8);
+      playHammer('good');
+    } else {
+      // Missed blade entirely
+      for (const z of sd.zones) z.distortion = Math.min(100, z.distortion + 0.5);
+      playHammer('miss');
+    }
+    // Symmetry
+    const distortions = sd.zones.map(z => z.distortion);
+    sd.symmetryError = distortions.reduce((a, b) => a + b, 0) / distortions.length;
+  }
+  sd.triggerWasPressed = trigPressed;
+  mouseState.clicked = false;
+
+  drawShapingHUD();
+}
+
+// ─── SHARPENING SCENE ────────────────────────────────────────
+let sharpeningData = {
+  strokeCount: 0,
+  lastDir: 0,
+  travelSinceDir: 0,
+  prevMidPos: new THREE.Vector3(),
+  angleScore: 100,
+  sharpness: 0,
+  hudCanvas: null,
+};
+let sharpeningObjects = {};
+
+function buildSharpening() {
+  sharpeningGroup.clear();
+  sharpeningObjects = {};
+  const sd = sharpeningData;
+  sd.strokeCount = 0; sd.lastDir = 0; sd.travelSinceDir = 0; sd.angleScore = 100;
+
+  // Floor
+  sharpeningGroup.add(new THREE.Mesh(
+    new THREE.PlaneGeometry(6, 6),
+    new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.95 })
+  ));
+  sharpeningGroup.children[0].rotation.x = -Math.PI / 2;
+
+  // Whetstone on table
+  const tableGeo = new THREE.BoxGeometry(1.0, 0.1, 0.6);
+  const table = new THREE.Mesh(tableGeo, new THREE.MeshStandardMaterial({ color: 0x3a2810, roughness: 0.8 }));
+  table.position.set(0, 0.85, -1.2);
+  sharpeningGroup.add(table);
+
+  const stoneGeo = new THREE.BoxGeometry(0.4, 0.05, 0.12);
+  const stone = new THREE.Mesh(stoneGeo, new THREE.MeshStandardMaterial({ color: 0x7a7a6a, roughness: 0.95 }));
+  stone.position.set(0, 0.93, -1.2);
+  sharpeningGroup.add(stone);
+  sharpeningObjects.stone = stone;
+  sharpeningObjects.stoneNormal = new THREE.Vector3(0, 1, 0);
+
+  // Blade held by both hands
+  const bladeGroup = new THREE.Group();
+  const bladeGeo = new THREE.BoxGeometry(0.06, 0.01, 0.3);
+  const bladeMat = new THREE.MeshStandardMaterial({ color: 0xaabbcc, metalness: 0.9, roughness: 0.1 });
+  const bladeMesh = new THREE.Mesh(bladeGeo, bladeMat);
+  bladeGroup.add(bladeMesh);
+  bladeGroup.position.set(0, 1.0, -0.8);
+  sharpeningGroup.add(bladeGroup);
+  sharpeningObjects.bladeGroup = bladeGroup;
+
+  // HUD
+  const hudCanvas = document.createElement('canvas');
+  hudCanvas.width = 256; hudCanvas.height = 128;
+  sd.hudCanvas = hudCanvas;
+  const hudTex = new THREE.CanvasTexture(hudCanvas);
+  const hudMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.8, 0.4),
+    new THREE.MeshBasicMaterial({ map: hudTex, transparent: true, side: THREE.DoubleSide })
+  );
+  hudMesh.position.set(0.8, 1.5, -1.5);
+  sharpeningGroup.add(hudMesh);
+  sharpeningObjects.hudMesh = hudMesh;
+  sharpeningObjects.hudTex = hudTex;
+  sharpeningObjects.hudCtx = hudCanvas.getContext('2d');
+}
+
+function drawSharpeningHUD() {
+  const sd = sharpeningData;
+  const ctx = sharpeningObjects.hudCtx;
+  if (!ctx) return;
+  ctx.clearRect(0, 0, 256, 128);
+  ctx.fillStyle = 'rgba(10,10,20,0.85)'; ctx.fillRect(0, 0, 256, 128);
+  ctx.fillStyle = '#aac'; ctx.font = '16px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(`ストローク: ${sd.strokeCount} / ${PARAMS.SHARPENING.TOTAL_STROKES}`, 128, 35);
+  const aq = sd.angleScore;
+  const col = aq > 75 ? '#4d8' : aq > 40 ? '#fa4' : '#f44';
+  ctx.fillStyle = col; ctx.font = '14px sans-serif';
+  ctx.fillText(`角度スコア: ${Math.round(aq)}`, 128, 62);
+  ctx.fillStyle = '#334'; ctx.fillRect(20, 75, 216, 14);
+  ctx.fillStyle = col; ctx.fillRect(20, 75, 216 * (sd.angleScore / 100), 14);
+  ctx.fillStyle = '#667'; ctx.font = '11px sans-serif';
+  ctx.fillText('A:次へ  B:やり直し', 128, 112);
+  sharpeningObjects.hudTex.needsUpdate = true;
+}
+
+const _stoneForward = new THREE.Vector3(1, 0, 0);
+const _tmpVec = new THREE.Vector3();
+
+function updateSharpening(delta) {
+  const sd = sharpeningData;
+
+  // Midpoint of both hands
+  let midPos = new THREE.Vector3(0, 0.95, -1.2);
+  if (rightController && leftController) {
+    const rp = new THREE.Vector3(), lp = new THREE.Vector3();
+    rightController.getWorldPosition(rp);
+    leftController.getWorldPosition(lp);
+    midPos.lerpVectors(lp, rp, 0.5);
+  } else if (rightController) {
+    rightController.getWorldPosition(midPos);
+  }
+
+  // Blade follows mid
+  if (sharpeningObjects.bladeGroup) {
+    sharpeningObjects.bladeGroup.position.copy(midPos);
+  }
+
+  // Stroke detection
+  _tmpVec.copy(midPos).sub(sd.prevMidPos);
+  const dist = _tmpVec.length();
+  const dot = _tmpVec.dot(_stoneForward);
+  const dir = dot >= 0 ? 1 : -1;
+
+  if (dist > 0.001) {
+    sd.travelSinceDir += dist;
+    if (dir !== sd.lastDir && sd.travelSinceDir > PARAMS.SHARPENING.STROKE_DIST_THRESHOLD) {
+      sd.strokeCount++;
+      sd.travelSinceDir = 0;
+
+      // Angle: compare blade tilt vs stone normal
+      const bladeNormal = new THREE.Vector3(0, 1, 0);
+      if (sharpeningObjects.bladeGroup) {
+        bladeNormal.applyQuaternion(sharpeningObjects.bladeGroup.quaternion);
+      }
+      const stoneNorm = sharpeningObjects.stoneNormal;
+      const dot2 = THREE.MathUtils.clamp(bladeNormal.dot(stoneNorm), -1, 1);
+      const angleError = Math.abs(Math.acos(dot2) * THREE.MathUtils.RAD2DEG - 15); // ideal 15deg
+      sd.angleScore = THREE.MathUtils.clamp(100 - angleError * PARAMS.SHARPENING.ANGLE_ERROR_SCALE, 0, 100);
+
+      playSharpen(sd.angleScore);
+      const isGood = sd.angleScore > 50;
+      playVibrate(rightController, 30, isGood ? 0.3 : 0.7);
+      if (isGood) emitSparks(midPos, 3, 0.3);
+    }
+    sd.lastDir = dir;
+  }
+  sd.prevMidPos.copy(midPos);
+
+  drawSharpeningHUD();
+}
+
+// ─── RESULT SCENE ────────────────────────────────────────────
+let resultData = { finalScore: 0, isNewBest: false };
+let resultObjects = {};
+
 function computeFinalScore() {
+  const s = bladeState;
   return Math.round(
-    (100-bladeState.shapeDistortion)*0.4 +
-    (100-bladeState.symmetryError)*0.3 +
-    bladeState.sharpness*0.3
+    (100 - s.shapeDistortion) * 0.4 +
+    (100 - s.symmetryError) * 0.3 +
+    s.sharpness * 0.3
   );
 }
 
-function getTitle(score) {
-  if(score>=85) return '名人 ★ Master';
-  if(score>=65) return '職人 ◆ Craftsman';
-  return '見習い ◇ Apprentice';
+function getRank(score) {
+  if (score >= 85) return { ja: '名人', en: 'Master', color: '#ffd700' };
+  if (score >= 65) return { ja: '職人', en: 'Craftsman', color: '#c0c0c0' };
+  return { ja: '見習い', en: 'Apprentice', color: '#cd7f32' };
 }
 
 function saveScore(score) {
-  let arr = loadScores();
+  let scores = [];
+  try { scores = JSON.parse(localStorage.getItem('echizenScores') || '[]'); } catch {}
   const now = new Date();
-  const pad = n=>String(n).padStart(2,'0');
-  const date=`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  arr.push({score, date});
-  arr.sort((a,b)=>b.score-a.score);
-  arr=arr.slice(0,5);
-  localStorage.setItem('echizen_scores', JSON.stringify(arr));
-  return arr;
+  const dateStr = now.toISOString().slice(0, 16).replace('T', ' ');
+  scores.push({ score, date: dateStr });
+  scores.sort((a, b) => b.score - a.score);
+  scores = scores.slice(0, 5);
+  localStorage.setItem('echizenScores', JSON.stringify(scores));
+  return scores;
 }
 
-function loadScores() {
-  try { return JSON.parse(localStorage.getItem('echizen_scores')||'[]'); }
-  catch(e){ return []; }
-}
+function buildResult() {
+  resultGroup.clear();
+  resultObjects = {};
 
-// ════════════════════════════════════════════════════════════
-//  PHASE STATE OBJECTS
-// ════════════════════════════════════════════════════════════
-let fState = {};  // forging
-let sState = {};  // shaping
-let shState = {}; // sharpening
+  const score = computeFinalScore();
+  resultData.finalScore = score;
+  const scores = saveScore(score);
+  resultData.isNewBest = scores[0].score === score && scores.filter(s => s.score === score).length === 1;
 
-function resetForging() {
-  fState = {
-    temperature: 22,
-    ironHeld: false,
-    ironInFurnace: false,
-    ironOnWorkbench: false,
-    hitCount: 0,
-    distortion: 0,
-  };
-  ironMesh.position.set(-0.85, 0.66, -1.6);
-  ironMesh.material.color.set(0x777777);
-  drawTempLabel(22);
-  forgeGlow.intensity = 0;
-}
+  const rank = getRank(score);
 
-function resetShaping() {
-  sState = { hitCount:0 };
-  zoneData.forEach(z=>{ z.distortion=20; });
-  updateZoneColors();
-}
+  // Billboard canvas panel
+  const canvas = document.createElement('canvas');
+  canvas.width = 512; canvas.height = 640;
+  const ctx = canvas.getContext('2d');
 
-function resetSharpening() {
-  shState = {
-    strokeCount: 0,
-    lastDir: 0,
-    prevAxis: 0,
-    totalAngle: 0,
-    angleN: 0,
-  };
-}
+  // Background
+  ctx.fillStyle = '#0a0a1e';
+  ctx.fillRect(0, 0, 512, 640);
+  ctx.strokeStyle = '#334';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(4, 4, 504, 632);
 
-// ════════════════════════════════════════════════════════════
-//  COLLIDERS
-// ════════════════════════════════════════════════════════════
-const FURNACE_BOX  = new THREE.Box3().setFromCenterAndSize(
-  new THREE.Vector3(-0.85, 0.5, -1.6), new THREE.Vector3(0.55,0.55,0.55));
-const WORKBENCH_FORGE_BOX = new THREE.Box3().setFromCenterAndSize(
-  new THREE.Vector3(0, 0.64, -1.6), new THREE.Vector3(0.85, 0.22, 0.46));
-const IRON_BOX = new THREE.Box3();
-const HAMMER_SPHERE = new THREE.Sphere(new THREE.Vector3(), 0.09);
+  // Title
+  ctx.fillStyle = '#8899cc';
+  ctx.font = 'bold 22px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('── 結果 ──', 256, 40);
 
-// Shaping zone boxes (world space, static)
-const ZONE_BOXES = zoneData.map((z) =>
-  new THREE.Box3().setFromCenterAndSize(
-    new THREE.Vector3(0, 0.655, -1.6 + z.zz),
-    new THREE.Vector3(0.1, 0.07, 0.062)
-  )
-);
+  // Rank
+  ctx.fillStyle = rank.color;
+  ctx.font = 'bold 32px sans-serif';
+  ctx.fillText(`${rank.ja}  ${rank.en}`, 256, 85);
 
-// ════════════════════════════════════════════════════════════
-//  INPUT STATE
-// ════════════════════════════════════════════════════════════
-const inp = {
-  aBtnPrev: false,
-  bBtnPrev: false,
-  rTrigPrev: false,
-  xBtnPrev: false,
-  rTrig: false,
-  lTrig: false,
-  lGrip: false,
-  mouseDown: false,
-  mouseDownPrev: false,
-  mouse: new THREE.Vector2(),
-  keys: {},
-  rPos: new THREE.Vector3(0.3, 1.2, -1.3),
-  lPos: new THREE.Vector3(-0.3, 1.2, -1.3),
-};
+  // Score
+  if (resultData.isNewBest) {
+    ctx.fillStyle = '#ffcc00';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillText('★ NEW BEST ★', 256, 115);
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold 56px sans-serif`;
+  ctx.fillText(`${score}点`, 256, 170);
 
-// Min/Max vectors for left hand clamping
-const L_MIN = new THREE.Vector3(-1.5, 0.3, -2.5);
-const L_MAX = new THREE.Vector3( 1.5, 2.0,  0.0);
+  // Details
+  ctx.strokeStyle = '#334'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(40, 190); ctx.lineTo(472, 190); ctx.stroke();
+  ctx.textAlign = 'left'; ctx.font = '15px sans-serif';
+  const details = [
+    { label: '🔨 鍛造 (Forging)', value: Math.round((100 - bladeState.shapeDistortion) * 0.4), color: '#ff8844' },
+    { label: '⚒ 成形 (Shaping)', value: Math.round((100 - bladeState.symmetryError) * 0.3), color: '#44aaff' },
+    { label: '🪨 研ぎ (Sharpening)', value: Math.round(bladeState.sharpness * 0.3), color: '#44ffaa' },
+  ];
+  let dy = 210;
+  for (const d of details) {
+    ctx.fillStyle = d.color; ctx.fillText(d.label, 50, dy);
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'right';
+    ctx.fillText(`${d.value}pt`, 460, dy);
+    ctx.textAlign = 'left';
+    dy += 28;
+  }
+  ctx.strokeStyle = '#334'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(40, dy + 4); ctx.lineTo(472, dy + 4); ctx.stroke();
+  dy += 24;
 
-window.addEventListener('keydown', e=>{inp.keys[e.key.toLowerCase()]=true;});
-window.addEventListener('keyup',   e=>{inp.keys[e.key.toLowerCase()]=false;});
-canvas.addEventListener('mousemove', e=>{
-  inp.mouse.set((e.clientX/innerWidth)*2-1, -(e.clientY/innerHeight)*2+1);
-});
-canvas.addEventListener('mousedown', ()=>{inp.mouseDown=true; ensureAudio();});
-canvas.addEventListener('mouseup',   ()=>{inp.mouseDown=false;});
-canvas.addEventListener('click', ensureAudio);
-
-// Raycaster for mouse→world
-const raycaster = new THREE.Raycaster();
-const _hitPt = new THREE.Vector3();
-
-// Camera orbit (non-VR)
-let camYaw=0, camPitch=0;
-
-// ════════════════════════════════════════════════════════════
-//  GLOBAL INPUT HANDLER  (A/B buttons, called every frame)
-// ════════════════════════════════════════════════════════════
-function handleGlobalInput() {
-  const isVR = renderer.xr.isPresenting;
-
-  // ── A button ──
-  let aBtn = false;
-  if(isVR && rightController?.gamepad) aBtn = rightController.gamepad.buttons[4]?.pressed||false;
-  else aBtn = inp.keys['n']||false;
-  if(aBtn && !inp.aBtnPrev) nextState();
-  inp.aBtnPrev = aBtn;
-
-  // ── B button (restart current phase) ──
-  let bBtn = false;
-  if(isVR && rightController?.gamepad) bBtn = rightController.gamepad.buttons[5]?.pressed||false;
-  else bBtn = inp.keys['p']||false;
-  if(bBtn && !inp.bBtnPrev) restartCurrentPhase();
-  inp.bBtnPrev = bBtn;
-
-  // ── Right trigger ──
-  let rTrig = false;
-  if(isVR && rightController?.gamepad) rTrig = rightController.gamepad.buttons[0]?.pressed||false;
-  else rTrig = inp.mouseDown;
-  inp.rTrigPrev = inp.rTrig;
-  inp.rTrig = rTrig;
-
-  // ── Left trigger / grip ──
-  if(isVR && leftController?.gamepad) {
-    inp.lTrig = leftController.gamepad.buttons[0]?.pressed||false;
-    inp.lGrip = leftController.gamepad.buttons[1]?.pressed||false;
-  } else {
-    inp.lTrig = inp.keys['q']||false;
-    inp.lGrip = inp.keys['e']||false;
+  // Ranking
+  ctx.fillStyle = '#8899cc'; ctx.font = 'bold 17px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('─ ランキング TOP 5 ─', 256, dy);
+  dy += 26;
+  ctx.font = '14px sans-serif';
+  for (let i = 0; i < scores.length; i++) {
+    const s = scores[i];
+    const isMe = i === 0 && resultData.isNewBest;
+    ctx.fillStyle = isMe ? '#ffd700' : (i === 0 ? '#fff' : '#889');
+    ctx.textAlign = 'left';
+    ctx.fillText(`${i + 1}位`, 50, dy);
+    ctx.textAlign = 'center';
+    ctx.fillText(`${s.score}点`, 200, dy);
+    ctx.textAlign = 'right';
+    ctx.font = '11px sans-serif';
+    ctx.fillText(s.date, 462, dy);
+    ctx.font = '14px sans-serif';
+    dy += 26;
   }
 
-  // ── X button (blade flip in shaping) ──
-  let xBtn = false;
-  if(isVR && leftController?.gamepad) xBtn = leftController.gamepad.buttons[4]?.pressed||false;
-  else xBtn = inp.keys['x']||false;
-  if(xBtn && !inp.xBtnPrev && currentState===State.SHAPING) flipBlade();
-  inp.xBtnPrev = xBtn;
+  // Replay hint
+  ctx.fillStyle = '#4a8'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('【A ボタン / N キー】でもう一度', 256, 610);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  const panel = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.6, 2.0),
+    new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide })
+  );
+  panel.position.set(0, 1.6, -2.0);
+  resultGroup.add(panel);
+  resultObjects.panel = panel;
+
+  // Spinning blade display (score-based)
+  const bladeScale = score >= 85 ? 1.4 : score >= 65 ? 1.0 : 0.7;
+  const bladeGroup = new THREE.Group();
+  const bladeCol = score >= 85 ? 0xffffaa : score >= 65 ? 0xaaccff : 0x887766;
+  const bGeo = new THREE.BoxGeometry(0.06 * bladeScale, 0.008 * bladeScale, 0.32 * bladeScale);
+  const bMat = new THREE.MeshStandardMaterial({ color: bladeCol, metalness: 0.9, roughness: 0.1 });
+  bladeGroup.add(new THREE.Mesh(bGeo, bMat));
+  bladeGroup.position.set(1.1, 1.6, -2.0);
+  resultGroup.add(bladeGroup);
+  resultObjects.bladeGroup = bladeGroup;
 }
 
-// ════════════════════════════════════════════════════════════
-//  CONTROLLER / MOUSE POSITION UPDATE
-// ════════════════════════════════════════════════════════════
-function updatePositions(delta) {
-  const isVR = renderer.xr.isPresenting;
-
-  if(isVR) {
-    if(rightController) inp.rPos.copy(rightController.position);
-    if(leftController)  inp.lPos.copy(leftController.position);
-  } else {
-    // WASD → left hand
-    const spd = 1.2*delta;
-    if(inp.keys['a']) inp.lPos.x -= spd;
-    if(inp.keys['d']) inp.lPos.x += spd;
-    if(inp.keys['w']) inp.lPos.z -= spd;
-    if(inp.keys['s']) inp.lPos.z += spd;
-    inp.lPos.clamp(L_MIN, L_MAX);
-
-    // Mouse → right hand (intersect a plane at z=-1.6)
-    raycaster.setFromCamera(inp.mouse, camera);
-    const plane = new THREE.Plane(new THREE.Vector3(0,0,1), 1.6);
-    raycaster.ray.intersectPlane(plane, _hitPt);
-    if(_hitPt) inp.rPos.copy(_hitPt);
-    inp.rPos.y = Math.max(0.5, Math.min(1.9, inp.rPos.y));
-
-    // Arrow keys → camera orbit
-    if(inp.keys['arrowleft'])  camYaw  -= 1.2*delta;
-    if(inp.keys['arrowright']) camYaw  += 1.2*delta;
-    if(inp.keys['arrowup'])    camPitch = Math.max(-0.45, camPitch-1.2*delta);
-    if(inp.keys['arrowdown'])  camPitch = Math.min( 0.45, camPitch+1.2*delta);
-    camera.quaternion.setFromEuler(new THREE.Euler(camPitch, camYaw, 0, 'YXZ'));
+function updateResult(delta) {
+  // Billboard: face camera
+  if (resultObjects.panel) {
+    const camPos = new THREE.Vector3();
+    camera.getWorldPosition(camPos);
+    resultObjects.panel.lookAt(camPos);
   }
-
-  // Velocity (rough units/sec)
-  rVel = inp.rPos.distanceTo(_rPrevPos) / Math.max(delta, 0.001);
-  lVel = inp.lPos.distanceTo(_lPrevPos) / Math.max(delta, 0.001);
-  _rPrevPos.copy(inp.rPos);
-  _lPrevPos.copy(inp.lPos);
+  // Spin blade
+  if (resultObjects.bladeGroup) {
+    resultObjects.bladeGroup.rotation.y += delta * 1.2;
+  }
 }
 
-// ════════════════════════════════════════════════════════════
-//  STATE TRANSITIONS
-// ════════════════════════════════════════════════════════════
-function setGroup(name) {
-  Object.entries(G).forEach(([k,g]) => { g.visible = k===name; });
+// ─── STATE TRANSITIONS ───────────────────────────────────────
+function setAllGroupsVisible(visible) {
+  [forgingGroup, shapingGroup, sharpeningGroup, introGroup, resultGroup].forEach(g => {
+    g.visible = false;
+  });
+}
+
+function enterState(newState) {
+  setAllGroupsVisible(false);
+  currentState = newState;
+  document.getElementById('phase-indicator').textContent = newState;
+
+  switch (newState) {
+    case State.INTRO:
+      introGroup.visible = true;
+      buildIntro();
+      break;
+    case State.FORGING:
+      forgingGroup.visible = true;
+      buildForging();
+      forgeLight.intensity = 2;
+      playTransition();
+      break;
+    case State.SHAPING:
+      shapingGroup.visible = true;
+      bladeState.shapeDistortion = forgingData.shapeDistortion;
+      buildShaping();
+      playTransition();
+      break;
+    case State.SHARPENING:
+      sharpeningGroup.visible = true;
+      bladeState.symmetryError = shapingData.symmetryError;
+      buildSharpening();
+      playTransition();
+      break;
+    case State.RESULT:
+      resultGroup.visible = true;
+      // compute sharpness
+      const sData = sharpeningData;
+      const efficiency = THREE.MathUtils.clamp(1 - bladeState.symmetryError * 0.01, 0.5, 1);
+      bladeState.sharpness = THREE.MathUtils.clamp(sData.angleScore * efficiency, 0, 100);
+      buildResult();
+      playTransition();
+      break;
+  }
 }
 
 function nextState() {
-  if(transitioning) return;
-  transitioning = true;
-  playTransition();
-  switch(currentState) {
-    case State.INTRO:       enterForging();    break;
-    case State.FORGING:
-      bladeState.shapeDistortion = fState.distortion;
-      enterShaping();   break;
-    case State.SHAPING:
-      bladeState.symmetryError = computeSymmetryError();
-      enterSharpening(); break;
-    case State.SHARPENING:
-      finalizeSharpening();
-      enterResult();    break;
-    case State.RESULT:      enterIntro();      break;
+  ensureAudio();
+  const order = [State.INTRO, State.FORGING, State.SHAPING, State.SHARPENING, State.RESULT];
+  const idx = order.indexOf(currentState);
+  if (idx < order.length - 1) enterState(order[idx + 1]);
+  else enterState(State.INTRO); // RESULT → INTRO
+}
+
+function restartCurrentState() {
+  ensureAudio();
+  enterState(currentState);
+}
+
+// ─── INPUT HANDLING ──────────────────────────────────────────
+let wasAPressed = false, wasBPressed = false;
+const mouseState = { x: 0, y: 0, clicked: false };
+const keyState = {};
+
+// Non-VR mouse control
+document.addEventListener('mousemove', (e) => {
+  mouseState.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouseState.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  // Move hammer in non-VR mode
+  forgingData.hammerPos.set(mouseState.x * 0.6, 1.1 + mouseState.y * 0.4, -0.8);
+  shapingData.hammerPos.set(mouseState.x * 0.6, 1.1 + mouseState.y * 0.4, -0.8);
+});
+document.addEventListener('click', () => { ensureAudio(); mouseState.clicked = true; });
+document.addEventListener('keydown', (e) => {
+  keyState[e.key.toLowerCase()] = true;
+  if (e.key.toLowerCase() === 'n') { ensureAudio(); nextState(); }
+  if (e.key.toLowerCase() === 'p') { ensureAudio(); restartCurrentState(); }
+});
+document.addEventListener('keyup', (e) => { keyState[e.key.toLowerCase()] = false; });
+
+// Arrow key camera rotation (non-VR)
+const camEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+function handleNonVRInput(delta) {
+  if (renderer.xr.isPresenting) return;
+  const spd = 1.0 * delta;
+  if (keyState['arrowleft']) camEuler.y += spd;
+  if (keyState['arrowright']) camEuler.y -= spd;
+  if (keyState['arrowup']) camEuler.x = Math.min(0.5, camEuler.x + spd);
+  if (keyState['arrowdown']) camEuler.x = Math.max(-0.5, camEuler.x - spd);
+  camera.quaternion.setFromEuler(camEuler);
+}
+
+function handleGlobalInput() {
+  const aPressed = rightController?.gamepad?.buttons[4]?.pressed || keyState['n'];
+  const bPressed = rightController?.gamepad?.buttons[5]?.pressed || keyState['p'];
+
+  if (aPressed && !wasAPressed) nextState();
+  wasAPressed = aPressed;
+
+  if (bPressed && !wasBPressed) restartCurrentState();
+  wasBPressed = bPressed;
+}
+
+// ─── AUTO-STATE TRANSITIONS ──────────────────────────────────
+function updateStateAuto() {
+  if (currentState === State.FORGING && forgingData.hitCount >= PARAMS.FORGING.TOTAL_HITS) {
+    if (!forgingData._autoAdvanced) { forgingData._autoAdvanced = true; }
+    // Prompt player to press A (don't auto-advance, spec says A button)
   }
-  setTimeout(()=>{ transitioning=false; }, 600);
-}
-
-function restartCurrentPhase() {
-  if(transitioning) return;
-  transitioning=true;
-  playTransition();
-  switch(currentState) {
-    case State.FORGING:    enterForging();    break;
-    case State.SHAPING:    enterShaping();    break;
-    case State.SHARPENING: enterSharpening(); break;
-    default: break;
-  }
-  setTimeout(()=>{ transitioning=false; }, 600);
-}
-
-function enterIntro() {
-  currentState = State.INTRO;
-  drawIntroPanel();
-  setGroup('intro');
-  setHUD('越前打刃物 — Aでスタート', 'N:スタート');
-}
-
-function enterForging() {
-  currentState = State.FORGING;
-  resetForging();
-  setGroup('forging');
-  setHUD('🔥 鍛造 | 炉で加熱してから叩け！', '');
-}
-
-function enterShaping() {
-  currentState = State.SHAPING;
-  resetShaping();
-  setGroup('shaping');
-  setHUD('⚒  成形 | 赤エリアを叩いて整形', 'X:反転 A:終了');
-}
-
-function enterSharpening() {
-  currentState = State.SHARPENING;
-  resetSharpening();
-  setGroup('sharpening');
-  setHUD('🪨 研ぎ | 前後に動かして刃を研ぐ', '');
-}
-
-function enterResult() {
-  currentState = State.RESULT;
-  const score = computeFinalScore();
-  saveScore(score);
-  drawResultPanel(score);
-  playResult(score);
-  // Blade color by score
-  const h = 0.58 + (score/100)*0.12;
-  resultBlade.material.color.setHSL(h, 0.6, 0.4+(score/100)*0.25);
-  setGroup('result');
-  setHUD(`結果: ${score}点 | ${getTitle(score)}`, 'A/N:リトライ');
-}
-
-// ════════════════════════════════════════════════════════════
-//  HUD
-// ════════════════════════════════════════════════════════════
-const hudL = document.getElementById('hud-l');
-const hudR = document.getElementById('hud-r');
-function setHUD(left, right) {
-  hudL.textContent = left || '';
-  const isVR = renderer.xr.isPresenting;
-  hudR.textContent = right || (isVR ? 'A:次 B:やり直し' : 'N:次 P:やり直し');
-}
-
-// ════════════════════════════════════════════════════════════
-//  COLOR HELPER
-// ════════════════════════════════════════════════════════════
-function tempToHex(temp) {
-  const t = Math.max(0, (temp-20)/1180);
-  if(t<0.3) return `rgb(${Math.round(100+t*500)},${Math.round(50*t)},${Math.round(50*t)})`;
-  if(t<0.7) return `rgb(255,${Math.round(((t-0.3)/0.4)*120)},0)`;
-  return `rgb(255,${Math.round(120+((t-0.7)/0.3)*135)},${Math.round(((t-0.7)/0.3)*80)})`;
-}
-
-// ════════════════════════════════════════════════════════════
-//  UPDATE: INTRO
-// ════════════════════════════════════════════════════════════
-function updateIntro(delta) {
-  // Gentle billboard
-  introP.mesh.lookAt(camera.position);
-}
-
-// ════════════════════════════════════════════════════════════
-//  UPDATE: FORGING
-// ════════════════════════════════════════════════════════════
-let _heatSoundTimer = 0;
-function updateForging(delta) {
-  const f = fState;
-
-  // ── Iron pick-up / drop ──
-  const hold = inp.lTrig || inp.lGrip;
-  if(hold && !f.ironHeld) {
-    if(inp.lPos.distanceTo(ironMesh.position) < 0.35) f.ironHeld = true;
-  }
-  if(!hold && f.ironHeld) {
-    f.ironHeld = false;
-    const pos = ironMesh.position;
-    if(FURNACE_BOX.containsPoint(pos)) {
-      f.ironInFurnace=true; f.ironOnWorkbench=false;
-    } else if(WORKBENCH_FORGE_BOX.containsPoint(pos)) {
-      f.ironOnWorkbench=true; f.ironInFurnace=false;
-      ironMesh.position.set(0, 0.645, -1.6); // snap
-    } else {
-      f.ironInFurnace=false; f.ironOnWorkbench=false;
+  if (currentState === State.SHARPENING && sharpeningData.strokeCount >= PARAMS.SHARPENING.TOTAL_STROKES) {
+    // Auto-advance to result after strokes done
+    if (!sharpeningData._autoAdvanced) {
+      sharpeningData._autoAdvanced = true;
+      setTimeout(() => enterState(State.RESULT), 800);
     }
   }
-  if(f.ironHeld) {
-    ironMesh.position.copy(inp.lPos);
-    f.ironInFurnace   = FURNACE_BOX.containsPoint(ironMesh.position);
-    f.ironOnWorkbench = false;
-  }
-
-  // ── Temperature ──
-  if(f.ironInFurnace) {
-    f.temperature = Math.min(1200, f.temperature + CFG.FORGING.heatRate*delta);
-    forgeGlow.intensity = 2.5 + Math.sin(Date.now()*0.008)*0.5;
-    furnaceGlow.material.color.setHSL(0.06 - (f.temperature/1200)*0.06, 1, 0.55);
-    _heatSoundTimer -= delta;
-    if(_heatSoundTimer<=0){ playHeatCrackle(); _heatSoundTimer=0.6; }
-  } else {
-    f.temperature = Math.max(20, f.temperature - CFG.FORGING.coolRate*delta);
-    forgeGlow.intensity = Math.max(0.3, forgeGlow.intensity - delta*2);
-    _heatSoundTimer = 0;
-  }
-
-  // Iron color
-  const t = Math.max(0,(f.temperature-20)/1180);
-  ironMesh.material.color.setHSL(0.05-t*0.05, Math.min(1,t*2), 0.2+t*0.55);
-  // Iron glow emission effect
-  forgeGlow.position.copy(ironMesh.position);
-
-  // Temp label tracks iron + billboard
-  tempLabel.position.copy(ironMesh.position).y += 0.12;
-  tempLabel.lookAt(camera.position);
-  drawTempLabel(f.temperature);
-
-  // ── Hammer hit (right trigger pressed) ──
-  if(inp.rTrig && !inp.rTrigPrev) {
-    HAMMER_SPHERE.center.copy(inp.rPos);
-    IRON_BOX.setFromCenterAndSize(ironMesh.position, new THREE.Vector3(0.14,0.045,0.32));
-
-    const isTiming  = f.ironOnWorkbench;
-    const isVelocity= rVel > CFG.FORGING.velocityThreshold;
-    const isHit     = IRON_BOX.intersectsSphere(HAMMER_SPHERE) || !renderer.xr.isPresenting;
-
-    let result = 'Miss';
-    if(f.temperature < CFG.FORGING.minHitTemp) result = 'Miss';
-    else if(isTiming && isVelocity && isHit) result = 'Perfect';
-    else if(isTiming && (isVelocity || isHit)) result = 'Good';
-
-    // Distortion accumulation
-    if(result==='Miss')    f.distortion = Math.min(100, f.distortion+2);
-    else if(result==='Good')    f.distortion = Math.min(100, f.distortion+1);
-    else if(result==='Perfect') f.distortion = Math.max(0,   f.distortion-0.5);
-
-    // Sparks
-    const sparkCt = CFG.FORGING.sparks[result.toLowerCase()]||0;
-    emitSparks(ironMesh.position.clone(), sparkCt);
-    // Sound
-    playHit(result==='Perfect'?2: result==='Good'?1:0);
-    // Haptic
-    haptic(rightController, result==='Perfect'?1:result==='Good'?0.5:0.1);
-
-    f.hitCount++;
-    const tempStr = `${Math.round(f.temperature)}°C`;
-    setHUD(`🔥 鍛造 ${f.hitCount}/${CFG.FORGING.totalHits} | ${result} | ${tempStr}`, '');
-  }
 }
 
-// ════════════════════════════════════════════════════════════
-//  UPDATE: SHAPING
-// ════════════════════════════════════════════════════════════
-let _bladeFlipping = false;
-let _bladeFlipTarget = 0;
+// ─── VR / AR BUTTONS ─────────────────────────────────────────
+let currentSession = null;
 
-function updateShaping(delta) {
-  const s = sState;
-
-  // Zone pulsing animation
-  zoneData.forEach((z,i) => {
-    const pulse = 1 + Math.sin(Date.now()*0.004+i*1.3)*0.04;
-    z.mesh.scale.set(pulse, 1, pulse);
-  });
-
-  // Blade flip animation
-  if(_bladeFlipping) {
-    const diff = _bladeFlipTarget - bladeMeshShaping.rotation.z;
-    bladeMeshShaping.rotation.z += diff * 0.2;
-    if(Math.abs(diff)<0.01){ bladeMeshShaping.rotation.z=_bladeFlipTarget; _bladeFlipping=false; }
-  }
-
-  // ── Hammer hit ──
-  if(inp.rTrig && !inp.rTrigPrev) {
-    HAMMER_SPHERE.center.copy(inp.rPos);
-
-    // Find hit zone
-    let hitIdx = -1;
-    if(renderer.xr.isPresenting) {
-      for(let i=0;i<ZONE_N;i++){
-        if(ZONE_BOXES[i].intersectsSphere(HAMMER_SPHERE)){ hitIdx=i; break; }
-      }
-    } else {
-      // Non-VR: map mouse X → zone index
-      const nx = (inp.mouse.x + 1) / 2; // 0..1
-      hitIdx = Math.max(0, Math.min(ZONE_N-1, Math.floor(nx*ZONE_N)));
-    }
-
-    if(hitIdx >= 0) {
-      const power = Math.max(CFG.SHAPING.power.min,
-        Math.min(CFG.SHAPING.power.max, rVel*CFG.SHAPING.velScale));
-      zoneData[hitIdx].distortion = Math.max(0, zoneData[hitIdx].distortion - power);
-      zoneData.forEach((z,i) => {
-        if(i!==hitIdx) z.distortion = Math.min(100, z.distortion + power*CFG.SHAPING.penalty);
-      });
-      updateZoneColors();
-      emitSparks(ZONE_BOXES[hitIdx].getCenter(new THREE.Vector3()), 18);
-      playHit(1);
-      haptic(rightController, 0.4);
-    }
-
-    s.hitCount++;
-    const maxD = Math.max(...zoneData.map(z=>z.distortion));
-    setHUD(`⚒  成形 ${s.hitCount}/${CFG.SHAPING.maxHits} | 最大歪み:${Math.round(maxD)}`, 'X:反転 A:終了');
-  }
-}
-
-function flipBlade() {
-  if(_bladeFlipping) return;
-  _bladeFlipping = true;
-  _bladeFlipTarget = bladeMeshShaping.rotation.z + Math.PI;
-  playTransition();
-}
-
-// ════════════════════════════════════════════════════════════
-//  UPDATE: SHARPENING
-// ════════════════════════════════════════════════════════════
-function updateSharpening(delta) {
-  const sh = shState;
-
-  // ── Blade position: midpoint of both controllers ──
-  let axisVal;
-  if(renderer.xr.isPresenting && rightController && leftController) {
-    const mid = new THREE.Vector3()
-      .addVectors(rightController.position, leftController.position)
-      .multiplyScalar(0.5);
-    axisVal = mid.z; // forward-back = Z
-    // Move blade visual
-    bladeMeshSharp.position.x = (mid.x) * 0.4;
-  } else {
-    // Non-VR: mouse X drives forward-back
-    axisVal = inp.mouse.x * 0.3;
-    bladeMeshSharp.position.x = inp.mouse.x * 0.06;
-  }
-
-  // ── Stroke detection ──
-  const motion = axisVal - sh.prevAxis;
-  if(Math.abs(motion) > CFG.SHARPENING.strokeThreshold) {
-    const dir = Math.sign(motion);
-    if(dir !== sh.lastDir && sh.lastDir !== 0) {
-      // Direction reversal = completed stroke
-      sh.strokeCount++;
-
-      // Angle: VR uses controller tilt, non-VR uses mouse Y
-      let angle;
-      if(renderer.xr.isPresenting && rightController) {
-        const fwd = new THREE.Vector3(0,0,-1).applyQuaternion(rightController.quaternion);
-        const stoneN = new THREE.Vector3(0,1,0);
-        angle = THREE.MathUtils.RAD2DEG * Math.acos(Math.min(1, Math.abs(fwd.dot(stoneN))));
-        angle = Math.abs(90 - angle); // convert to tilt angle from horizontal
-      } else {
-        angle = 5 + (inp.mouse.y*0.5+0.5)*30; // mouse Y 0..1 → angle 5..35
-      }
-
-      const err = Math.abs(angle - CFG.SHARPENING.angleOptimal);
-      const aScore = Math.max(0, Math.min(100, 100 - err*CFG.SHARPENING.angleWeight));
-      sh.totalAngle += aScore;
-      sh.angleN++;
-
-      playSharpening(angle);
-      haptic(rightController, 0.15 + aScore/400);
-      if(leftController) haptic(leftController, 0.15 + aScore/400);
-
-      const qual = aScore>70 ? 'Good ✓' : 'Miss ✗';
-      setHUD(`🪨 研ぎ ${sh.strokeCount}/${CFG.SHARPENING.totalStrokes} | ${qual} | 角度:${Math.round(angle)}°`, '');
-    }
-    sh.lastDir = dir;
-  }
-  sh.prevAxis = axisVal;
-
-  // Blade shimmer animation
-  const shimmer = 0.5 + Math.sin(Date.now()*0.015)*0.12;
-  bladeMeshSharp.material.color.setRGB(shimmer*0.6, shimmer*0.7, 1);
-}
-
-function finalizeSharpening() {
-  const sh = shState;
-  const avgAngle = sh.angleN>0 ? sh.totalAngle/sh.angleN : 50;
-  const efficiency = Math.max(0.5, 1 - bladeState.symmetryError*0.01);
-  bladeState.sharpness = Math.round(Math.min(100, avgAngle * efficiency));
-}
-
-// ════════════════════════════════════════════════════════════
-//  UPDATE: RESULT
-// ════════════════════════════════════════════════════════════
-function updateResult(delta) {
-  resultBlade.rotation.y += delta * 0.9;
-  resultBlade.rotation.x = Math.sin(Date.now()*0.0008)*0.15;
-  resultP.mesh.lookAt(camera.position);
-  // Pulsing result light
-  resultLight.intensity = 2.5 + Math.sin(Date.now()*0.003)*0.8;
-}
-
-// ════════════════════════════════════════════════════════════
-//  AUTO TRANSITION  (hit/stroke count limits)
-// ════════════════════════════════════════════════════════════
-function updateAutoTransition() {
-  if(transitioning) return;
-  if(currentState===State.FORGING && fState.hitCount >= CFG.FORGING.totalHits) {
-    bladeState.shapeDistortion = fState.distortion;
-    transitioning=true;
-    setTimeout(()=>{enterShaping(); setTimeout(()=>transitioning=false,600);},300);
-  }
-  if(currentState===State.SHAPING && sState.hitCount >= CFG.SHAPING.maxHits) {
-    bladeState.symmetryError = computeSymmetryError();
-    transitioning=true;
-    setTimeout(()=>{enterSharpening(); setTimeout(()=>transitioning=false,600);},300);
-  }
-  if(currentState===State.SHARPENING && shState.strokeCount >= CFG.SHARPENING.totalStrokes) {
-    finalizeSharpening();
-    transitioning=true;
-    setTimeout(()=>{enterResult(); setTimeout(()=>transitioning=false,600);},300);
-  }
-}
-
-// ════════════════════════════════════════════════════════════
-//  HAPTIC HELPER
-// ════════════════════════════════════════════════════════════
-function haptic(ctrl, intensity=0.5, dur=80) {
-  ctrl?.gamepad?.hapticActuators?.[0]?.pulse(intensity, dur);
-}
-
-// ════════════════════════════════════════════════════════════
-//  XR SESSION MANAGEMENT
-// ════════════════════════════════════════════════════════════
 async function startXR(mode) {
   ensureAudio();
-  if(!navigator.xr) { alert('WebXR未対応 / WebXR not supported'); return; }
-  const ok = await navigator.xr.isSessionSupported(mode).catch(()=>false);
-  if(!ok) { alert(`${mode} not supported on this device`); return; }
-  try {
-    if(renderer.xr.isPresenting) await renderer.xr.getSession()?.end();
-    const init = mode==='immersive-ar'
-      ? { optionalFeatures:['dom-overlay'], domOverlay:{root:document.body} }
-      : { optionalFeatures:['hand-tracking','local-floor'] };
-    const session = await navigator.xr.requestSession(mode, init);
-    renderer.xr.setReferenceSpaceType('local-floor');
-    await renderer.xr.setSession(session);
-    scene.background = mode==='immersive-ar' ? null : new THREE.Color(0x100502);
-    scene.fog = mode==='immersive-ar' ? null : new THREE.FogExp2(0x100502, 0.1);
-    setHUD(hudL.textContent, 'A:次へ B:やり直し');
-  } catch(e) {
-    console.warn('XR error:', e);
-    alert('XRセッション開始失敗: '+e.message);
-  }
+  if (!navigator.xr) { alert('WebXR not supported'); return; }
+  const supported = await navigator.xr.isSessionSupported(mode).catch(() => false);
+  if (!supported) { alert(`${mode} not supported on this device`); return; }
+  if (currentSession) { await currentSession.end(); currentSession = null; return; }
+  const opts = mode === 'immersive-ar'
+    ? { requiredFeatures: ['hit-test'], optionalFeatures: ['dom-overlay'], domOverlay: { root: document.getElementById('browser-ui') } }
+    : { optionalFeatures: ['local-floor', 'bounded-floor'] };
+  const session = await navigator.xr.requestSession(mode, opts);
+  renderer.xr.setSession(session);
+  currentSession = session;
+  session.addEventListener('end', () => { currentSession = null; });
+  document.getElementById('vr-mode-btn').textContent = mode === 'immersive-vr' ? '✕ Exit VR' : '▶ Enter VR';
+  document.getElementById('ar-mode-btn').textContent = mode === 'immersive-ar' ? '✕ Exit AR' : '◈ Enter AR';
 }
 
-document.getElementById('btn-vr').addEventListener('click', ()=>startXR('immersive-vr'));
-document.getElementById('btn-ar').addEventListener('click', ()=>startXR('immersive-ar'));
-document.getElementById('btn-reset').addEventListener('click', ()=>{
-  if(confirm('スコアをリセットしますか？\nReset all score records?')) {
-    localStorage.removeItem('echizen_scores');
-    alert('リセットしました / Scores cleared.');
+document.getElementById('vr-mode-btn').onclick = () => startXR('immersive-vr');
+document.getElementById('ar-mode-btn').onclick = () => startXR('immersive-ar');
+document.getElementById('reset-btn').onclick = () => {
+  if (confirm('スコアをリセットしますか？\nReset all scores?')) {
+    localStorage.removeItem('echizenScores');
+    alert('リセットしました');
   }
-});
+};
 
-// ════════════════════════════════════════════════════════════
-//  RESIZE
-// ════════════════════════════════════════════════════════════
-window.addEventListener('resize', ()=>{
-  camera.aspect = innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
-
-// ════════════════════════════════════════════════════════════
-//  ANIMATION LOOP
-// ════════════════════════════════════════════════════════════
-let lastT = 0;
+// ─── MAIN LOOP ───────────────────────────────────────────────
+let lastTime = 0;
 
 renderer.setAnimationLoop((t) => {
-  if(lastT===0) lastT=t;
-  const delta = Math.min((t-lastT)/1000, 0.033);
-  lastT=t;
+  if (!lastTime) lastTime = t;
+  const delta = Math.min((t - lastTime) / 1000, 0.033);
+  lastTime = t;
 
-  // 1. Input
+  handleNonVRInput(delta);
   handleGlobalInput();
-  updatePositions(delta);
 
-  // 2. Phase update
-  switch(currentState) {
-    case State.INTRO:       updateIntro(delta);       break;
-    case State.FORGING:     updateForging(delta);     break;
-    case State.SHAPING:     updateShaping(delta);     break;
-    case State.SHARPENING:  updateSharpening(delta);  break;
-    case State.RESULT:      updateResult(delta);      break;
+  // Phase update
+  switch (currentState) {
+    case State.INTRO:
+      // Spin display blade
+      introGroup.traverse(obj => { if (obj.userData.spin) obj.rotation.y += delta * 0.8; });
+      break;
+    case State.FORGING:    updateForging(delta); break;
+    case State.SHAPING:    updateShaping(delta); break;
+    case State.SHARPENING: updateSharpening(delta); break;
+    case State.RESULT:     updateResult(delta); break;
   }
 
-  // 3. Auto-transition check
-  updateAutoTransition();
-
-  // 4. Sparks (single draw call)
   updateSparks(delta);
-
-  // 5. Render
+  updateStateAuto();
   renderer.render(scene, camera);
 });
 
-// ════════════════════════════════════════════════════════════
-//  INIT
-// ════════════════════════════════════════════════════════════
-enterIntro();
+// ─── INIT ────────────────────────────────────────────────────
+enterState(State.INTRO);
 
+// Check WebXR availability
+navigator.xr?.isSessionSupported('immersive-vr').then(ok => {
+  if (!ok) {
+    document.getElementById('vr-mode-btn').style.opacity = '0.4';
+    document.getElementById('vr-mode-btn').title = 'VR not supported';
+  }
+});
+navigator.xr?.isSessionSupported('immersive-ar').then(ok => {
+  if (!ok) {
+    document.getElementById('ar-mode-btn').style.opacity = '0.4';
+    document.getElementById('ar-mode-btn').title = 'AR not supported';
+  }
+});
 </script>
 </body>
 </html>
