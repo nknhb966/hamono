@@ -203,7 +203,7 @@
 <div id="uiPanel">
   <div class="panel-inner">
     <p class="main-title">越前打刃物</p>
-    <p class="sub-title">Echizen Blades — 鍛冶職人 VR 体験</p>
+    <p class="sub-title">Echizen Blades — 鍛冶職人 VR 体験<br><span style="font-size:0.85em;letter-spacing:1px;">Blacksmith VR Experience</span></p>
 
     <div id="vrButtonWrap">
       <button id="btn-vr" disabled>🥽 VR を開始する</button>
@@ -244,36 +244,39 @@
 <div id="modal">
   <div class="modal-box">
     <button class="modal-close" id="modalClose">×</button>
-    <div class="modal-title-h">📖 操作方法</div>
+    <div class="modal-title-h">📖 操作方法 / How to Play</div>
     <div class="modal-content">
-      <h3>🔥 フェーズ① 鍛造 (Forging)</h3>
+      <h3>🔥 フェーズ① 鍛造 / Forging</h3>
       <ul>
-        <li><span class="tag">左グリップ</span> 鉄を掴む／離す</li>
-        <li>鉄を炉に入れると温度上昇・赤熱</li>
-        <li>作業台に置いて <span class="tag">右トリガー</span> でハンマー打撃</li>
-        <li>温度が高いほど効果的。冷えると Miss になります</li>
-        <li>30回打撃でフェーズ終了</li>
+        <li><span class="tag">左グリップ</span> 鉄を掴む／離す / Hold iron</li>
+        <li>炉に入れると加熱 / Heat iron in furnace</li>
+        <li>80〜60° <span class="tag">〇</span> 適正 / Optimal — Perfect/Good/Miss</li>
+        <li>100〜80° <span class="tag">△</span> 熱すぎ / Too hot — Good/Miss only</li>
+        <li>60°未満 <span class="tag">×</span> 冷めすぎ / Too cold — Miss only</li>
+        <li>作業台に置いて <span class="tag">右トリガー</span> で打撃 / Hammer on bench</li>
+        <li>30回打撃でフェーズ終了 / 30 hits to complete</li>
       </ul>
-      <h3>🔨 フェーズ② 成形 (Shaping)</h3>
+      <h3>🔨 フェーズ② 成形 / Shaping</h3>
       <ul>
-        <li><span class="tag">右トリガー</span> で赤いゾーンを叩いて歪みを修正</li>
-        <li><span class="tag">左X ボタン</span> で刃物を表裏反転</li>
-        <li>表(+)の歪みは表から、裏(-)の歪みは裏から叩く</li>
-        <li>ゾーンの数値が 0 に近づくほど良い成形</li>
+        <li><span class="tag">右トリガー</span> 赤いゾーンを叩く / Hammer red zones</li>
+        <li><span class="tag">左Xボタン</span> 刃物を表裏反転 / Flip blade</li>
+        <li>表(+)歪みは表から、裏(-)歪みは裏から / Hit matching side</li>
+        <li>歪み0→100点、未修正→0点 / 0 distortion = 100pts</li>
       </ul>
-      <h3>⚔️ フェーズ③ 研ぎ (Sharpening)</h3>
+      <h3>⚔️ フェーズ③ 研ぎ / Sharpening</h3>
       <ul>
-        <li><span class="tag">両手グリップ</span> で刃物を保持</li>
-        <li>砥石の上で前後に動かしてストロークをカウント</li>
-        <li>目標角度 <strong>15°</strong> を維持して研ぐ</li>
-        <li>両手の角度が揃っていない場合は判定されません</li>
-        <li>「シャーッ」という音が正しい研ぎのサイン</li>
-        <li>30ストロークで完了</li>
+        <li><span class="tag">両手グリップ</span> 刃物を保持 / Hold with both grips</li>
+        <li>前後にスライド / Slide blade back & forth</li>
+        <li>目標角度 <strong>+15°</strong>（コントローラーを少し奥に傾ける）</li>
+        <li>Target <strong>+15°</strong> — tilt controller slightly forward</li>
+        <li>両手の角度を揃えること / Keep both hands aligned</li>
+        <li>「シャーッ」音が正解 / Shhh sound = correct angle</li>
+        <li>30ストロークで完了 / 30 strokes to complete</li>
       </ul>
-      <h3>🎮 共通操作</h3>
+      <h3>🎮 共通 / Common</h3>
       <ul>
-        <li><span class="tag">右A ボタン</span> 次のフェーズへ進む</li>
-        <li><span class="tag">右B ボタン</span> 現在フェーズをリトライ</li>
+        <li><span class="tag">右Aボタン</span> 次のフェーズへ / Next phase</li>
+        <li><span class="tag">右Bボタン</span> 現在フェーズをリトライ / Retry phase</li>
       </ul>
     </div>
   </div>
@@ -299,7 +302,7 @@ const CONFIG = {
     TOTAL_HITS: 30,
     VELOCITY_THRESHOLD: 0.8,
     FORGE_HEAT_RATE: 25,       // per second in furnace
-    COOL_RATE: 2,              // per second in air（ゆっくり冷える）
+    COOL_RATE: 4,              // per second in air（冷却2倍速）
     HOT_THRESHOLD: 60,
     MISS_THRESHOLD: 30,
     SPARK_COUNT_PERFECT: 80,
@@ -531,11 +534,12 @@ addLaser(ctrl0);
 addLaser(ctrl1);
 
 /* ================================================================
-   SPARK SYSTEM — Points 固定プール方式（確実版）
+   SPARK SYSTEM — Points 固定プール方式
+   size: 0.015 (1/4), forge:5x orange / shape:3x blue-white 0.3spread
 ================================================================ */
-const SPARK_MAX = 80;
-const _spkPositions = new Float32Array(SPARK_MAX * 3); // 全ゼロで初期化
-const _spkColors    = new Float32Array(SPARK_MAX * 3); // 全ゼロで初期化
+const SPARK_MAX = 400;
+const _spkPositions = new Float32Array(SPARK_MAX * 3);
+const _spkColors    = new Float32Array(SPARK_MAX * 3);
 const spkGeo = new THREE.BufferGeometry();
 const _spkPosBuf = new THREE.BufferAttribute(_spkPositions, 3);
 const _spkColBuf = new THREE.BufferAttribute(_spkColors, 3);
@@ -543,72 +547,56 @@ _spkPosBuf.setUsage(THREE.DynamicDrawUsage);
 _spkColBuf.setUsage(THREE.DynamicDrawUsage);
 spkGeo.setAttribute('position', _spkPosBuf);
 spkGeo.setAttribute('color',    _spkColBuf);
-// drawRangeは毎フレームsetするが、まずInfinityで初期化
-spkGeo.drawRange = { start: 0, count: Infinity };
+spkGeo.drawRange = { start: 0, count: SPARK_MAX };
 const spkMat = new THREE.PointsMaterial({
-  size: 0.06,
+  size: 0.015,           // 1/4サイズ（球体点）
   vertexColors: true,
   sizeAttenuation: true,
   transparent: true,
-  depthTest: false, // 常に前面に描画
+  depthTest: false,
 });
 const spkMesh = new THREE.Points(spkGeo, spkMat);
 scene.add(spkMesh);
 
 const _spk = Array.from({ length: SPARK_MAX }, () => ({
   active: false,
-  px: 0, py: -100, pz: 0, // 非アクティブ時は画面外
+  px: 0, py: -200, pz: 0,
   vx: 0, vy: 0, vz: 0,
   life: 0, maxLife: 1,
+  mode: 'forge', // 'forge'=オレンジ / 'shape'=青白
 }));
 let _spkHead = 0;
 
-// 初期状態：全頂点を画面外の位置に書き込んでおく（drawRange=0にするより確実）
-for (let i = 0; i < SPARK_MAX; i++) {
-  _spkPositions[i*3]   = 0;
-  _spkPositions[i*3+1] = -100;
-  _spkPositions[i*3+2] = 0;
-}
+// 初期位置を画面外に
+for (let i = 0; i < SPARK_MAX; i++) _spkPositions[i*3+1] = -200;
 _spkPosBuf.needsUpdate = true;
 
-function spawnSparks(origin, count) {
+// spread: 速度・距離の倍率（shapingは0.3）
+function spawnSparks(origin, count, mode = 'forge', spread = 1.0) {
   for (let n = 0; n < count; n++) {
     const idx = _spkHead % SPARK_MAX;
     _spkHead++;
-    const s   = _spk[idx];
-    s.active  = true;
-    s.px = origin.x + (Math.random() - 0.5) * 0.08;
-    s.py = origin.y + Math.random() * 0.05;
-    s.pz = origin.z + (Math.random() - 0.5) * 0.08;
-    s.vx = (Math.random() - 0.5) * 6;
-    s.vy = Math.random() * 7 + 2;
-    s.vz = (Math.random() - 0.5) * 6;
-    s.maxLife = 0.35 + Math.random() * 0.5;
+    const s  = _spk[idx];
+    s.active = true;
+    s.mode   = mode;
+    s.px = origin.x + (Math.random()-0.5)*0.06*spread;
+    s.py = origin.y + Math.random()*0.04*spread;
+    s.pz = origin.z + (Math.random()-0.5)*0.06*spread;
+    s.vx = (Math.random()-0.5)*6*spread;
+    s.vy = (Math.random()*7+2)*spread;
+    s.vz = (Math.random()-0.5)*6*spread;
+    s.maxLife = (0.30+Math.random()*0.45)*spread + 0.1;
     s.life    = s.maxLife;
   }
 }
 
 function updateSparks(delta) {
-  let anyActive = false;
   for (let i = 0; i < SPARK_MAX; i++) {
-    const s   = _spk[i];
-    const b   = i * 3;
-    if (!s.active) {
-      // 非アクティブは画面外に飛ばす
-      _spkPositions[b]   = 0;
-      _spkPositions[b+1] = -100;
-      _spkPositions[b+2] = 0;
-      continue;
-    }
-    anyActive = true;
+    const s = _spk[i];
+    const b = i * 3;
+    if (!s.active) { _spkPositions[b+1] = -200; continue; }
     s.life -= delta;
-    if (s.life <= 0) {
-      s.active = false;
-      _spkPositions[b]   = 0;
-      _spkPositions[b+1] = -100;
-      _spkPositions[b+2] = 0;
-      continue;
-    }
+    if (s.life <= 0) { s.active = false; _spkPositions[b+1] = -200; continue; }
     s.vy -= 9.8 * delta;
     s.px += s.vx * delta;
     s.py += s.vy * delta;
@@ -617,11 +605,18 @@ function updateSparks(delta) {
     _spkPositions[b+1] = s.py;
     _spkPositions[b+2] = s.pz;
     const t = Math.max(0, s.life / s.maxLife);
-    _spkColors[b]   = 1.0;
-    _spkColors[b+1] = 0.25 + t * 0.75;
-    _spkColors[b+2] = t * 0.1;
+    if (s.mode === 'shape') {
+      // 青白い冷たい火花
+      _spkColors[b]   = 0.4 + t*0.6;
+      _spkColors[b+1] = 0.6 + t*0.4;
+      _spkColors[b+2] = 1.0;
+    } else {
+      // オレンジ炎の火花
+      _spkColors[b]   = 1.0;
+      _spkColors[b+1] = 0.2 + t*0.8;
+      _spkColors[b+2] = t*0.1;
+    }
   }
-  // 常に全SPARK_MAX頂点を描画（非アクティブは-100Yで不可視）
   spkGeo.drawRange = { start: 0, count: SPARK_MAX };
   _spkPosBuf.needsUpdate = true;
   _spkColBuf.needsUpdate = true;
@@ -648,42 +643,103 @@ floor.receiveShadow = true;
 scene.add(floor);
 let isARMode = false; // AR起動時にtrueになる
 
-// --- WORKBENCH (shared reference point, placed in front of player) ---
+// --- WORKBENCH (shared reference point) ---
 const workbenchPos = new THREE.Vector3(0, 0.85, -1.1);
 
 function makeWorkbench(parent) {
-  const mat = new THREE.MeshStandardMaterial({ color: 0x3a2510, roughness: 0.9 });
-  const top = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.06, 0.5), mat);
-  top.position.set(0, 0, 0);
-  top.castShadow = true;
-  top.receiveShadow = true;
-  const leg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.85, 0.06), mat);
-  const legs = new THREE.Group();
-  [[-0.4,-0.425,-0.2],[0.4,-0.425,-0.2],[-0.4,-0.425,0.2],[0.4,-0.425,0.2]].forEach(([x,y,z]) => {
-    const l = leg.clone(); l.position.set(x,y,z); l.castShadow=true; legs.add(l);
-  });
-  const bench = new THREE.Group();
-  bench.add(top); bench.add(legs);
-  bench.position.copy(workbenchPos);
-  parent.add(bench);
-  return bench;
+  const group = new THREE.Group();
+
+  // レンガ色のモルタルベース（暗め）
+  const mortarMat = new THREE.MeshStandardMaterial({ color: 0x2a1e14, roughness: 0.95 });
+  // 天板：鉄や刃物と区別できる深い赤錆色
+  const topMat    = new THREE.MeshStandardMaterial({ color: 0x5c3020, roughness: 0.85, metalness: 0.05 });
+
+  // 天板
+  const top = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.06, 0.5), topMat);
+  top.castShadow = true; top.receiveShadow = true;
+  group.add(top);
+
+  // レンガ段（3段積み）
+  const brickColors = [0x7a3a22, 0x6a2e1a, 0x7e3e28];
+  const brickH = 0.12;
+  for (let row = 0; row < 3; row++) {
+    const bmat = new THREE.MeshStandardMaterial({ color: brickColors[row % 3], roughness: 0.9 });
+    // 各段に交互にずらしたレンガを並べる
+    const brickW = 0.215; const brickD = 0.22; const gap = 0.012;
+    const brickCount = 4;
+    const offset = (row % 2 === 0) ? 0 : brickW * 0.5;
+    for (let col = 0; col < brickCount; col++) {
+      const bk = new THREE.Mesh(new THREE.BoxGeometry(brickW, brickH - gap, brickD - gap), bmat);
+      bk.position.set(
+        -0.43 + col * (brickW + gap) + offset,
+        -0.03 - brickH * (2 - row),
+        0
+      );
+      bk.castShadow = true; bk.receiveShadow = true;
+      group.add(bk);
+    }
+    // 前後レンガ（奥・手前）
+    for (let side of [-1, 1]) {
+      const bk2 = new THREE.Mesh(new THREE.BoxGeometry(0.88, brickH - gap, brickD * 0.5 - gap), bmat);
+      bk2.position.set(0, -0.03 - brickH * (2 - row), side * 0.19);
+      bk2.castShadow = true;
+      group.add(bk2);
+    }
+  }
+
+  // モルタルベース（底部）
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.05, 0.52), mortarMat);
+  base.position.set(0, -0.03 - brickH * 3 - 0.025, 0);
+  base.castShadow = true; base.receiveShadow = true;
+  group.add(base);
+
+  group.position.copy(workbenchPos);
+  parent.add(group);
+  return group;
 }
 
 // ============ FORGING OBJECTS ============
 const forgingBench = makeWorkbench(groupForging);
 
-// Furnace
+// 炉 — 床からレンガ積みで立ち上がる構造
+// 炉の開口部の高さ: y=0.9 を維持
+const furnaceGroup = new THREE.Group();
+furnaceGroup.position.set(-1.1, 0, -1.2); // XZのみ指定、Y=0(床)から構築
+groupForging.add(furnaceGroup);
+// 参照用（BB判定に使うfurnace変数と互換性を持たせる）
+const furnace = furnaceGroup;
+
+// 炉台（床から積み上がるレンガ状の台）
+const fbMat1 = new THREE.MeshStandardMaterial({ color: 0x5a2e18, roughness: 0.92 });
+const fbMat2 = new THREE.MeshStandardMaterial({ color: 0x4a2410, roughness: 0.95 });
+// 下段ベース
+const fBase = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.3, 0.62), fbMat2);
+fBase.position.set(0, 0.15, 0);
+fBase.castShadow = true; fBase.receiveShadow = true;
+furnaceGroup.add(fBase);
+// 中段（少し絞る）
+const fMid = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.35, 0.56), fbMat1);
+fMid.position.set(0, 0.475, 0);
+fMid.castShadow = true;
+furnaceGroup.add(fMid);
+// 上段（炉本体）
 const furnaceMat = new THREE.MeshStandardMaterial({ color: 0x2a1505, roughness: 0.9, metalness: 0.2 });
-const furnace = new THREE.Group();
-const furnaceBody = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.7, 0.5), furnaceMat);
+const furnaceBody = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.42, 0.50), furnaceMat);
+furnaceBody.position.set(0, 0.86, 0); // 高さ 0.65+0.35/2+0.4/2=0.85相当
 furnaceBody.castShadow = true;
-furnace.add(furnaceBody);
-const furnaceHoleMat = new THREE.MeshStandardMaterial({ color: 0xff2200, emissive: 0xff2200, emissiveIntensity: 0, roughness: 1 });
+furnaceGroup.add(furnaceBody);
+// 炉の開口部（熱光） — 高さ 0.9 付近に維持
+const furnaceHoleMat = new THREE.MeshStandardMaterial({
+  color: 0xff2200, emissive: 0xff2200, emissiveIntensity: 0.3, roughness: 1
+});
 const furnaceHole = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.12), furnaceHoleMat);
-furnaceHole.position.set(0, 0, 0.22);
-furnace.add(furnaceHole);
-furnace.position.set(-1.1, 0.9, -1.2);
-groupForging.add(furnace);
+furnaceHole.position.set(0, 0.86, 0.27); // furnaceBody基準 → worldY≈0.86
+furnaceGroup.add(furnaceHole);
+// 煙突
+const chimneyMat = new THREE.MeshStandardMaterial({ color: 0x3a1e08, roughness: 0.95 });
+const chimney    = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.10, 0.40, 8), chimneyMat);
+chimney.position.set(0, 1.27, 0);
+furnaceGroup.add(chimney);
 
 // Iron piece — 最初から作業台の上に配置
 const ironMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8, metalness: 0.7 });
@@ -693,30 +749,42 @@ ironMesh.castShadow = true;
 ironMesh.position.set(0, 0.91, -1.1);
 groupForging.add(ironMesh);
 
-// 温度表示スプライト（鉄の真上に追従）
+// Temperature display — 解像度アップ＋区分表示
 const tempCanvas = document.createElement('canvas');
-tempCanvas.width = 128; tempCanvas.height = 64;
+tempCanvas.width = 256; tempCanvas.height = 80;
 const tempCtx = tempCanvas.getContext('2d');
 const tempTex = new THREE.CanvasTexture(tempCanvas);
 const tempSprite = new THREE.Sprite(
   new THREE.SpriteMaterial({ map: tempTex, transparent: true, depthTest: false })
 );
-tempSprite.scale.set(0.28, 0.14, 1);
-tempSprite.position.set(0, 0.20, 0); // ironMeshからの相対位置
+tempSprite.scale.set(0.40, 0.125, 1);
+tempSprite.position.set(0, 0.24, 0);
 ironMesh.add(tempSprite);
 
+function getTempZone(temp) {
+  // 100-80: 熱すぎ△ / 80-60: 適正○ / 60未満: 冷めすぎ×
+  if (temp >= 80) return { label: '△ HOT', color: '#ff6622', judge: 'hot' };
+  if (temp >= 60) return { label: '〇 GOOD', color: '#88ff44', judge: 'good' };
+  return               { label: '× COLD', color: '#4488ff', judge: 'cold' };
+}
+
 function updateTempSprite(temp) {
-  tempCtx.clearRect(0, 0, 128, 64);
-  tempCtx.fillStyle = 'rgba(0,0,0,0.70)';
-  tempCtx.beginPath();
-  tempCtx.roundRect(4, 6, 120, 52, 10);
-  tempCtx.fill();
-  const hue = temp < 30 ? 200 : temp < 60 ? 30 : 10;
+  const zone = getTempZone(temp);
+  tempCtx.clearRect(0, 0, 256, 80);
+  tempCtx.fillStyle = 'rgba(0,0,0,0.80)';
+  tempCtx.beginPath(); tempCtx.roundRect(3, 3, 250, 74, 12); tempCtx.fill();
+  // 温度数値
+  const hue = temp < 60 ? 210 : temp < 80 ? 30 : 12;
   tempCtx.fillStyle = `hsl(${hue},100%,72%)`;
-  tempCtx.font = 'bold 30px monospace';
-  tempCtx.textAlign = 'center';
+  tempCtx.font = 'bold 38px monospace';
+  tempCtx.textAlign = 'left';
   tempCtx.textBaseline = 'middle';
-  tempCtx.fillText(`${Math.round(temp)}\u00b0`, 64, 33);
+  tempCtx.fillText(`${Math.round(temp)}°`, 14, 40);
+  // 区分ラベル
+  tempCtx.fillStyle = zone.color;
+  tempCtx.font = 'bold 26px monospace';
+  tempCtx.textAlign = 'right';
+  tempCtx.fillText(zone.label, 246, 40);
   tempTex.needsUpdate = true;
 }
 
@@ -901,76 +969,60 @@ const angleHudMesh = new THREE.Mesh(
 angleHudMesh.position.set(0, workbenchPos.y + 0.60, -1.1);
 groupSharpening.add(angleHudMesh);
 
-function updateAngleHud(leftDeg, rightDeg, isAligned, angleDeg) {
+function updateAngleHud(leftDeg, rightDeg, isAligned, bladeAngleDeg) {
   const c   = angleHudCanvas;
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, 256, 128);
-  ctx.fillStyle = 'rgba(0,0,0,0.75)';
+  ctx.fillStyle = 'rgba(0,0,0,0.80)';
   ctx.beginPath(); ctx.roundRect(4, 4, 248, 120, 10); ctx.fill();
 
   if (!isAligned) {
     ctx.fillStyle = '#ff8844';
-    ctx.font = 'bold 18px monospace';
+    ctx.font = 'bold 15px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('両手の角度を合わせてください', 128, 40);
-    ctx.font = '14px monospace';
+    ctx.fillText('両手の角度を合わせてください', 128, 32);
+    ctx.fillText('Align both hands', 128, 52);
     ctx.fillStyle = '#cccccc';
-    ctx.fillText(`L: ${Math.round(leftDeg)}°  R: ${Math.round(rightDeg)}°`, 128, 72);
-    ctx.fillText('Align both hands', 128, 96);
-  } else {
-    const col = Math.abs(angleDeg - 15) < 5 ? '#66ff88' : Math.abs(angleDeg - 15) < 10 ? '#ffee44' : '#ff6644';
-    ctx.fillStyle = col;
-    ctx.font = 'bold 36px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${Math.round(angleDeg)}°`, 128, 58);
-    ctx.fillStyle = '#aaaaaa';
-    ctx.font = '16px monospace';
-    ctx.fillText('目標: 15°  /  Target: 15°', 128, 90);
+    ctx.font = '14px monospace';
+    // 符号付きで表示（水平=0°、奥=正、手前=負）
+    ctx.fillText(`L: ${leftDeg >= 0 ? '+' : ''}${Math.round(leftDeg)}°  R: ${rightDeg >= 0 ? '+' : ''}${Math.round(rightDeg)}°`, 128, 80);
     ctx.fillStyle = '#888888';
-    ctx.font = '13px monospace';
-    ctx.fillText(`L:${Math.round(leftDeg)}°  R:${Math.round(rightDeg)}°`, 128, 112);
+    ctx.font = '12px monospace';
+    ctx.fillText('水平=0° / 奥=＋ / 手前=－', 128, 104);
+  } else {
+    // 奥+15°付近が最良→緑、±10°内→黄、それ以上→赤、負は赤
+    const err = bladeAngleDeg - CONFIG.SHARPENING.IDEAL_ANGLE;
+    const col = (bladeAngleDeg >= 0 && Math.abs(err) < 5) ? '#66ff88'
+              : (bladeAngleDeg >= 0 && Math.abs(err) < 10) ? '#ffee44' : '#ff6644';
+    ctx.fillStyle = col;
+    ctx.font = 'bold 34px monospace';
+    ctx.textAlign = 'center';
+    const sign = bladeAngleDeg >= 0 ? '+' : '';
+    ctx.fillText(`${sign}${Math.round(bladeAngleDeg)}°`, 128, 50);
+    ctx.fillStyle = '#aaaaaa';
+    ctx.font = '14px monospace';
+    ctx.fillText('目標: +15° / Target: +15°', 128, 80);
+    ctx.fillStyle = '#888888';
+    ctx.font = '12px monospace';
+    ctx.fillText(`L:${leftDeg >= 0 ? '+' : ''}${Math.round(leftDeg)}° R:${rightDeg >= 0 ? '+' : ''}${Math.round(rightDeg)}°`, 128, 104);
   }
   angleHudTex.needsUpdate = true;
 }
 
 // 研ぎフェーズ用刃物
-// bladeGeo は X:0〜0.5, Y:0〜0.09 の形状
-// rotation.x = -PI/2 で寝かせると X方向に長く、Y(元)がZ方向に
-// 刃先(X=0付近)を奥(+Z)に向けるため rotation.y = PI
+// bladeGeo: X:0〜0.5, Y:0〜0.09 → 中心X=0.25
+// rotation.x=-PI/2で寝かせ、rotation.y=PIで刃先を奥(+Z)へ
 const sharpenBladeGroup = new THREE.Group();
 const sharpenBladeMesh  = bladeMesh.clone();
-sharpenBladeMesh.position.set(-0.25, 0, 0); // X中心補正
-// 刃先を奥(+Z方向)に向ける：rotation.x=-PI/2 + rotation.y=PI
+sharpenBladeMesh.position.set(-0.25, 0, 0.045); // X中心補正 + Z:刃の厚み方向を砥石面へ
 sharpenBladeMesh.rotation.set(-Math.PI / 2, Math.PI, 0);
 sharpenBladeGroup.add(sharpenBladeMesh);
-
-// 刃先マーカー（青い細線で刃側を明示）
-const edgeMarkerGeo = new THREE.BoxGeometry(0.50, 0.005, 0.003);
-const edgeMarkerMat = new THREE.MeshBasicMaterial({ color: 0x44aaff, transparent: true, opacity: 0.85 });
+// 刃先マーカー（細い青線のみ、ラベルなし）
+const edgeMarkerGeo = new THREE.BoxGeometry(0.50, 0.004, 0.002);
+const edgeMarkerMat = new THREE.MeshBasicMaterial({ color: 0x44aaff, transparent: true, opacity: 0.7 });
 const edgeMarker    = new THREE.Mesh(edgeMarkerGeo, edgeMarkerMat);
-// 刃先(Y=0 in original = 刃側) は rotation.y=PI後は -Z側 = 奥側
-// sharpenBladeMesh座標系でZ=-0.045付近（bladeGeo Y:0〜0.09の刃先はY=0）
-edgeMarker.position.set(0, 0.005, 0.045); // 奥側
+edgeMarker.position.set(0, 0.003, -0.045);
 sharpenBladeGroup.add(edgeMarker);
-
-// ラベルスプライト「刃先→」
-const edgeLabelCanvas = document.createElement('canvas');
-edgeLabelCanvas.width = 128; edgeLabelCanvas.height = 48;
-{
-  const ec = edgeLabelCanvas.getContext('2d');
-  ec.fillStyle = 'rgba(20,100,200,0.85)';
-  ec.beginPath(); ec.roundRect(2,2,124,44,8); ec.fill();
-  ec.fillStyle = '#88ddff';
-  ec.font = 'bold 18px sans-serif';
-  ec.textAlign = 'center'; ec.textBaseline = 'middle';
-  ec.fillText('刃先 / EDGE ▶', 64, 24);
-}
-const edgeLabelTex    = new THREE.CanvasTexture(edgeLabelCanvas);
-const edgeLabelSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: edgeLabelTex, transparent: true, depthTest: false }));
-edgeLabelSprite.scale.set(0.20, 0.075, 1);
-edgeLabelSprite.position.set(0, 0.12, 0.08); // 奥側上方
-sharpenBladeGroup.add(edgeLabelSprite);
-
 sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.1);
 groupSharpening.add(sharpenBladeGroup);
 
@@ -1185,9 +1237,10 @@ const workbenchBB  = new THREE.Box3().setFromCenterAndSize(
   workbenchPos.clone().add(new THREE.Vector3(0, 0.05, 0)),
   new THREE.Vector3(0.85, 0.12, 0.45)
 );
-const furnaceBB    = new THREE.Box3().setFromCenterAndSize(
-  furnace.position.clone(),
-  new THREE.Vector3(0.55, 0.55, 0.45)
+// furnaceGroup.position = (-1.1, 0, -1.2)、炉本体のワールド中心 ≈ y=0.86
+const furnaceBB = new THREE.Box3().setFromCenterAndSize(
+  new THREE.Vector3(-1.1, 0.65, -1.2),
+  new THREE.Vector3(0.65, 1.30, 0.55)
 );
 
 // Temperature color helpers
@@ -1301,16 +1354,15 @@ function getBothGrips() {
    PHASE TRANSITIONS
 ================================================================ */
 function resetForging() {
-  ironTemperature = 0;
+  ironTemperature = 70; // スタート時70°
   ironOnWorkbench = false;
   ironInFurnace   = false;
   ironHeld        = false;
   forgingHitCount = 0;
-  // shapeDistortion は onEnterState で設定するためここではリセットしない
   forgingComplete = false;
   ironMesh.position.set(0, 0.91, -1.1);
-  ironMesh.material.color.set(0x555555);
-  updateTempSprite(0);
+  ironMesh.material.color.copy(tempToColor(70));
+  updateTempSprite(70);
 }
 function resetShaping() {
   shapingHitCount = 0;
@@ -1379,48 +1431,42 @@ function onEnterState(state, prev) {
   if (state === State.INTRO) {
     bladeState = { shapeDistortion: 0, symmetryError: 0, sharpness: 0 };
     resetForging(); resetShaping(); resetSharpening();
-    updateInfoPanel('越前打刃物\nEchizen Blades\n\nAボタンで開始');
-    updateStatusBar('INTRO', 'Aボタン：開始', null);
+    updateInfoPanel('越前打刃物\nEchizen Blades\n\n鍛冶職人体験VR / Blacksmith VR\nAボタンで開始 / Press A to Start');
+    updateStatusBar('INTRO', 'Aボタン：開始 / Press A', null);
 
   } else if (state === State.FORGING) {
     resetForging();
-    // 何もしなければ shapeDistortion=100（最悪）が引き継がれるよう初期化
     shapeDistortion = 100;
-    updateInfoPanel('フェーズ①：鍛造\nForging\n\n炉で鉄を熱し、作業台で叩け\n（左手で掴む・右手でハンマー）');
-    updateStatusBar('鍛造', '打撃 0/30 | 温度: 0', 0);
+    updateInfoPanel('フェーズ①：鍛造 / Phase 1: Forging\n\n炉で鉄を熱し、作業台で叩け\nHeat iron, then hammer on bench\n左グリップ：掴む / Left Grip: Hold\n右トリガー：打撃 / Right Trigger: Hit');
+    updateStatusBar('鍛造 Forging', '打撃 0/30 | Temp: 0', 0);
 
   } else if (state === State.SHAPING) {
     resetShaping();
-    // 鍛造の歪みを引き継ぐ
     bladeState.shapeDistortion = shapeDistortion;
-    // 何もしなければ symmetryError = 初期歪みの絶対値平均（高い = 悪い）
-    // ゾーン初期歪みは±5〜20、平均は約12.5 → スコア寄与は (100-12.5)*0.3 ≈ 26点
-    // ただしAスキップで完全0点にするため、ここで最悪値100をセット
-    bladeState.symmetryError = 100;
-    updateInfoPanel('フェーズ②：成形\nShaping\n\n赤いエリアを叩いて歪みを修正せよ\n（Xボタンで表裏反転）');
-    updateStatusBar('成形', '打撃 0/100 | Aで終了', 0);
+    bladeState.symmetryError   = 100;
+    updateInfoPanel('フェーズ②：成形 / Phase 2: Shaping\n\n赤いゾーンを叩いて歪みを修正\nHammer red zones to fix distortion\nXボタン：表裏反転 / X: Flip blade\nAボタン：終了 / A: Finish');
+    updateStatusBar('成形 Shaping', '打撃 0/100 | A: Finish', 0);
 
   } else if (state === State.SHARPENING) {
     resetSharpening();
-    // 成形が完了していれば shapingComplete=true で実際のエラー値を使う
-    // 未完了（Aスキップ）の場合は bladeState.symmetryError = 100 のまま
     if (shapingComplete) {
       bladeState.symmetryError = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
     }
-    updateInfoPanel('フェーズ③：研ぎ\nSharpening\n\n両手グリップで刃物を保持\n前後に動かして研ぐ');
-    updateStatusBar('研ぎ', 'ストローク 0/30', 0);
+    updateInfoPanel('フェーズ③：研ぎ / Phase 3: Sharpening\n\n両手グリップで刃物を保持\nGrip blade with both hands\n前後に動かして研ぐ / Slide back & forth\n目標角度 +15° / Target angle +15°');
+    updateStatusBar('研ぎ Sharpening', 'Strokes 0/30', 0);
 
   } else if (state === State.RESULT) {
-    // strokeCount=0のとき totalSharpness=0 なので何もしなければ sharpness=0
-    const efficiency = Math.max(0.5, 1 - bladeState.symmetryError * 0.01);
+    // symmetryError=0→shapingScore=100, symmetryError=25→shapingScore=0
+    const shapingScore = Math.max(0, Math.min(100, 100 - bladeState.symmetryError * 4));
+    const efficiency   = Math.max(0.5, 1 - bladeState.symmetryError * 0.01);
     bladeState.sharpness = strokeCount > 0
       ? Math.max(0, Math.min(100, totalSharpness * efficiency))
-      : 0; // ストローク0回=0点
+      : 0;
 
     const finalScore = Math.max(0, Math.min(100,
       (100 - bladeState.shapeDistortion) * 0.4 +
-      (100 - bladeState.symmetryError)   * 0.3 +
-      bladeState.sharpness               * 0.3
+      shapingScore                        * 0.3 +
+      bladeState.sharpness                * 0.3
     ));
     const scores = saveScore(finalScore);
     showResultPanel(finalScore, bladeState, scores);
@@ -1502,12 +1548,22 @@ function updateForging(delta) {
   const hammerHeadWorld = new THREE.Vector3();
   hammerHead.getWorldPosition(hammerHeadWorld);
 
-  // Temperature update
+  // Temperature update + 炉内左手バイブ
   if (ironInFurnace) {
     ironTemperature = Math.min(100, ironTemperature + CONFIG.FORGING.FORGE_HEAT_RATE * delta);
     forgeLight.intensity = 1.5 + Math.sin(Date.now()*0.01)*0.3;
     emberLight.intensity = 0.8;
     furnaceHoleMat.emissiveIntensity = 0.5 + ironTemperature * 0.01;
+    // 炉内での左手バイブ（温度区分に応じて）
+    const lGp = getLeftGamepad();
+    if (lGp?.hapticActuators?.[0]) {
+      const zone = getTempZone(ironTemperature);
+      const strength = zone.judge === 'hot' ? 0.7 : zone.judge === 'good' ? 0.4 : 0.15;
+      // 0.5秒に一回パルス
+      if (Math.floor(Date.now() / 500) !== Math.floor((Date.now() - delta*1000) / 500)) {
+        lGp.hapticActuators[0].pulse(strength, 80);
+      }
+    }
   } else {
     ironTemperature = Math.max(0, ironTemperature - CONFIG.FORGING.COOL_RATE * delta);
     forgeLight.intensity = THREE.MathUtils.lerp(forgeLight.intensity, 0.4, delta*2);
@@ -1522,7 +1578,6 @@ function updateForging(delta) {
     : new THREE.Color(0x000000);
   ironMesh.material.emissiveIntensity = ironTemperature > 50 ? 1 : 0;
 
-  // 温度スプライト更新（毎フレーム）
   updateTempSprite(ironTemperature);
 
   // Velocity
@@ -1532,7 +1587,6 @@ function updateForging(delta) {
 
   forgingHitCooldown = Math.max(0, forgingHitCooldown - delta);
 
-  // Hit detection — ハンマーヘッドが鉄のBBに当たっているか
   const rightTrig = getRightTrigger();
   const hammerHitsIron = ironBB.containsPoint(hammerHeadWorld) ||
                          hammerHeadWorld.distanceTo(ironMesh.position) < 0.14;
@@ -1544,30 +1598,34 @@ function updateForging(delta) {
     const isTiming   = ironOnWorkbench;
     const isVelocity = rightVelocity > CONFIG.FORGING.VELOCITY_THRESHOLD;
     const isHit      = hammerHitsIron;
-    const hotEnough = ironTemperature >= CONFIG.FORGING.MISS_THRESHOLD;
+    const tempZone   = getTempZone(ironTemperature);
 
     let result = 'Miss';
-    if (!hotEnough) {
+    if (tempZone.judge === 'cold') {
+      // 冷めすぎ: Missのみ
       result = 'Miss';
-    } else if (isTiming && isVelocity && isHit) {
-      result = 'Perfect';
-    } else if (isTiming && (isVelocity || isHit)) {
-      result = 'Good';
+    } else if (tempZone.judge === 'hot') {
+      // 熱すぎ: PerfectなしのGood/Missのみ
+      if (isTiming && (isVelocity || isHit)) result = 'Good';
+      else result = 'Miss';
+    } else {
+      // 適正: Perfect/Good/Miss
+      if (isTiming && isVelocity && isHit) result = 'Perfect';
+      else if (isTiming && (isVelocity || isHit)) result = 'Good';
+      else result = 'Miss';
     }
 
     // 歪み更新
-    // 初期値100から始まり、Perfectを連続すると0に近づく
-    // Perfect: -5 / Good: -1 / Miss: +3
     if (result === 'Perfect')      shapeDistortion = Math.max(0,   shapeDistortion - 5);
     else if (result === 'Good')    shapeDistortion = Math.max(0,   shapeDistortion - 1);
     else if (result === 'Miss')    shapeDistortion = Math.min(100, shapeDistortion + 3);
 
-    // Sparks — ヘッド位置から発生
+    // Sparks（鍛造：5倍量、オレンジ炎色）
     const sparkOrigin = hammerHeadWorld.clone().add(new THREE.Vector3(0, 0.02, 0));
-    const sparkCount = result === 'Perfect' ? CONFIG.FORGING.SPARK_COUNT_PERFECT :
-                       result === 'Good'    ? CONFIG.FORGING.SPARK_COUNT_GOOD :
+    const sparkCount = result === 'Perfect' ? CONFIG.FORGING.SPARK_COUNT_PERFECT * 5 :
+                       result === 'Good'    ? CONFIG.FORGING.SPARK_COUNT_GOOD    * 5 :
                                               CONFIG.FORGING.SPARK_COUNT_MISS;
-    spawnSparks(sparkOrigin, sparkCount);
+    spawnSparks(sparkOrigin, sparkCount, 'forge', 1.0);
 
     // Sound
     if (result === 'Perfect') playHammerPerfect();
@@ -1686,12 +1744,12 @@ function updateShaping(delta) {
       const result = absNow < 2 ? 'Perfect' : 'Good';
       if (result === 'Perfect') playHammerPerfect();
       else playHammerGood();
-      spawnSparks(rhPos.clone(), result === 'Perfect' ? 50 : 20);
+      // 成形：青白い火花、3倍量、飛距離3割
+      spawnSparks(rhPos.clone(), result === 'Perfect' ? 150 : 60, 'shape', 0.3);
 
     } else {
-      // ゾーン外を叩いた
       playHammerMiss();
-      spawnSparks(rhPos.clone(), 3);
+      spawnSparks(rhPos.clone(), 9, 'shape', 0.3);
     }
 
     if (rightController?.gamepad?.hapticActuators?.[0]) {
@@ -1699,15 +1757,21 @@ function updateShaping(delta) {
     }
 
     const avgAbs = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
-    updateInfoPanel(`打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS}\n平均歪み: ${Math.round(avgAbs)}\nX：表裏反転 | A：終了`);
-    updateStatusBar('成形', `打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS} | 歪み: ${Math.round(avgAbs)}`, 100 - avgAbs);
+    // スコア：歪み0→100点、歪み最大→0点
+    // 初期歪み最大25相当を100点基準に正規化
+    const shapingScore = Math.max(0, Math.min(100, 100 - avgAbs * 4));
+    // bladeState.symmetryErrorをリアルタイム更新（RESULT遷移時に使用）
+    bladeState.symmetryError = avgAbs;
+    updateInfoPanel(`フェーズ②：成形\nShaping\n打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS}\n平均歪み: ${Math.round(avgAbs)} / スコア: ${Math.round(shapingScore)}\nX：表裏反転 | A：終了`);
+    updateStatusBar('成形', `打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS} | 歪み: ${Math.round(avgAbs)}`, shapingScore);
   }
   prevShapingTrigger = shapingTrig;
 
   if (shapingHitCount >= CONFIG.SHAPING.MAX_HITS && !shapingComplete) {
     shapingComplete = true;
     const avg = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
-    updateInfoPanel(`成形完了！\nAボタンで次へ\n対称性誤差: ${Math.round(avg)}`);
+    const score = Math.max(0, Math.min(100, 100 - avg * 4));
+    updateInfoPanel(`成形完了！ / Shaping Done!\nAボタンで次へ / Press A to continue\n歪み: ${Math.round(avg)} → スコア: ${Math.round(score)}`);
     bladeState.symmetryError = avg;
     playComplete();
   }
@@ -1717,7 +1781,6 @@ function updateShaping(delta) {
    UPDATE SHARPENING
 ================================================================ */
 function updateSharpening(delta) {
-  // ハンマーをSHARPENINGフェーズでは非表示にする
   hammerGroup.visible = false;
 
   const lhPos = getLeftHandPos();
@@ -1730,41 +1793,43 @@ function updateSharpening(delta) {
                 (getRightGamepad()?.buttons[1]?.pressed ?? false);
   const held  = lGrip && rGrip;
 
-  // 両手の中点
   const midX = (lhPos.x + rhPos.x) * 0.5;
   const midY = (lhPos.y + rhPos.y) * 0.5;
   const midZ = (lhPos.z + rhPos.z) * 0.5;
 
-  // ---- 各コントローラーのロール角（水平面から何度傾いているか）----
-  // コントローラーのローカルY軸をワールドに変換し、XZ平面への射影でロール取得
+  // ---- コントローラーの「前後傾き」を取得 ----
+  // 「手の甲を上にして持つ」状態でのピッチ（前後方向の傾き）
+  // コントローラーのローカルZ軸(-forward)をワールドに変換し、
+  // そのY成分がコントローラーの前後傾きを表す
+  // 水平=0°、奥に倒す=正、手前に倒す=負
   let leftTiltDeg  = 0;
   let rightTiltDeg = 0;
   if (leftController && rightController) {
-    const lUp = new THREE.Vector3(0, 1, 0).applyQuaternion(leftController.quaternion);
-    const rUp = new THREE.Vector3(0, 1, 0).applyQuaternion(rightController.quaternion);
-    // Y成分のarcsinで垂直からの傾き度を取得
-    // コントローラーを水平に持つ → lUp.y ≈ 1 → arcsin ≈ 90°
-    // 15°研ぎ角 → コントローラーを約15°傾ける
-    leftTiltDeg  = Math.asin(THREE.MathUtils.clamp(lUp.y, -1, 1)) * (180 / Math.PI);
-    rightTiltDeg = Math.asin(THREE.MathUtils.clamp(rUp.y, -1, 1)) * (180 / Math.PI);
+    // コントローラー前方向ベクトル（-Z局所軸）のワールド変換
+    const lFwd = new THREE.Vector3(0, 0, -1).applyQuaternion(leftController.quaternion);
+    const rFwd = new THREE.Vector3(0, 0, -1).applyQuaternion(rightController.quaternion);
+    // 前方ベクトルのY成分 → 上向きが正（奥に傾ける）、下向きが負（手前に傾ける）
+    // arcsinでラジアン→度に変換、水平=0°
+    leftTiltDeg  = Math.asin(THREE.MathUtils.clamp(lFwd.y, -1, 1)) * (180 / Math.PI);
+    rightTiltDeg = Math.asin(THREE.MathUtils.clamp(rFwd.y, -1, 1)) * (180 / Math.PI);
   }
 
-  // ---- 両手の角度一致チェック（差が20°以内 → 緩めに判定）----
+  // ---- 両手の角度一致チェック（差が20°以内）----
   const angleDiff = Math.abs(leftTiltDeg - rightTiltDeg);
   const isAligned = angleDiff < 20;
 
-  // 刃物の砥石面に対する実際の刃角
-  // コントローラーが水平(90°)=刃が砥石に平行=0°、傾けると刃角が増える
-  const avgTiltDeg  = (leftTiltDeg + rightTiltDeg) * 0.5;
-  // 刃先が奥(+Z)向きなので、砥石に置いたとき「刃側を砥石に押しつける」 = コントローラーを内側に傾ける
-  // 傾き量そのものを刃角とする（90°からの差ではなく傾け量）
-  const bladeAngleDeg = Math.max(0, Math.min(45, 90 - Math.abs(avgTiltDeg)));
+  // 刃角 = 両手の平均傾き
+  // 奥に倒す（正の値）= 刃が砥石面に対して傾く = 正しい研ぎ角
+  // 水平（0°）= 刃が砥石面に平行 = ぎりぎり得点
+  // 手前に倒す（負の値）= 逆方向 = 得点なし
+  const avgTiltDeg = (leftTiltDeg + rightTiltDeg) * 0.5;
+  // 有効な刃角：水平0°〜奥方向の正の傾き
+  // 目標：約15°（少し奥に倒した状態）
+  const bladeAngleDeg = avgTiltDeg; // 符号付きのまま使用（奥=正が良い）
 
-  // HUD 更新
   updateAngleHud(leftTiltDeg, rightTiltDeg, isAligned, bladeAngleDeg);
 
   if (held) {
-    // 刃物グループを両手中点に移動
     sharpenBladeGroup.position.set(
       midX,
       Math.max(midY - 0.02, workbenchPos.y + 0.06),
@@ -1772,18 +1837,14 @@ function updateSharpening(delta) {
     );
 
     if (isAligned) {
-      // 両手ベクトルから水平方向の向き（Y軸回転）
       const handVec = new THREE.Vector3().subVectors(rhPos, lhPos).normalize();
       const yAngle  = Math.atan2(handVec.z, handVec.x);
-      // 傾き：砥石に刃を当てる角度をX軸回転で表現
-      // 刃先が奥なので tiltRad は -方向（前傾き）
-      const tiltRad = -(bladeAngleDeg * Math.PI) / 180;
+      // tiltRad: 奥に傾けた量をX軸回転に適用（正の値=奥=刃を砥石面に押しつける）
+      const tiltRad = (avgTiltDeg * Math.PI) / 180;
       sharpenBladeGroup.rotation.y = yAngle;
-      // sharpenBladeMesh のX回転に傾きを追加（基本は -PI/2）
       sharpenBladeMesh.rotation.set(-Math.PI / 2 + tiltRad, Math.PI, 0);
     }
 
-    // ---- ストローク検出：Z軸（前後）0.015m閾値 ----
     const dz  = midZ - prevSharpenZ;
     const dir = Math.sign(dz);
 
@@ -1795,8 +1856,18 @@ function updateSharpening(delta) {
           playSharpenBad();
         } else {
           strokeCount++;
-          const angleErr = Math.abs(bladeAngleDeg - CONFIG.SHARPENING.IDEAL_ANGLE);
-          const score    = Math.max(0, Math.min(100, 100 - angleErr * 5));
+          // スコア計算：
+          // 奥に傾けた場合（正値）→ 目標15°との差でスコア
+          // 水平（0°）→ ぎりぎり1点
+          // 手前（負値）→ 0点
+          let score = 0;
+          if (bladeAngleDeg >= 0) {
+            const angleErr = Math.abs(bladeAngleDeg - CONFIG.SHARPENING.IDEAL_ANGLE);
+            score = Math.max(1, Math.min(100, 100 - angleErr * 5));
+          }
+          // 水平の場合は最低1点（ぎりぎり得点）
+          if (bladeAngleDeg === 0) score = 1;
+
           strokeScores  += score;
           totalSharpness = strokeScores / strokeCount;
 
@@ -1808,7 +1879,7 @@ function updateSharpening(delta) {
           }
 
           updateInfoPanel(
-            `ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES}\n刃角: ${Math.round(bladeAngleDeg)}° (目標15°)\nスコア: ${Math.round(score)}`
+            `ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES}\n刃角: ${Math.round(bladeAngleDeg)}° (目標+15°)\nスコア: ${Math.round(score)}`
           );
           updateStatusBar(
             '研ぎ',
@@ -1821,7 +1892,6 @@ function updateSharpening(delta) {
     prevSharpenZ = midZ;
 
   } else {
-    // 離したら初期位置に戻す
     sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.1);
     sharpenBladeGroup.rotation.set(0, 0, 0);
     sharpenBladeMesh.rotation.set(-Math.PI / 2, Math.PI, 0);
@@ -1831,7 +1901,7 @@ function updateSharpening(delta) {
 
   if (strokeCount >= CONFIG.SHARPENING.TOTAL_STROKES && !sharpenComplete) {
     sharpenComplete = true;
-    updateInfoPanel(`研ぎ完了！\nAボタンで結果へ\n鋭さ: ${Math.round(totalSharpness)}点`);
+    updateInfoPanel(`研ぎ完了！ / Sharpening Done!\nAボタンで結果へ / Press A\n鋭さ: ${Math.round(totalSharpness)}点`);
     playComplete();
   }
 }
@@ -1856,17 +1926,21 @@ function updateIntro(delta) {
 /* ================================================================
    INTRO VISUALS
 ================================================================ */
-// Ambient particles
+// Ambient particles — 球体点（Points）
 const particleCount = 120;
-const particleGeo = new THREE.BufferGeometry();
-const particlePos = new Float32Array(particleCount * 3);
+const particleGeo   = new THREE.BufferGeometry();
+const particlePos   = new Float32Array(particleCount * 3);
 for (let i = 0; i < particleCount; i++) {
   particlePos[i*3]   = (Math.random()-0.5)*8;
   particlePos[i*3+1] = Math.random()*3;
   particlePos[i*3+2] = (Math.random()-0.5)*8;
 }
 particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePos, 3));
-const particleMat = new THREE.PointsMaterial({ color: 0xff6600, size: 0.025, transparent: true, opacity: 0.4 });
+// PointsMaterial → GPUが球体のsplatとしてレンダリング
+const particleMat = new THREE.PointsMaterial({
+  color: 0xff6600, size: 0.035, sizeAttenuation: true,
+  transparent: true, opacity: 0.45
+});
 const particles = new THREE.Points(particleGeo, particleMat);
 scene.add(particles);
 
