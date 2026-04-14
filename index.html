@@ -301,8 +301,8 @@ const CONFIG = {
   FORGING: {
     TOTAL_HITS: 30,
     VELOCITY_THRESHOLD: 0.8,
-    FORGE_HEAT_RATE: 25,       // per second in furnace
-    COOL_RATE: 4,              // per second in air（冷却2倍速）
+    FORGE_HEAT_RATE: 12.5,     // per second in furnace（加熱2倍ゆっくり）
+    COOL_RATE: 4,              // per second in air
     HOT_THRESHOLD: 60,
     MISS_THRESHOLD: 30,
     SPARK_COUNT_PERFECT: 80,
@@ -535,7 +535,7 @@ addLaser(ctrl1);
 
 /* ================================================================
    SPARK SYSTEM — Points 固定プール方式
-   size: 0.015 (1/4), forge:5x orange / shape:3x blue-white 0.3spread
+   AdditiveBlending で確実に発光表示
 ================================================================ */
 const SPARK_MAX = 400;
 const _spkPositions = new Float32Array(SPARK_MAX * 3);
@@ -549,11 +549,12 @@ spkGeo.setAttribute('position', _spkPosBuf);
 spkGeo.setAttribute('color',    _spkColBuf);
 spkGeo.drawRange = { start: 0, count: SPARK_MAX };
 const spkMat = new THREE.PointsMaterial({
-  size: 0.015,           // 1/4サイズ（球体点）
+  size: 0.04,                          // VR/ARで確実に見えるサイズ
   vertexColors: true,
   sizeAttenuation: true,
   transparent: true,
-  depthTest: false,
+  blending: THREE.AdditiveBlending,   // 加算合成→暗い背景でも確実に光る
+  depthWrite: false,
 });
 const spkMesh = new THREE.Points(spkGeo, spkMat);
 scene.add(spkMesh);
@@ -563,15 +564,13 @@ const _spk = Array.from({ length: SPARK_MAX }, () => ({
   px: 0, py: -200, pz: 0,
   vx: 0, vy: 0, vz: 0,
   life: 0, maxLife: 1,
-  mode: 'forge', // 'forge'=オレンジ / 'shape'=青白
+  mode: 'forge',
 }));
 let _spkHead = 0;
 
-// 初期位置を画面外に
 for (let i = 0; i < SPARK_MAX; i++) _spkPositions[i*3+1] = -200;
 _spkPosBuf.needsUpdate = true;
 
-// spread: 速度・距離の倍率（shapingは0.3）
 function spawnSparks(origin, count, mode = 'forge', spread = 1.0) {
   for (let n = 0; n < count; n++) {
     const idx = _spkHead % SPARK_MAX;
@@ -606,12 +605,10 @@ function updateSparks(delta) {
     _spkPositions[b+2] = s.pz;
     const t = Math.max(0, s.life / s.maxLife);
     if (s.mode === 'shape') {
-      // 青白い冷たい火花
       _spkColors[b]   = 0.4 + t*0.6;
       _spkColors[b+1] = 0.6 + t*0.4;
       _spkColors[b+2] = 1.0;
     } else {
-      // オレンジ炎の火花
       _spkColors[b]   = 1.0;
       _spkColors[b+1] = 0.2 + t*0.8;
       _spkColors[b+2] = t*0.1;
@@ -841,14 +838,14 @@ const bladeGeo = createBladeGeometry();
 const bladeMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.4, metalness: 0.9 });
 const bladeMesh = new THREE.Mesh(bladeGeo, bladeMat);
 bladeMesh.castShadow = true;
-// bladeGeo は X:0〜0.5, Y:0〜0.09 → 中心はX:0.25, Y:0.045
-// PivotGroupを使って中心で回転できるようにする
-// bladeMesh を X:-0.25 にオフセットし、PivotGroup の原点 = 刃物中心
+// bladeGeo: X:0〜0.5, Y:0〜0.09
+// 作業台に寝かせる: rotation.x = -PI/2
+// 刃先をプレイヤー手前(-Z)方向に：position.x=-0.25でX中心補正
+// bladePivotを使うが、反転はbladeMesh.rotation.xのみで行う（位置はズレない）
 const bladePivot = new THREE.Group();
-bladeMesh.position.set(-0.25, 0, 0);
-bladeMesh.rotation.x = -Math.PI / 2; // 作業台に寝かせる
+bladeMesh.position.set(-0.25, 0, 0);  // X中心補正
+bladeMesh.rotation.x = -Math.PI / 2; // 表: 表面が上
 bladePivot.add(bladeMesh);
-// PivotGroupを作業台上に配置
 bladePivot.position.set(0, workbenchPos.y + 0.04, -1.25);
 groupShaping.add(bladePivot);
 
@@ -1010,19 +1007,23 @@ function updateAngleHud(leftDeg, rightDeg, isAligned, bladeAngleDeg) {
 }
 
 // 研ぎフェーズ用刃物
-// bladeGeo: X:0〜0.5, Y:0〜0.09 → 中心X=0.25
-// rotation.x=-PI/2で寝かせ、rotation.y=PIで刃先を奥(+Z)へ
+// bladeGeo: X:0〜0.5 (X中心=0.25), Y:0〜0.09 (刃先=Y小側)
+// 平置き: rotation.x = -PI/2 → X方向に長く、Y軸がZ方向に変換される
+// 刃先(元Y=0)は rotation.x=-PI/2 後に -Z方向（プレイヤー側=手前）
+// 刃先を奥(+Z)に向けるには rotation.x = +PI/2 にする
+//   → Y軸が+Z方向に変換 → 元Y=0の刃先が+Z(奥)に向く
 const sharpenBladeGroup = new THREE.Group();
 const sharpenBladeMesh  = bladeMesh.clone();
-sharpenBladeMesh.position.set(-0.25, 0, 0.045); // X中心補正 + Z:刃の厚み方向を砥石面へ
-sharpenBladeMesh.rotation.set(-Math.PI / 2, Math.PI, 0);
+sharpenBladeMesh.position.set(-0.25, 0, 0); // X中心補正
+sharpenBladeMesh.rotation.set(Math.PI / 2, 0, 0); // 刃先を奥(+Z)へ
 sharpenBladeGroup.add(sharpenBladeMesh);
-// 刃先マーカー（細い青線のみ、ラベルなし）
+// 細い青マーカー（刃先=奥側に）
 const edgeMarkerGeo = new THREE.BoxGeometry(0.50, 0.004, 0.002);
 const edgeMarkerMat = new THREE.MeshBasicMaterial({ color: 0x44aaff, transparent: true, opacity: 0.7 });
 const edgeMarker    = new THREE.Mesh(edgeMarkerGeo, edgeMarkerMat);
-edgeMarker.position.set(0, 0.003, -0.045);
+edgeMarker.position.set(0, 0.003, 0.045); // 奥側（+Z）に配置
 sharpenBladeGroup.add(edgeMarker);
+// グループを砥石の上に配置（X=0が刃物中心）
 sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.1);
 groupSharpening.add(sharpenBladeGroup);
 
@@ -1101,19 +1102,21 @@ function buildResultCanvas(score, bladeStateSnap, scores) {
 
   // Title
   ctx.fillStyle = '#e8c87a';
-  ctx.font = 'bold 32px serif';
+  ctx.font = 'bold 28px serif';
   ctx.textAlign = 'center';
-  ctx.fillText('完成 ─ 越前打刃物', W/2, 48);
+  ctx.fillText('完成 ─ 越前打刃物 / Echizen Blades', W/2, 48);
 
   // Score big
-  const rank = score >= 90 ? '名人' : score >= 70 ? '職人' : '見習い';
+  const rankJa = score >= 90 ? '名人' : score >= 70 ? '職人' : '見習い';
+  const rankEn = score >= 90 ? 'Master' : score >= 70 ? 'Craftsman' : 'Apprentice';
+  const rank   = `${rankJa} / ${rankEn}`;
   ctx.font = 'bold 72px serif';
   ctx.fillStyle = score >= 90 ? '#ffe066' : score >= 70 ? '#a0c8ff' : '#ff8866';
   ctx.fillText(Math.round(score), W/2, 130);
   ctx.font = '24px serif';
   ctx.fillStyle = '#c8a060';
-  ctx.fillText('点', W/2 + 45, 118);
-  ctx.font = '28px serif';
+  ctx.fillText('点 / pts', W/2 + 55, 118);
+  ctx.font = '22px serif';
   ctx.fillStyle = '#e8c87a';
   ctx.fillText(`【 ${rank} 】`, W/2, 172);
 
@@ -1123,10 +1126,11 @@ function buildResultCanvas(score, bladeStateSnap, scores) {
   ctx.beginPath(); ctx.moveTo(30, 195); ctx.lineTo(W-30, 195); ctx.stroke();
 
   // Detail
+  const shapingScoreDisplay = Math.round(Math.max(0, Math.min(100, 100 - bladeStateSnap.symmetryError * 4)));
   const details = [
-    ['鍛造 (歪み)', Math.round(100 - bladeStateSnap.shapeDistortion), 0.4],
-    ['成形 (対称性)', Math.round(100 - bladeStateSnap.symmetryError), 0.3],
-    ['研ぎ (鋭さ)', Math.round(bladeStateSnap.sharpness), 0.3],
+    ['鍛造 Forging',  Math.round(100 - bladeStateSnap.shapeDistortion), 0.4],
+    ['成形 Shaping',  shapingScoreDisplay,                               0.3],
+    ['研ぎ Sharpen',  Math.round(bladeStateSnap.sharpness),              0.3],
   ];
   ctx.font = '20px serif';
   ctx.textAlign = 'left';
@@ -1154,27 +1158,27 @@ function buildResultCanvas(score, bladeStateSnap, scores) {
 
   // Ranking
   ctx.fillStyle = '#e8c87a';
-  ctx.font = 'bold 22px serif';
+  ctx.font = 'bold 20px serif';
   ctx.textAlign = 'center';
-  ctx.fillText('─ ランキング ─', W/2, 420);
+  ctx.fillText('─ ランキング / Ranking ─', W/2, 420);
 
-  ctx.font = '19px monospace';
+  ctx.font = '18px monospace';
   scores.slice(0, 5).forEach((s, i) => {
-    const y = 458 + i * 46;
+    const y = 455 + i * 44;
     const isNew = i === 0 && Math.abs(s.score - score) < 0.5;
     ctx.fillStyle = isNew ? '#ffe066' : (i === 0 ? '#e8c87a' : 'rgba(200,170,100,0.7)');
     const medal = ['🥇', '🥈', '🥉', '  4', '  5'][i] || String(i+1);
     ctx.textAlign = 'left';
-    ctx.fillText(`${medal}  ${Math.round(s.score)}点`, 60, y);
+    ctx.fillText(`${medal}  ${Math.round(s.score)}pts`, 60, y);
     ctx.textAlign = 'right';
     ctx.fillStyle = 'rgba(200,170,100,0.5)';
     ctx.fillText(s.date, W - 50, y);
   });
 
-  ctx.fillStyle = 'rgba(232,200,122,0.4)';
-  ctx.font = '16px serif';
+  ctx.fillStyle = 'rgba(232,200,122,0.5)';
+  ctx.font = '15px serif';
   ctx.textAlign = 'center';
-  ctx.fillText('Aボタンで再プレイ', W/2, H - 30);
+  ctx.fillText('Aボタンで再プレイ / Press A to Replay', W/2, H - 25);
   return c;
 }
 
@@ -1376,8 +1380,8 @@ function resetShaping() {
     updateZoneSprite(i);
   });
   bladePivot.position.set(0, workbenchPos.y + 0.04, -1.25);
-  bladePivot.rotation.set(0, 0, 0);
-  bladeMesh.rotation.x = -Math.PI / 2;
+  bladePivot.rotation.y = 0;         // ピボットは常にY=0
+  bladeMesh.rotation.x = -Math.PI/2; // 表を上に
 }
 function resetSharpening() {
   strokeCount     = 0;
@@ -1389,7 +1393,7 @@ function resetSharpening() {
   sharpenStreak   = 0;
   sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.1);
   sharpenBladeGroup.rotation.set(0, 0, 0);
-  sharpenBladeMesh.rotation.set(-Math.PI / 2, Math.PI, 0); // 刃先を奥に
+  sharpenBladeMesh.rotation.set(Math.PI / 2, 0, 0); // 刃先を奥に
 }
 
 function setVisibility() {
@@ -1663,9 +1667,10 @@ function updateShaping(delta) {
   const xBtn     = getXButton();
 
   // 刃物は作業台に固定（左手追従なし）
-  // ---- 表裏反転：bladePivotのY軸回転で中心を維持したまま反転 ----
-  // 表: pivotRotY = 0    (bladeMesh.rotation.x = -PI/2 で表が上)
-  // 裏: pivotRotY = PI   (Y軸180°回転で裏面が上、刃先方向は不変)
+  // ---- 表裏反転：bladeMesh.rotation.xのみ変更（位置はズレない）----
+  // 表: rotation.x = -PI/2（表面が上）
+  // 裏: rotation.x = +PI/2（裏面が上）
+  // どちらも刃先の向きと位置は変わらない
   if (xBtn && !wasXPressed) {
     bladeFlipped  = !bladeFlipped;
     bladeFlipAnim = 1.0;
@@ -1673,12 +1678,11 @@ function updateShaping(delta) {
   wasXPressed = xBtn;
   if (bladeFlipAnim > 0) {
     bladeFlipAnim = Math.max(0, bladeFlipAnim - delta * 5);
-    const targetY = bladeFlipped ? Math.PI : 0;
-    const fromY   = bladeFlipped ? 0 : Math.PI;
-    const ease    = 1 - bladeFlipAnim;
-    bladePivot.rotation.y = fromY + (targetY - fromY) * ease;
+    const from = bladeFlipped ? -Math.PI/2 :  Math.PI/2;
+    const to   = bladeFlipped ?  Math.PI/2 : -Math.PI/2;
+    bladeMesh.rotation.x = from + (to - from) * (1 - bladeFlipAnim);
   } else {
-    bladePivot.rotation.y = bladeFlipped ? Math.PI : 0;
+    bladeMesh.rotation.x = bladeFlipped ? Math.PI/2 : -Math.PI/2;
   }
 
   // ---- ゾーンインジケーター更新（刃物固定のため位置はそのまま、色のみ更新）----
@@ -1839,10 +1843,10 @@ function updateSharpening(delta) {
     if (isAligned) {
       const handVec = new THREE.Vector3().subVectors(rhPos, lhPos).normalize();
       const yAngle  = Math.atan2(handVec.z, handVec.x);
-      // tiltRad: 奥に傾けた量をX軸回転に適用（正の値=奥=刃を砥石面に押しつける）
+      // tiltRad: 奥に傾ける（正=奥）→ 基本PI/2 + tiltRad
       const tiltRad = (avgTiltDeg * Math.PI) / 180;
       sharpenBladeGroup.rotation.y = yAngle;
-      sharpenBladeMesh.rotation.set(-Math.PI / 2 + tiltRad, Math.PI, 0);
+      sharpenBladeMesh.rotation.set(Math.PI / 2 + tiltRad, 0, 0);
     }
 
     const dz  = midZ - prevSharpenZ;
@@ -1856,17 +1860,17 @@ function updateSharpening(delta) {
           playSharpenBad();
         } else {
           strokeCount++;
-          // スコア計算：
-          // 奥に傾けた場合（正値）→ 目標15°との差でスコア
-          // 水平（0°）→ ぎりぎり1点
-          // 手前（負値）→ 0点
+          // スコア計算（符号付き角度ベース）:
+          // 奥に傾けた（正値、目標+15°）→ 目標との差でスコア
+          // 水平（-2°〜+2°）→ ぎりぎり1点
+          // 手前（負値 < -2°）→ 0点
           let score = 0;
-          if (bladeAngleDeg >= 0) {
+          if (bladeAngleDeg > -2) {
+            // 水平〜奥方向はすべて有効
             const angleErr = Math.abs(bladeAngleDeg - CONFIG.SHARPENING.IDEAL_ANGLE);
+            // 目標±3°以内=最高100点、それ以外は減点。水平(0°)は100-15*5=25点
             score = Math.max(1, Math.min(100, 100 - angleErr * 5));
           }
-          // 水平の場合は最低1点（ぎりぎり得点）
-          if (bladeAngleDeg === 0) score = 1;
 
           strokeScores  += score;
           totalSharpness = strokeScores / strokeCount;
@@ -1894,7 +1898,7 @@ function updateSharpening(delta) {
   } else {
     sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.1);
     sharpenBladeGroup.rotation.set(0, 0, 0);
-    sharpenBladeMesh.rotation.set(-Math.PI / 2, Math.PI, 0);
+    sharpenBladeMesh.rotation.set(Math.PI / 2, 0, 0);
     prevSharpenZ  = midZ;
     lastStrokeDir = 0;
   }
@@ -1926,23 +1930,33 @@ function updateIntro(delta) {
 /* ================================================================
    INTRO VISUALS
 ================================================================ */
-// Ambient particles — 球体点（Points）
-const particleCount = 120;
-const particleGeo   = new THREE.BufferGeometry();
-const particlePos   = new Float32Array(particleCount * 3);
-for (let i = 0; i < particleCount; i++) {
-  particlePos[i*3]   = (Math.random()-0.5)*8;
-  particlePos[i*3+1] = Math.random()*3;
-  particlePos[i*3+2] = (Math.random()-0.5)*8;
-}
-particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePos, 3));
-// PointsMaterial → GPUが球体のsplatとしてレンダリング
-const particleMat = new THREE.PointsMaterial({
-  color: 0xff6600, size: 0.035, sizeAttenuation: true,
-  transparent: true, opacity: 0.45
+// Ambient particles — 真の球体（SphereGeometry + InstancedMesh）
+const particleCount    = 120;
+const particleSphereGeo = new THREE.SphereGeometry(0.018, 5, 4);
+const particleSphereMat = new THREE.MeshBasicMaterial({
+  color: 0xff6600,
+  transparent: true, opacity: 0.5,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
 });
-const particles = new THREE.Points(particleGeo, particleMat);
+const particles = new THREE.InstancedMesh(particleSphereGeo, particleSphereMat, particleCount);
+particles.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 scene.add(particles);
+
+// 各パーティクルの状態
+const _ptPos = Array.from({ length: particleCount }, () => ({
+  x: (Math.random()-0.5)*8,
+  y: Math.random()*3,
+  z: (Math.random()-0.5)*8,
+}));
+const _ptDummy = new THREE.Object3D();
+// 初期行列を設定
+for (let i = 0; i < particleCount; i++) {
+  _ptDummy.position.set(_ptPos[i].x, _ptPos[i].y, _ptPos[i].z);
+  _ptDummy.updateMatrix();
+  particles.setMatrixAt(i, _ptDummy.matrix);
+}
+particles.instanceMatrix.needsUpdate = true;
 
 /* ================================================================
    XR & UI SETUP
@@ -2083,12 +2097,15 @@ renderer.setAnimationLoop((t) => {
   const delta = Math.min((t - lastTime) / 1000, 0.033);
   lastTime = t;
 
-  const ppos = particles.geometry.attributes.position.array;
+  // アンビエント球体パーティクル更新
   for (let i = 0; i < particleCount; i++) {
-    ppos[i*3+1] += delta * (0.1 + Math.random()*0.05);
-    if (ppos[i*3+1] > 3.5) ppos[i*3+1] = 0;
+    _ptPos[i].y += delta * (0.08 + Math.random()*0.04);
+    if (_ptPos[i].y > 3.5) _ptPos[i].y = 0;
+    _ptDummy.position.set(_ptPos[i].x, _ptPos[i].y, _ptPos[i].z);
+    _ptDummy.updateMatrix();
+    particles.setMatrixAt(i, _ptDummy.matrix);
   }
-  particles.geometry.attributes.position.needsUpdate = true;
+  particles.instanceMatrix.needsUpdate = true;
 
   updateSparks(delta);
   handleGlobalInput();
