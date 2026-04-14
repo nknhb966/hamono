@@ -267,8 +267,8 @@
       <ul>
         <li><span class="tag">両手グリップ</span> 刃物を保持 / Hold with both grips</li>
         <li>前後にスライド / Slide blade back & forth</li>
-        <li>目標角度 <strong>+15°</strong>（コントローラーを少し奥に傾ける）</li>
-        <li>Target <strong>+15°</strong> — tilt controller slightly forward</li>
+        <li>目標角度 <strong>-15°</strong>（コントローラーを少し手前に傾ける）</li>
+        <li>Target <strong>-15°</strong> — tilt controller slightly toward you</li>
         <li>両手の角度を揃えること / Keep both hands aligned</li>
         <li>「シャーッ」音が正解 / Shhh sound = correct angle</li>
         <li>30ストロークで完了 / 30 strokes to complete</li>
@@ -319,7 +319,7 @@ const CONFIG = {
   SHARPENING: {
     TOTAL_STROKES: 30,
     STROKE_THRESHOLD: 0.04,
-    IDEAL_ANGLE: 15,
+    IDEAL_ANGLE: -15,
     ANGLE_TOLERANCE: 5,
   },
 };
@@ -1012,12 +1012,12 @@ function updateAngleHud(leftDeg, rightDeg, isAligned, bladeAngleDeg) {
     ctx.fillText(`L: ${leftDeg >= 0 ? '+' : ''}${Math.round(leftDeg)}°  R: ${rightDeg >= 0 ? '+' : ''}${Math.round(rightDeg)}°`, 128, 80);
     ctx.fillStyle = '#888888';
     ctx.font = '12px monospace';
-    ctx.fillText('水平=0° / 奥=＋ / 手前=－', 128, 104);
+    ctx.fillText('水平=0° / 手前=－ (目標) / 奥=＋', 128, 104);
   } else {
-    // 奥+15°付近が最良→緑、±10°内→黄、それ以上→赤、負は赤
-    const err = bladeAngleDeg - CONFIG.SHARPENING.IDEAL_ANGLE;
-    const col = (bladeAngleDeg >= 0 && Math.abs(err) < 5) ? '#66ff88'
-              : (bladeAngleDeg >= 0 && Math.abs(err) < 10) ? '#ffee44' : '#ff6644';
+    // -15°付近が最良→緑、±10°内→黄、それ以外→赤
+    const err = bladeAngleDeg - CONFIG.SHARPENING.IDEAL_ANGLE; // 目標-15°からのズレ
+    const col = (Math.abs(err) < 5) ? '#66ff88'
+              : (Math.abs(err) < 10) ? '#ffee44' : '#ff6644';
     ctx.fillStyle = col;
     ctx.font = 'bold 34px monospace';
     ctx.textAlign = 'center';
@@ -1025,7 +1025,7 @@ function updateAngleHud(leftDeg, rightDeg, isAligned, bladeAngleDeg) {
     ctx.fillText(`${sign}${Math.round(bladeAngleDeg)}°`, 128, 50);
     ctx.fillStyle = '#aaaaaa';
     ctx.font = '14px monospace';
-    ctx.fillText('目標: +15° / Target: +15°', 128, 80);
+    ctx.fillText('目標: -15° / Target: -15°', 128, 80);
     ctx.fillStyle = '#888888';
     ctx.font = '12px monospace';
     ctx.fillText(`L:${leftDeg >= 0 ? '+' : ''}${Math.round(leftDeg)}° R:${rightDeg >= 0 ? '+' : ''}${Math.round(rightDeg)}°`, 128, 104);
@@ -1051,13 +1051,17 @@ groupSharpening.add(sharpenBladeGroup);
 // ============ RESULT BLADE DISPLAY ============
 const resultBladeGroup = new THREE.Group();
 const resultBlade = bladeMesh.clone();
-resultBlade.position.set(-0.25, 0, 0); // X中心補正（bladeGeo X:0〜0.5）
-resultBlade.rotation.x = -Math.PI / 2; // 寝かせて表示
-resultBlade.scale.set(2, 2, 2);
-resultBladeGroup.position.set(0, 1.4, -1.5); // パネル(z=-2.5)より手前
+resultBlade.position.set(-0.25, 0, 0);  // X中心補正
+resultBlade.rotation.x = -Math.PI / 2;  // 平置き
+resultBlade.scale.set(1, 1, 1);         // 現在の1/2サイズ（元が2倍だった）
+// material を depthTest:false にして常にパネルの前面に描画
+resultBlade.material = resultBlade.material.clone();
+resultBlade.material.depthTest  = false;
+resultBlade.material.depthWrite = false;
+resultBlade.renderOrder = 10; // パネル(renderOrder=0)より高く設定
+resultBladeGroup.position.set(0, 1.5, -2.0); // パネル(z=-2.5)の手前
+resultBladeGroup.renderOrder = 10;
 resultBladeGroup.add(resultBlade);
-// renderOrderを上げて確実に前に描画
-resultBladeGroup.renderOrder = 1;
 scene.add(resultBladeGroup);
 resultBladeGroup.visible = false;
 
@@ -1483,7 +1487,7 @@ function onEnterState(state, prev) {
     if (shapingComplete) {
       bladeState.symmetryError = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
     }
-    updateInfoPanel('フェーズ③：研ぎ / Phase 3: Sharpening\n\n両手グリップで刃物を保持\nGrip blade with both hands\n前後に動かして研ぐ / Slide back & forth\n目標角度 +15° / Target angle +15°');
+    updateInfoPanel('フェーズ③：研ぎ / Phase 3: Sharpening\n\n両手グリップで刃物を保持\nGrip blade with both hands\n前後に動かして研ぐ / Slide back & forth\n目標角度 -15° / Target angle -15°');
     updateStatusBar('研ぎ Sharpening', 'Strokes 0/30', 0);
 
   } else if (state === State.RESULT) {
@@ -1501,17 +1505,18 @@ function onEnterState(state, prev) {
       shapingScore                        * 0.3 +
       bladeState.sharpness                * 0.3
     ));
-    const scores = saveScore(finalScore);
-    showResultPanel(finalScore, bladeState, scores);
+    const scores  = saveScore(finalScore);
     const quality = finalScore / 100;
-    // 刃物の材質を品質に応じて変更（depthTest:true で確実に前に表示）
+    showResultPanel(finalScore, bladeState, scores);
+    // 刃物マテリアルを品質に応じて更新（depthTest:falseで常にパネルの前面に表示）
     resultBlade.material = new THREE.MeshStandardMaterial({
-      color: new THREE.Color().setHSL(0.15 + quality * 0.15, 0.3 + quality * 0.5, 0.4 + quality * 0.3),
+      color:     new THREE.Color().setHSL(0.12 + quality * 0.13, 0.3 + quality * 0.5, 0.4 + quality * 0.3),
       roughness: 0.4 - quality * 0.2,
       metalness: 0.5 + quality * 0.5,
-      depthTest: true,
+      depthTest:  false,
+      depthWrite: false,
     });
-    resultBlade.material.needsUpdate = true;
+    resultBlade.renderOrder = 10;
     updateStatusBar('結果', `スコア: ${Math.round(finalScore)}`, finalScore);
   }
 }
@@ -1735,21 +1740,25 @@ function updateShaping(delta) {
   rightVelocity = prevRightPos.distanceTo(currRightPos) / Math.max(delta, 0.001);
   shapingHitCooldown = Math.max(0, shapingHitCooldown - delta);
 
+  // ハンマーヘッドのワールド座標取得（当たり判定と火花の発生位置）
+  const shapingHammerHeadWorld = new THREE.Vector3();
+  hammerHead.getWorldPosition(shapingHammerHeadWorld);
+
   // ---- 打撃判定 ----
   const shapingTrig = getRightTrigger();
   if (shapingTrig && !prevShapingTrigger && shapingHitCooldown <= 0 && shapingHitCount < CONFIG.SHAPING.MAX_HITS) {
     shapingHitCooldown = 0.18;
     shapingHitCount++;
 
-    // 最も近いゾーンを検索
+    // 最も近いゾーンを検索（ハンマーヘッド位置で判定）
     let nearestIdx  = 0;
     let nearestDist = Infinity;
     for (let i = 0; i < ZONE_COUNT; i++) {
-      const d = rhPos.distanceTo(zoneIndicators[i].position);
+      const d = shapingHammerHeadWorld.distanceTo(zoneIndicators[i].position);
       if (d < nearestDist) { nearestDist = d; nearestIdx = i; }
     }
 
-    if (nearestDist < 0.28) {
+    if (nearestDist < 0.22) {
       // ---- 歪み修正ロジック ----
       // 表向き(bladeFlipped=false): +歪みを叩くと減少（+方向の歪みを修正）
       // 裏向き(bladeFlipped=true) : -歪みを叩くと増加（-方向の歪みを修正）
@@ -1782,12 +1791,13 @@ function updateShaping(delta) {
       const result = absNow < 2 ? 'Perfect' : 'Good';
       if (result === 'Perfect') playHammerPerfect();
       else playHammerGood();
-      // 成形：青白い火花、3倍量、飛距離3割
-      spawnSparks(rhPos.clone(), result === 'Perfect' ? 150 : 60, 'shape', 0.3);
+      // 成形：青白い火花、3倍量、飛距離3割（ハンマーヘッド接触点から）
+      const shapingSparkOrigin = shapingHammerHeadWorld.clone().add(new THREE.Vector3(0, 0.01, 0));
+      spawnSparks(shapingSparkOrigin, result === 'Perfect' ? 150 : 60, 'shape', 0.3);
 
     } else {
       playHammerMiss();
-      spawnSparks(rhPos.clone(), 9, 'shape', 0.3);
+      spawnSparks(shapingHammerHeadWorld.clone(), 9, 'shape', 0.3);
     }
 
     if (rightController?.gamepad?.hapticActuators?.[0]) {
@@ -1895,30 +1905,30 @@ function updateSharpening(delta) {
         } else {
           strokeCount++;
 
-          // ---- 加点方式スコア ----
-          // ×  : 0点  (手前方向、bladeAngleDeg < -2)
-          // △  : 1点  (水平付近、-2°〜+5°)
-          // ○  : 2点  (やや良い、+5°〜+10° または +20°〜+30°)
-          // ◎  : 3点  (目標付近、+10°〜+20° = 目標15°±5°)
+          // ---- 加点方式スコア（目標 -15°：手前に傾ける）----
+          // ×  : 0点  (奥方向 > +2°、または傾けすぎ < -30°)
+          // △  : 1点  (水平付近、-5°〜+2°)
+          // ○  : 2点  (やや良い、-10°〜-5° または -30°〜-20°)
+          // ◎  : 3点  (目標付近、-20°〜-10° = 目標-15°±5°)
           // ◎10回連続で+10ボーナス
           let addPoints = 0;
           let grade     = '×';
 
-          if (bladeAngleDeg >= 10 && bladeAngleDeg <= 20) {
-            // ◎：目標+15°の±5°以内
+          if (bladeAngleDeg >= -20 && bladeAngleDeg <= -10) {
+            // ◎：目標-15°の±5°以内
             addPoints = 3;
             grade     = '◎';
-          } else if ((bladeAngleDeg > 5 && bladeAngleDeg < 10) ||
-                     (bladeAngleDeg > 20 && bladeAngleDeg <= 30)) {
+          } else if ((bladeAngleDeg > -10 && bladeAngleDeg < -5) ||
+                     (bladeAngleDeg >= -30 && bladeAngleDeg < -20)) {
             // ○：目標に近い
             addPoints = 2;
             grade     = '○';
-          } else if (bladeAngleDeg >= -2 && bladeAngleDeg <= 5) {
-            // △：水平〜わずかに奥
+          } else if (bladeAngleDeg >= -5 && bladeAngleDeg <= 2) {
+            // △：水平付近（ぎりぎり得点）
             addPoints = 1;
             grade     = '△';
           } else {
-            // ×：手前 or 傾けすぎ
+            // ×：奥方向 or 傾けすぎ
             addPoints = 0;
             grade     = '×';
           }
@@ -1953,7 +1963,7 @@ function updateSharpening(delta) {
             ? '\n★ ◎×10 ボーナス +10!'
             : '';
           updateInfoPanel(
-            `ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES}\n刃角: ${Math.round(bladeAngleDeg)}° (目標+15°)\n${grade} +${addPoints}点 → 合計: ${Math.round(totalSharpness)}点${bonusMsg}`
+            `ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES}\n刃角: ${Math.round(bladeAngleDeg)}° (目標-15°)\n${grade} +${addPoints}点 → 合計: ${Math.round(totalSharpness)}点${bonusMsg}`
           );
           updateStatusBar(
             '研ぎ',
