@@ -549,11 +549,11 @@ spkGeo.setAttribute('position', _spkPosBuf);
 spkGeo.setAttribute('color',    _spkColBuf);
 spkGeo.drawRange = { start: 0, count: SPARK_MAX };
 const spkMat = new THREE.PointsMaterial({
-  size: 0.04,                          // VR/ARで確実に見えるサイズ
+  size: 0.01,                          // 1/4サイズ
   vertexColors: true,
   sizeAttenuation: true,
   transparent: true,
-  blending: THREE.AdditiveBlending,   // 加算合成→暗い背景でも確実に光る
+  blending: THREE.AdditiveBlending,
   depthWrite: false,
 });
 const spkMesh = new THREE.Points(spkGeo, spkMat);
@@ -1034,32 +1034,30 @@ function updateAngleHud(leftDeg, rightDeg, isAligned, bladeAngleDeg) {
 }
 
 // 研ぎフェーズ用刃物
-// bladeGeo: X:0〜0.5 (X中心=0.25), Y:0〜0.09 (刃先=Y小側)
-// 平置き: rotation.x = -PI/2 → X方向に長く、Y軸がZ方向に変換される
-// 刃先(元Y=0)は rotation.x=-PI/2 後に -Z方向（プレイヤー側=手前）
-// 刃先を奥(+Z)に向けるには rotation.x = +PI/2 にする
-//   → Y軸が+Z方向に変換 → 元Y=0の刃先が+Z(奥)に向く
 const sharpenBladeGroup = new THREE.Group();
 const sharpenBladeMesh  = bladeMesh.clone();
 sharpenBladeMesh.position.set(-0.25, 0, 0); // X中心補正
 sharpenBladeMesh.rotation.set(Math.PI / 2, 0, 0); // 刃先を奥(+Z)へ
-sharpenBladeGroup.add(sharpenBladeMesh);
-// 細い青マーカー（刃先=奥側に）
-const edgeMarkerGeo = new THREE.BoxGeometry(0.50, 0.004, 0.002);
-const edgeMarkerMat = new THREE.MeshBasicMaterial({ color: 0x44aaff, transparent: true, opacity: 0.7 });
+// 刃先マーカーをsharpenBladeMeshの子にする（分離しないよう一緒に回転）
+const edgeMarkerGeo = new THREE.BoxGeometry(0.50, 0.003, 0.001);
+const edgeMarkerMat = new THREE.MeshBasicMaterial({ color: 0x44aaff, transparent: true, opacity: 0.6 });
 const edgeMarker    = new THREE.Mesh(edgeMarkerGeo, edgeMarkerMat);
-edgeMarker.position.set(0, 0.003, 0.045); // 奥側（+Z）に配置
-sharpenBladeGroup.add(edgeMarker);
-// グループを砥石の上に配置（X=0が刃物中心）
+edgeMarker.position.set(0.25, 0.001, 0); // ローカルY=0（刃先側）にX中心補正付きで配置
+sharpenBladeMesh.add(edgeMarker); // meshの子 → 常に一緒に動く
+sharpenBladeGroup.add(sharpenBladeMesh);
 sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.1);
 groupSharpening.add(sharpenBladeGroup);
 
 // ============ RESULT BLADE DISPLAY ============
 const resultBladeGroup = new THREE.Group();
 const resultBlade = bladeMesh.clone();
-resultBlade.position.set(0, 1.5, -1.0);  // 手前に移動 (-1.5 → -1.0)
+resultBlade.position.set(-0.25, 0, 0); // X中心補正（bladeGeo X:0〜0.5）
+resultBlade.rotation.x = -Math.PI / 2; // 寝かせて表示
 resultBlade.scale.set(2, 2, 2);
+resultBladeGroup.position.set(0, 1.4, -1.5); // パネル(z=-2.5)より手前
 resultBladeGroup.add(resultBlade);
+// renderOrderを上げて確実に前に描画
+resultBladeGroup.renderOrder = 1;
 scene.add(resultBladeGroup);
 resultBladeGroup.visible = false;
 
@@ -1293,13 +1291,14 @@ let shapingComplete  = false;
 /* ================================================================
    SHARPENING STATE VARIABLES
 ================================================================ */
-let strokeCount       = 0;
-let lastStrokeDir     = 0;
-let sharpenComplete   = false;
-let totalSharpness    = 0;
-let strokeScores      = 0;
-let prevSharpenZ      = 0;   // Z軸（前後）ストローク用
-let sharpenStreak     = 0;
+let strokeCount        = 0;
+let lastStrokeDir      = 0;
+let sharpenComplete    = false;
+let totalSharpness     = 0;   // 累積加点
+let strokeScores       = 0;   // 未使用（互換用）
+let prevSharpenZ       = 0;
+let sharpenStreak      = 0;
+let consecutivePerfect = 0;   // ◎連続カウント
 
 /* ================================================================
    INPUT STATE
@@ -1415,9 +1414,10 @@ function resetSharpening() {
   lastStrokeDir   = 0;
   sharpenComplete = false;
   totalSharpness  = 0;
-  strokeScores    = 0;
-  prevSharpenZ    = 0;
-  sharpenStreak   = 0;
+  strokeScores       = 0;
+  prevSharpenZ       = 0;
+  sharpenStreak      = 0;
+  consecutivePerfect = 0;
   sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.1);
   sharpenBladeGroup.rotation.set(0, 0, 0);
   sharpenBladeMesh.rotation.set(Math.PI / 2, 0, 0); // 刃先を奥に
@@ -1490,8 +1490,10 @@ function onEnterState(state, prev) {
     // symmetryError=0→shapingScore=100, symmetryError=25→shapingScore=0
     const shapingScore = Math.max(0, Math.min(100, 100 - bladeState.symmetryError * 4));
     const efficiency   = Math.max(0.5, 1 - bladeState.symmetryError * 0.01);
+    // 加点方式: 最大 30回×3点=90点 + ボーナス → 100点満点に正規化
+    const maxPossible = CONFIG.SHARPENING.TOTAL_STROKES * 3;
     bladeState.sharpness = strokeCount > 0
-      ? Math.max(0, Math.min(100, totalSharpness * efficiency))
+      ? Math.max(0, Math.min(100, (totalSharpness / maxPossible) * 100 * efficiency))
       : 0;
 
     const finalScore = Math.max(0, Math.min(100,
@@ -1501,10 +1503,15 @@ function onEnterState(state, prev) {
     ));
     const scores = saveScore(finalScore);
     showResultPanel(finalScore, bladeState, scores);
-    resultBlade.material = bladeMesh.material.clone();
     const quality = finalScore / 100;
-    resultBlade.material.color.setHSL(0.15 + quality * 0.15, 0.3 + quality * 0.5, 0.4 + quality * 0.3);
-    resultBlade.material.metalness = 0.5 + quality * 0.5;
+    // 刃物の材質を品質に応じて変更（depthTest:true で確実に前に表示）
+    resultBlade.material = new THREE.MeshStandardMaterial({
+      color: new THREE.Color().setHSL(0.15 + quality * 0.15, 0.3 + quality * 0.5, 0.4 + quality * 0.3),
+      roughness: 0.4 - quality * 0.2,
+      metalness: 0.5 + quality * 0.5,
+      depthTest: true,
+    });
+    resultBlade.material.needsUpdate = true;
     updateStatusBar('結果', `スコア: ${Math.round(finalScore)}`, finalScore);
   }
 }
@@ -1868,11 +1875,11 @@ function updateSharpening(delta) {
     );
 
     if (isAligned) {
-      const handVec = new THREE.Vector3().subVectors(rhPos, lhPos).normalize();
-      const yAngle  = Math.atan2(handVec.z, handVec.x);
-      // tiltRad: 奥に傾ける（正=奥）→ 基本PI/2 + tiltRad
+      // 刃物は砥石に対して常にX軸方向（左右）に向ける
+      // handVecによるY回転は行わない（右手を奥に動かすと逆回転になるバグを防ぐ）
+      // tiltのみ適用：avgTiltDeg が正（奥傾け）→ 刃が砥石面に当たる
       const tiltRad = (avgTiltDeg * Math.PI) / 180;
-      sharpenBladeGroup.rotation.y = yAngle;
+      sharpenBladeGroup.rotation.y = 0; // 常にX軸方向（砥石に平行）
       sharpenBladeMesh.rotation.set(Math.PI / 2 + tiltRad, 0, 0);
     }
 
@@ -1887,24 +1894,50 @@ function updateSharpening(delta) {
           playSharpenBad();
         } else {
           strokeCount++;
-          // スコア計算（符号付き角度ベース）:
-          // 奥に傾けた（正値、目標+15°）→ 目標との差でスコア
-          // 水平（-2°〜+2°）→ ぎりぎり1点
-          // 手前（負値 < -2°）→ 0点
-          let score = 0;
-          if (bladeAngleDeg > -2) {
-            // 水平〜奥方向はすべて有効
-            const angleErr = Math.abs(bladeAngleDeg - CONFIG.SHARPENING.IDEAL_ANGLE);
-            // 目標±3°以内=最高100点、それ以外は減点。水平(0°)は100-15*5=25点
-            score = Math.max(1, Math.min(100, 100 - angleErr * 5));
+
+          // ---- 加点方式スコア ----
+          // ×  : 0点  (手前方向、bladeAngleDeg < -2)
+          // △  : 1点  (水平付近、-2°〜+5°)
+          // ○  : 2点  (やや良い、+5°〜+10° または +20°〜+30°)
+          // ◎  : 3点  (目標付近、+10°〜+20° = 目標15°±5°)
+          // ◎10回連続で+10ボーナス
+          let addPoints = 0;
+          let grade     = '×';
+
+          if (bladeAngleDeg >= 10 && bladeAngleDeg <= 20) {
+            // ◎：目標+15°の±5°以内
+            addPoints = 3;
+            grade     = '◎';
+          } else if ((bladeAngleDeg > 5 && bladeAngleDeg < 10) ||
+                     (bladeAngleDeg > 20 && bladeAngleDeg <= 30)) {
+            // ○：目標に近い
+            addPoints = 2;
+            grade     = '○';
+          } else if (bladeAngleDeg >= -2 && bladeAngleDeg <= 5) {
+            // △：水平〜わずかに奥
+            addPoints = 1;
+            grade     = '△';
+          } else {
+            // ×：手前 or 傾けすぎ
+            addPoints = 0;
+            grade     = '×';
           }
 
-          strokeScores  += score;
-          totalSharpness = strokeScores / strokeCount;
+          // ◎連続ボーナス
+          if (grade === '◎') {
+            consecutivePerfect++;
+            if (consecutivePerfect % 10 === 0) {
+              addPoints += 10; // ◎10回ごとに+10ボーナス
+            }
+          } else {
+            consecutivePerfect = 0; // ◎以外でリセット
+          }
 
-          if (score > 30) {
+          totalSharpness += addPoints;
+
+          // 良い判定（◎○）= シャーッ音＋水滴
+          if (grade === '◎' || grade === '○') {
             playSharpenGood();
-            // 良い判定時：水滴エフェクト（研ぎ水が飛ぶ）
             const waterOrigin = sharpenBladeGroup.position.clone().add(new THREE.Vector3(0, 0.05, 0));
             spawnSparks(waterOrigin, 20, 'water', 0.8);
           } else {
@@ -1912,16 +1945,20 @@ function updateSharpening(delta) {
           }
 
           if (rightController?.gamepad?.hapticActuators?.[0]) {
-            rightController.gamepad.hapticActuators[0].pulse(score > 70 ? 0.5 : 0.2, 50);
+            const strength = grade === '◎' ? 0.6 : grade === '○' ? 0.4 : 0.15;
+            rightController.gamepad.hapticActuators[0].pulse(strength, 50);
           }
 
+          const bonusMsg = consecutivePerfect > 0 && consecutivePerfect % 10 === 0
+            ? '\n★ ◎×10 ボーナス +10!'
+            : '';
           updateInfoPanel(
-            `ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES}\n刃角: ${Math.round(bladeAngleDeg)}° (目標+15°)\nスコア: ${Math.round(score)}`
+            `ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES}\n刃角: ${Math.round(bladeAngleDeg)}° (目標+15°)\n${grade} +${addPoints}点 → 合計: ${Math.round(totalSharpness)}点${bonusMsg}`
           );
           updateStatusBar(
             '研ぎ',
             `ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES} | ${Math.round(totalSharpness)}点`,
-            totalSharpness
+            Math.min(100, totalSharpness * (100 / (CONFIG.SHARPENING.TOTAL_STROKES * 3)))
           );
         }
       }
@@ -1947,10 +1984,8 @@ function updateSharpening(delta) {
    UPDATE RESULT
 ================================================================ */
 function updateResult(delta) {
-  // 結果刃物を回転させるのみ（パネルはワールド固定）
-  if (resultBlade) {
-    resultBlade.rotation.y += delta * 0.8;
-  }
+  // 結果刃物グループをゆっくり回転（Y軸）
+  resultBladeGroup.rotation.y += delta * 0.8;
 }
 
 /* ================================================================
