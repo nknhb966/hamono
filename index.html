@@ -1061,7 +1061,7 @@ resultBlade.rotation.x = -Math.PI / 2;  // 平置き
 resultBlade.scale.set(1, 1, 1);         // 現在の1/2サイズ（元が2倍だった）
 // material を depthTest:false にして常にパネルの前面に描画
 resultBlade.material = resultBlade.material.clone();
-resultBlade.material.depthTest  = false;
+resultBlade.material.depthTest  = true;
 resultBlade.material.depthWrite = false;
 resultBlade.material.side       = THREE.DoubleSide;
 resultBlade.renderOrder = 99;
