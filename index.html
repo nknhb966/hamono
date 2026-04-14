@@ -310,7 +310,7 @@ const CONFIG = {
     SPARK_COUNT_MISS: 5,
   },
   SHAPING: {
-    MAX_HITS: 100,
+    MAX_HITS: 50,
     ZONE_COUNT: 5,
     HIT_POWER_SCALE: 0.08,
     SMALL_PENALTY: 0.3,
@@ -938,7 +938,7 @@ for (let i = 0; i < ZONE_COUNT; i++) {
 
   // 色ボックス（刃物の上に薄く被せる）
   const zoneIndMat = new THREE.MeshBasicMaterial({
-    color: 0x0066ff, transparent: true, opacity: 0.03, depthTest: true
+    color: 0x4499ff, transparent: true, opacity: 0.008, depthTest: true
   });
   const zoneInd = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.01, 0.08), zoneIndMat);
   zoneInd.position.set(wx, BLADE_Y, BLADE_WORLD_Z);
@@ -1011,31 +1011,36 @@ angleHudMesh.position.set(0.4, workbenchPos.y + 0.20, -1.2);
 scene.add(angleHudMesh);  // groupSharpeningではなくsceneに追加（手に追従させるため）
 
 function updateAngleHud(leftDeg, rightDeg, isAligned, bladeAngleDeg) {
+  // Canvasは 256x80 だがメッシュは(0.15,0.11)なので縦長に圧縮される
+  // → テキストを上下に分けてコンパクトに
   const ctx = angleHudCanvas.getContext('2d');
   ctx.clearRect(0, 0, 256, 80);
-  ctx.fillStyle = 'rgba(0,0,0,0.82)';
-  ctx.beginPath(); ctx.roundRect(3, 3, 250, 74, 10); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.85)';
+  ctx.beginPath(); ctx.roundRect(2, 2, 252, 76, 8); ctx.fill();
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   if (!isAligned) {
-    // NG表示のみ
-    ctx.fillStyle = '#ff5522';
-    ctx.font = 'bold 40px monospace';
+    ctx.fillStyle = '#ff4411';
+    ctx.font = 'bold 52px monospace';
     ctx.fillText('NG', 128, 40);
   } else {
-    // 角度のみ表示
+    // 角度 + グレード記号
     const err = bladeAngleDeg - CONFIG.SHARPENING.IDEAL_ANGLE;
-    const col = Math.abs(err) < 5 ? '#66ff88' : Math.abs(err) < 10 ? '#ffee44' : '#ff6644';
+    const col = Math.abs(err) < 7 ? '#66ff88' : Math.abs(err) < 14 ? '#ffee44' : '#ff6644';
+    // グレード判定（updateSharpeningと同じ範囲）
+    let gradeSymbol = '×';
+    if      (bladeAngleDeg >= -22 && bladeAngleDeg <= -8)  gradeSymbol = '◎';
+    else if ((bladeAngleDeg > -8 && bladeAngleDeg < -3) || (bladeAngleDeg >= -35 && bladeAngleDeg < -22)) gradeSymbol = '○';
+    else if (bladeAngleDeg >= -3 && bladeAngleDeg <= 4)    gradeSymbol = '△';
     ctx.fillStyle = col;
-    ctx.font = 'bold 38px monospace';
+    ctx.font = 'bold 34px monospace';
     const sign = bladeAngleDeg >= 0 ? '+' : '';
-    ctx.fillText(`${sign}${Math.round(bladeAngleDeg)}°`, 128, 40);
+    ctx.fillText(`${sign}${Math.round(bladeAngleDeg)}° ${gradeSymbol}`, 128, 40);
   }
   angleHudTex.needsUpdate = true;
-  // 右手トリガー右側に配置（+0.15m）
+  // 右手コントローラー右側+0.15mに動的配置
   if (rightController) {
     const rhWorld = new THREE.Vector3();
     rightController.getWorldPosition(rhWorld);
-    // 右方向ベクトル（コントローラーのX軸）
     const rhRight = new THREE.Vector3(1, 0, 0).applyQuaternion(rightController.quaternion);
     angleHudMesh.position.copy(rhWorld).addScaledVector(rhRight, 0.15);
     angleHudMesh.quaternion.copy(rightController.quaternion);
@@ -1061,7 +1066,7 @@ resultBlade.rotation.x = -Math.PI / 2;  // 平置き
 resultBlade.scale.set(1, 1, 1);         // 現在の1/2サイズ（元が2倍だった）
 // material を depthTest:false にして常にパネルの前面に描画
 resultBlade.material = resultBlade.material.clone();
-resultBlade.material.depthTest  = true;
+resultBlade.material.depthTest  = false;
 resultBlade.material.depthWrite = false;
 resultBlade.material.side       = THREE.DoubleSide;
 resultBlade.renderOrder = 99;
@@ -1102,25 +1107,29 @@ let scorePanelMesh = null;
 function updateScorePanel(text, worldPos) {
   if (scorePanelMesh) scorePanelGroup.remove(scorePanelMesh);
   if (!text) { scorePanelMesh = null; return; }
-  const cw = 512, ch = 128;
+  const lines = text.split('\n');
+  const cw = 512, ch = 56 + lines.length * 52;
   const cv = document.createElement('canvas');
   cv.width = cw; cv.height = ch;
   const ctx = cv.getContext('2d');
   ctx.fillStyle = 'rgba(10,0,0,0.82)';
-  ctx.beginPath(); ctx.roundRect(4, 4, cw-8, ch-8, 14); ctx.fill();
-  ctx.strokeStyle = 'rgba(255,100,60,0.7)';
+  ctx.beginPath(); ctx.roundRect(3, 3, cw-6, ch-6, 12); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,100,60,0.65)';
   ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.roundRect(4, 4, cw-8, ch-8, 14); ctx.stroke();
+  ctx.beginPath(); ctx.roundRect(3, 3, cw-6, ch-6, 12); ctx.stroke();
   ctx.fillStyle = '#ffddaa';
-  ctx.font = 'bold 36px monospace';
+  ctx.font = 'bold 34px monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, cw/2, ch/2);
+  lines.forEach((line, i) => {
+    ctx.fillText(line, cw/2, 28 + 28 + i * 52);
+  });
   const tex = new THREE.CanvasTexture(cv);
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, side: THREE.DoubleSide });
-  scorePanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.14), mat);
-  const pos = worldPos || new THREE.Vector3(0, workbenchPos.y + 0.55, -1.25);
+  const panelH = 0.07 * lines.length + 0.04;
+  scorePanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.60, panelH), mat);
+  const pos = worldPos || new THREE.Vector3(0, workbenchPos.y + 0.23, -1.25);
   scorePanelMesh.position.copy(pos);
   scorePanelGroup.add(scorePanelMesh);
 }
@@ -1275,12 +1284,13 @@ function buildResultCanvas(score, bladeStateSnap, scores) {
   const newRank = scores.findIndex(s => Math.abs(s.score - recomputedFinal) < 0.5);
   // TOP5入り時のNEW RECORD表示 (W/4の位置)
   if (newRank >= 0 && newRank < 5) {
-    ctx.font = 'bold 42px serif';
+    // Score bigの横（W/4）に表示
+    ctx.font = 'bold 40px serif';
     ctx.fillStyle = '#ffe066';
     ctx.textAlign = 'center';
     const recLabel = newRank === 0 ? '🥇 NEW\nRECORD!' : `TOP${newRank+1}\nNEW!`;
     recLabel.split('\n').forEach((line, li) => {
-      ctx.fillText(line, W/4, 870 + li * 46);
+      ctx.fillText(line, W/4, 240 + li * 50);  // Score big(y=260)の隣
     });
   }
 
@@ -1575,20 +1585,20 @@ function onEnterState(state, prev) {
   if (state === State.INTRO) {
     bladeState = { shapeDistortion: 0, symmetryError: 0, sharpness: 0 };
     resetForging(); resetShaping(); resetSharpening();
-    updateInfoPanel('越前打刃物 / Echizen Blades\n\nAボタンで開始 / Press A to Start');
+    updateInfoPanel('越前打刃物 / Echizen Blades\n鍛冶職人VR体験\nAボタンで開始 / Press A');
     updateStatusBar('INTRO', 'Aボタン：開始 / Press A', null);
 
   } else if (state === State.FORGING) {
     resetForging();
     shapeDistortion = 100;
-    updateInfoPanel('鍛造 / Forging\n左グリップ：鉄を掴む / Grip: Hold iron\n右トリガー：ハンマー / Trigger: Hammer\nAボタン：次へ / A: Next');
+    updateInfoPanel('① 鍛造 / Forging\n炉で熱を→作業台で叩く\nGrip:掴む Trigger:打撃\n温度80-60°=○最高 | A:次へ');
     updateStatusBar('① 鍛造', '', 0);
 
   } else if (state === State.SHAPING) {
     resetShaping();
     bladeState.shapeDistortion = shapeDistortion;
     bladeState.symmetryError   = 100;
-    updateInfoPanel('成形 / Shaping\n右トリガー：ゾーンを叩く / Hammer zones\nXボタン：表裏反転 / X: Flip\nAボタン：終了 / A: Finish');
+    updateInfoPanel('② 成形 / Shaping\n赤ゾーンを叩いて歪み修正\nTrigger:叩く X:表裏反転\n歪み0=100pt | A:終了');
     updateStatusBar('② 成形', '', 0);
 
   } else if (state === State.SHARPENING) {
@@ -1596,7 +1606,7 @@ function onEnterState(state, prev) {
     if (shapingComplete) {
       bladeState.symmetryError = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
     }
-    updateInfoPanel('研ぎ / Sharpening\n両グリップ：刃物を保持 / Both grips: Hold\n前後にスライド / Slide back & forth\n目標角度 -15° (手前傾け)\n両手の角度を揃える / Align hands (HUD:NG=misaligned)');
+    updateInfoPanel('③ 研ぎ / Sharpening\n両グリップ:刃物保持→前後スライド\n目標角度 -15°(手前傾け)\n両手角度揃える(HUD:NG=不一致)\n◎3pt ○2pt △1pt ×0pt');
     updateStatusBar('③ 研ぎ', '', 0);
 
   } else if (state === State.RESULT) {
@@ -1622,15 +1632,15 @@ function onEnterState(state, prev) {
     const quality = finalScore / 100;
     showResultPanel(finalScore, bladeState, scores);
     // 刃物マテリアルを品質に応じて更新（depthTest:falseで常にパネルの前面に表示）
+    // 結果刃物: depthTest:false + renderOrder:99 で確実にパネルの前に表示
     const newMat = new THREE.MeshStandardMaterial({
       color:     new THREE.Color().setHSL(0.12 + quality * 0.13, 0.3 + quality * 0.5, 0.4 + quality * 0.3),
       roughness: 0.4 - quality * 0.2,
       metalness: 0.5 + quality * 0.5,
-      depthTest:  true,
+      depthTest:  false,
       depthWrite: false,
       side: THREE.DoubleSide,
     });
-    // resultBlade自身とすべての子Mesh（nakago等）にrenderOrderと材質を適用
     resultBladeGroup.traverse((obj) => {
       if (obj.isMesh) {
         obj.material    = newMat.clone();
@@ -1801,7 +1811,7 @@ function updateForging(delta) {
     }
 
     updateInfoPanel(`フェーズ①：鍛造 / Forging\n打撃 ${forgingHitCount}/${CONFIG.FORGING.TOTAL_HITS}  ${result}\n温度: ${Math.round(ironTemperature)}°`);
-    updateScorePanel(`① ${result}  歪み:${Math.round(shapeDistortion)}`, new THREE.Vector3(0, workbenchPos.y + 0.23, -1.1));
+    updateScorePanel(`① 打撃 ${forgingHitCount}/${CONFIG.FORGING.TOTAL_HITS}\n${result}  歪み:${Math.round(shapeDistortion)}`, new THREE.Vector3(0, workbenchPos.y + 0.23, -1.1));
     updateStatusBar('鍛造', `打撃 ${forgingHitCount}/${CONFIG.FORGING.TOTAL_HITS} | 温度: ${Math.round(ironTemperature)}°`, 100 - shapeDistortion);
 
     if (forgingHitCount >= CONFIG.FORGING.TOTAL_HITS) {
@@ -1937,7 +1947,7 @@ function updateShaping(delta) {
     bladeState.symmetryError = avgAbs;
     updateInfoPanel(`フェーズ②：成形\nShaping\n打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS}\n平均歪み: ${Math.round(avgAbs)} / スコア: ${Math.round(shapingScore)}\nX：表裏反転 | A：終了`);
     updateStatusBar('成形', `打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS} | 歪み: ${Math.round(avgAbs)}`, shapingScore);
-    updateScorePanel(`② 歪み:${Math.round(avgAbs)} → ${Math.round(shapingScore)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.23, -1.25));
+    updateScorePanel(`② 打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS}\n歪み:${Math.round(avgAbs)} → ${Math.round(shapingScore)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.23, -1.25));
   }
   prevShapingTrigger = shapingTrig;
 
@@ -2104,7 +2114,7 @@ function updateSharpening(delta) {
             `ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES} | ${Math.round(totalSharpness)}点`,
             Math.min(100, totalSharpness * (100 / (CONFIG.SHARPENING.TOTAL_STROKES * 3)))
           );
-          updateScorePanel(`③ ${grade} 合計:${Math.round(totalSharpness)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.23, -1.2));
+          updateScorePanel(`③ ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES}\n${grade} 合計:${Math.round(totalSharpness)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.23, -1.2));
         }
       }
     }
@@ -2166,26 +2176,29 @@ scene.add(_ptOrange);
 scene.add(_ptYellow);
 // particles は互換性のためエイリアス（更新はまとめて行う）
 
-// Perlinノイズ用シンプルスムーズノイズ
-function smoothNoise(x) {
-  const i = Math.floor(x);
-  const f = x - i;
-  const u = f * f * (3 - 2 * f); // smoothstep
-  const a = Math.sin(i * 127.1) * 43758.5453;
-  const b = Math.sin((i+1) * 127.1) * 43758.5453;
-  return (a - Math.floor(a)) * (1 - u) + (b - Math.floor(b)) * u;
-}
-function perlin2(x, z) {
-  return smoothNoise(x * 2.1) * 2 - 1 + (smoothNoise(z * 1.7 + 100) * 2 - 1);
+// Perlinノイズ風：収束しないよう複数の異なる周波数サインを重ね合わせ
+function perlinLike(t, freqA, freqB, phaseA, phaseB) {
+  // 2つの非整数比の周波数サインを重ねる → 準周期的で収束しない
+  return Math.sin(t * freqA + phaseA) * 0.6 + Math.sin(t * freqB + phaseB) * 0.4;
 }
 
-// 各パーティクルの状態（Perlinノイズによる横移動）
+// 各パーティクルの状態
 const _ptPos = Array.from({ length: particleCount }, (_, idx) => ({
-  x:    (Math.random()-0.5)*8,
-  y:    Math.random()*3,
-  z:    (Math.random()-0.5)*8,
-  seed: Math.random() * 100,    // 個別ノイズオフセット
-  t:    Math.random() * 10,     // ノイズ時間オフセット
+  x:     (Math.random()-0.5)*8,
+  y:     Math.random()*3,
+  z:     (Math.random()-0.5)*8,
+  baseX: (Math.random()-0.5)*6,   // 基準X（この周辺をさまよう）
+  baseZ: (Math.random()-0.5)*6,   // 基準Z
+  t:     Math.random() * 20,      // 時間オフセット（個別）
+  fax:   0.31 + Math.random()*0.12, // X用周波数A（非整数比）
+  fbx:   0.53 + Math.random()*0.11, // X用周波数B
+  faz:   0.37 + Math.random()*0.14, // Z用周波数A
+  fbz:   0.61 + Math.random()*0.10, // Z用周波数B
+  pax:   Math.random()*Math.PI*2,   // X位相A
+  pbx:   Math.random()*Math.PI*2,   // X位相B
+  paz:   Math.random()*Math.PI*2,   // Z位相A
+  pbz:   Math.random()*Math.PI*2,   // Z位相B
+  amp:   0.8 + Math.random()*1.2,   // 振れ幅
 }));
 const _ptDummy = new THREE.Object3D();
 // 初期行列を設定
@@ -2337,21 +2350,19 @@ renderer.setAnimationLoop((t) => {
   const delta = Math.min((t - lastTime) / 1000, 0.033);
   lastTime = t;
 
-  // アンビエント球体パーティクル更新（Perlinノイズによる横移動）
+  // アンビエント球体パーティクル更新（収束しない準周期的ゆらぎ）
   for (let i = 0; i < particleCount; i++) {
     const p = _ptPos[i];
-    p.t += delta * 0.18;  // ノイズ時間を緩やかに進める
-    // 縦方向上昇（変更なし）
-    p.y += delta * (0.08 + Math.sin(p.seed + p.t)*0.015);
-    if (p.y > 3.5) { p.y = 0; p.t = Math.random() * 10; }
-    // Perlinノイズで横方向をなめらかに
-    const nx = perlin2(p.t + p.seed,       p.seed * 0.3) * 0.07;
-    const nz = perlin2(p.seed * 0.5, p.t + p.seed * 0.7) * 0.07;
-    p.x += nx * delta;
-    p.z += nz * delta;
-    // 範囲外は中央に引き戻す
-    if (Math.abs(p.x) > 4) p.x *= 0.95;
-    if (Math.abs(p.z) > 4) p.z *= 0.95;
+    p.t += delta * 0.25;  // 時間を進める
+    // 縦方向上昇
+    p.y += delta * (0.08 + Math.sin(p.t * 0.7 + p.pax)*0.02);
+    if (p.y > 3.5) p.y = 0;
+    // 横方向：baseX/baseZを中心に非整数比サインで揺らぐ（収束しない）
+    const wx = p.baseX + perlinLike(p.t, p.fax, p.fbx, p.pax, p.pbx) * p.amp;
+    const wz = p.baseZ + perlinLike(p.t, p.faz, p.fbz, p.paz, p.pbz) * p.amp;
+    // なめらかに追従（lerp）
+    p.x += (wx - p.x) * Math.min(delta * 1.2, 0.08);
+    p.z += (wz - p.z) * Math.min(delta * 1.2, 0.08);
     _ptDummy.position.set(p.x, p.y, p.z);
     _ptDummy.updateMatrix();
     if (i < _ptCountOrange) _ptOrange.setMatrixAt(i, _ptDummy.matrix);
