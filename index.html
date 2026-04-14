@@ -771,7 +771,7 @@ tempCanvas.width = 256; tempCanvas.height = 80;
 const tempCtx = tempCanvas.getContext('2d');
 const tempTex = new THREE.CanvasTexture(tempCanvas);
 const tempSprite = new THREE.Sprite(
-  new THREE.SpriteMaterial({ map: tempTex, transparent: true, depthTest: false })
+  new THREE.SpriteMaterial({ map: tempTex, transparent: true, depthTest: true })
 );
 tempSprite.scale.set(0.35, 0.11, 1);
 tempSprite.position.set(0.37, 0.02, 0);  // 鉄の右横+0.15m
@@ -946,7 +946,7 @@ for (let i = 0; i < ZONE_COUNT; i++) {
 
   // 色ボックス（刃物の上に薄く被せる）
   const zoneIndMat = new THREE.MeshBasicMaterial({
-    color: 0x0066ff, transparent: true, opacity: 0.12, depthTest: false
+    color: 0x0066ff, transparent: true, opacity: 0.12, depthTest: true
   });
   const zoneInd = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.01, 0.08), zoneIndMat);
   zoneInd.position.set(wx, BLADE_Y, BLADE_WORLD_Z);
@@ -957,7 +957,7 @@ for (let i = 0; i < ZONE_COUNT; i++) {
   const canvas = makeZoneCanvas();
   const tex    = new THREE.CanvasTexture(canvas);
   const sprite = new THREE.Sprite(
-    new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false })
+    new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true })
   );
   sprite.scale.set(0.12, 0.06, 1);
   sprite.position.set(wx, BLADE_Y + 0.08, BLADE_WORLD_Z);
@@ -1012,7 +1012,7 @@ angleHudCanvas.width = 256; angleHudCanvas.height = 80;  // tempSpriteと同じ�
 const angleHudTex = new THREE.CanvasTexture(angleHudCanvas);
 const angleHudMesh = new THREE.Mesh(
   new THREE.PlaneGeometry(0.35, 0.11),  // tempSpriteと同サイズ
-  new THREE.MeshBasicMaterial({ map: angleHudTex, transparent: true, depthTest: false, side: THREE.DoubleSide })
+  new THREE.MeshBasicMaterial({ map: angleHudTex, transparent: true, depthTest: true, side: THREE.DoubleSide })
 );
 // 初期位置（右手が取れるまでのデフォルト）
 angleHudMesh.position.set(0.4, workbenchPos.y + 0.20, -1.2);
@@ -1069,7 +1069,7 @@ resultBlade.rotation.x = -Math.PI / 2;  // 平置き
 resultBlade.scale.set(1, 1, 1);         // 現在の1/2サイズ（元が2倍だった）
 // material を depthTest:false にして常にパネルの前面に描画
 resultBlade.material = resultBlade.material.clone();
-resultBlade.material.depthTest  = false;
+resultBlade.material.depthTest  = true;
 resultBlade.material.depthWrite = false;
 resultBlade.material.side       = THREE.DoubleSide;
 resultBlade.renderOrder = 99;
@@ -1126,7 +1126,7 @@ function updateScorePanel(text, worldPos) {
   ctx.fillText(text, cw/2, ch/2);
   const tex = new THREE.CanvasTexture(cv);
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, side: THREE.DoubleSide });
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, side: THREE.DoubleSide });
   scorePanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.14), mat);
   const pos = worldPos || new THREE.Vector3(0, workbenchPos.y + 0.55, -1.25);
   scorePanelMesh.position.copy(pos);
@@ -1143,7 +1143,7 @@ function updateInfoPanel(text) {
   const c   = makeTextCanvas(text, 1024, 512, 'rgba(0,0,0,0.88)', '#e8c87a', 38);
   const tex = new THREE.CanvasTexture(c);
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, side: THREE.DoubleSide });
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, side: THREE.DoubleSide });
   infoPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.5), mat);
   infoPanelMesh.position.set(0, 2.0, -1.3);
   // 正面を向かせる（回転なし = ワールド座標系でZ-方向を向く）
@@ -1329,7 +1329,7 @@ function showResultPanel(score, bladeStateSnap, scores) {
   const c   = buildResultCanvas(score, bladeStateSnap, scores);
   const tex = new THREE.CanvasTexture(c);
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, side: THREE.DoubleSide });
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, side: THREE.DoubleSide });
   resultPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.1), mat);
   resultPanelMesh.position.set(0, 1.55, -2.5);  // 奥へ移動 (-1.6 → -2.5)
   resultPanelMesh.rotation.set(0, 0, 0);
@@ -1635,7 +1635,7 @@ function onEnterState(state, prev) {
       color:     new THREE.Color().setHSL(0.12 + quality * 0.13, 0.3 + quality * 0.5, 0.4 + quality * 0.3),
       roughness: 0.4 - quality * 0.2,
       metalness: 0.5 + quality * 0.5,
-      depthTest:  false,
+      depthTest:  true,
       depthWrite: false,
       side: THREE.DoubleSide,
     });
