@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -314,7 +314,7 @@ const CONFIG = {
     ZONE_COUNT: 5,
     HIT_POWER_SCALE: 0.08,
     SMALL_PENALTY: 0.3,
-    VELOCITY_THRESHOLD: 0.5,
+    VELOCITY_THRESHOLD: 0.25,  // 半分の遅さでも判定
   },
   SHARPENING: {
     TOTAL_STROKES: 30,
@@ -549,7 +549,7 @@ spkGeo.setAttribute('position', _spkPosBuf);
 spkGeo.setAttribute('color',    _spkColBuf);
 spkGeo.drawRange = { start: 0, count: SPARK_MAX };
 const spkMat = new THREE.PointsMaterial({
-  size: 0.01,                          // 1/4サイズ
+  size: 0.005,                         // 極小サイズ
   vertexColors: true,
   sizeAttenuation: true,
   transparent: true,
@@ -836,24 +836,27 @@ tongGroup.position.set(0, -0.03, -0.1);
 // ============ SHAPING OBJECTS ============
 const shapingBench = makeWorkbench(groupShaping);
 
-// Blade model — 包丁らしい形状
-// X: 0=柄側〜0.5=切先, Y: 0=刃先(薄)〜0.12=峰(厚)
-// 刃先(Y=0)は鋭く薄く、峰(Y=0.12)は厚くまっすぐ
+// Blade model — リアルな和包丁/刃物形状
+// X: 0=柄側〜0.5=切先, Y: 0=刃先(薄)〜0.10=峰(厚)
+// なかご(中子)がみね側（Y上方向）に延びる
+// 刃先(Y=0)は鋭く薄く、峰(Y=0.10)はほぼまっすぐ
 function createBladeGeometry() {
   const shape = new THREE.Shape();
-  // 刃先ライン（Y=0、下辺）: 柄側から切先へ
-  shape.moveTo(0,    0);      // 柄元・刃先
-  shape.lineTo(0.48, 0.01);   // 切先・刃先（わずかに上がる）
-  // 切先（鋭い先端）
-  shape.lineTo(0.50, 0.04);   // 切先の尖り
+  // なかご部分（柄側、峰上方向に突き出す）
+  shape.moveTo(0.02, 0.10);   // 峰・柄側
+  shape.lineTo(-0.04, 0.10);  // なかご・峰側端
+  shape.lineTo(-0.06, 0.07);  // なかご・斜め
+  shape.lineTo(-0.04, 0.00);  // なかご・刃先側
+  shape.lineTo(0.0,   0.00);  // 刃先・柄元
+  // 刃先ライン（下辺）: 柄側から切先へ
+  shape.lineTo(0.46, 0.005);  // 切先近く（わずかに上がる）
+  // 切先（鋭い三角形）
+  shape.lineTo(0.50, 0.035);  // 切先
   // 峰ライン（上辺）: 切先から柄元へ
-  shape.lineTo(0.44, 0.12);   // 切先・峰
-  shape.lineTo(0.02, 0.12);   // 峰・まっすぐ
-  // 柄元
-  shape.lineTo(-0.02, 0.06);  // 柄元の端
-  shape.lineTo(0,    0);      // 閉じる
+  shape.lineTo(0.46, 0.10);   // 切先・峰
+  shape.lineTo(0.02, 0.10);   // 峰・まっすぐ（閉じる）
   const extrudeSettings = {
-    depth: 0.008,              // 刃の厚み（薄め）
+    depth: 0.007,
     bevelEnabled: true,
     bevelThickness: 0.001,
     bevelSize: 0.002,
@@ -862,7 +865,7 @@ function createBladeGeometry() {
   return new THREE.ExtrudeGeometry(shape, extrudeSettings);
 }
 const bladeGeo = createBladeGeometry();
-const bladeMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.4, metalness: 0.9 });
+const bladeMat = new THREE.MeshStandardMaterial({ color: 0x7a8a95, roughness: 0.25, metalness: 0.92 }); // 包丁・刀の青みがかった鋼色
 const bladeMesh = new THREE.Mesh(bladeGeo, bladeMat);
 bladeMesh.castShadow = true;
 // bladeGeo: X:0〜0.5, Y:0〜0.12 (新ジオメトリ)
@@ -919,9 +922,16 @@ const BLADE_WORLD_X1 =  0.25;  // 切先側（bladeGeo X:0.5 → +0.25）
 const BLADE_WORLD_Z  = -1.25;  // bladePivot.position.z（刃物中心Z）
 const BLADE_Y        = workbenchPos.y + 0.045; // ゾーン表示高さ
 
+// ゾーン配置: なかご1か所(X≈-0.22) + 刃4か所(X:-0.08〜+0.22)
+const ZONE_POSITIONS = [
+  -0.22,  // なかご（柄側）
+  -0.08,  // 刃・柄寄り
+   0.06,  // 刃・中央寄り
+   0.16,  // 刃・中央
+   0.24,  // 刃・切先寄り
+];
 for (let i = 0; i < ZONE_COUNT; i++) {
-  const t = i / (ZONE_COUNT - 1);
-  const wx = BLADE_WORLD_X0 + t * (BLADE_WORLD_X1 - BLADE_WORLD_X0);
+  const wx = ZONE_POSITIONS[i];
 
   // 色ボックス（刃物の上に薄く被せる）
   const zoneIndMat = new THREE.MeshBasicMaterial({
@@ -1061,9 +1071,10 @@ resultBlade.scale.set(1, 1, 1);         // 現在の1/2サイズ（元が2倍だ
 resultBlade.material = resultBlade.material.clone();
 resultBlade.material.depthTest  = false;
 resultBlade.material.depthWrite = false;
-resultBlade.renderOrder = 10; // パネル(renderOrder=0)より高く設定
-resultBladeGroup.position.set(0, 1.5, -2.0); // パネル(z=-2.5)の手前
-resultBladeGroup.renderOrder = 10;
+resultBlade.material.side       = THREE.DoubleSide;
+resultBlade.renderOrder = 99;
+resultBladeGroup.position.set(0, 1.5, -2.0);
+resultBladeGroup.renderOrder = 99;
 resultBladeGroup.add(resultBlade);
 scene.add(resultBladeGroup);
 resultBladeGroup.visible = false;
@@ -1091,6 +1102,37 @@ function makeTextCanvas(text, w, h, bg, fg, fontSize) {
   return c;
 }
 
+
+// フェーズ得点表示パネル（刃物近く）
+const scorePanelGroup = new THREE.Group();
+scene.add(scorePanelGroup);
+let scorePanelMesh = null;
+function updateScorePanel(text, worldPos) {
+  if (scorePanelMesh) scorePanelGroup.remove(scorePanelMesh);
+  if (!text) { scorePanelMesh = null; return; }
+  const cw = 512, ch = 128;
+  const cv = document.createElement('canvas');
+  cv.width = cw; cv.height = ch;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = 'rgba(10,0,0,0.82)';
+  ctx.beginPath(); ctx.roundRect(4, 4, cw-8, ch-8, 14); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,100,60,0.7)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.roundRect(4, 4, cw-8, ch-8, 14); ctx.stroke();
+  ctx.fillStyle = '#ffddaa';
+  ctx.font = 'bold 36px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, cw/2, ch/2);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, side: THREE.DoubleSide });
+  scorePanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.14), mat);
+  const pos = worldPos || new THREE.Vector3(0, workbenchPos.y + 0.55, -1.25);
+  scorePanelMesh.position.copy(pos);
+  scorePanelGroup.add(scorePanelMesh);
+}
+
 // Floating info panel — 正面固定（カメラに追従しない）
 const infoPanel = new THREE.Group();
 scene.add(infoPanel);
@@ -1116,101 +1158,141 @@ resultPanel.visible = false;
 let resultPanelMesh = null;
 
 function buildResultCanvas(score, bladeStateSnap, scores) {
-  const W = 600, H = 700;
+  // 2倍解像度
+  const W = 1200, H = 1400;
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
   const ctx = c.getContext('2d');
-  // Background
+
+  // 赤基調背景
   const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, '#12090a');
-  grad.addColorStop(1, '#1a1005');
+  grad.addColorStop(0, '#2a0808');
+  grad.addColorStop(0.5, '#1a0505');
+  grad.addColorStop(1, '#0f0202');
   ctx.fillStyle = grad;
-  ctx.roundRect(0, 0, W, H, 20);
-  ctx.fill();
-  ctx.strokeStyle = '#e8c87a';
+  ctx.beginPath(); ctx.roundRect(0, 0, W, H, 36); ctx.fill();
+  ctx.strokeStyle = '#e05050';
+  ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.roundRect(4, 4, W-8, H-8, 32); ctx.stroke();
+  // 内側金縁
+  ctx.strokeStyle = 'rgba(255,200,80,0.4)';
   ctx.lineWidth = 2;
-  ctx.roundRect(2, 2, W-4, H-4, 18);
-  ctx.stroke();
+  ctx.beginPath(); ctx.roundRect(14, 14, W-28, H-28, 26); ctx.stroke();
 
   // Title
-  ctx.fillStyle = '#e8c87a';
-  ctx.font = 'bold 28px serif';
+  ctx.fillStyle = '#ffddaa';
+  ctx.font = 'bold 52px serif';
   ctx.textAlign = 'center';
-  ctx.fillText('完成 ─ 越前打刃物 / Echizen Blades', W/2, 48);
+  ctx.fillText('完成 ─ 越前打刃物', W/2, 80);
+  ctx.font = '28px serif';
+  ctx.fillStyle = '#ffaa88';
+  ctx.fillText('Echizen Blades Complete', W/2, 120);
 
   // Score big
   const rankJa = score >= 90 ? '名人' : score >= 70 ? '職人' : '見習い';
   const rankEn = score >= 90 ? 'Master' : score >= 70 ? 'Craftsman' : 'Apprentice';
-  const rank   = `${rankJa} / ${rankEn}`;
-  ctx.font = 'bold 72px serif';
-  ctx.fillStyle = score >= 90 ? '#ffe066' : score >= 70 ? '#a0c8ff' : '#ff8866';
-  ctx.fillText(Math.round(score), W/2, 130);
-  ctx.font = '24px serif';
-  ctx.fillStyle = '#c8a060';
-  ctx.fillText('点 / pts', W/2 + 55, 118);
-  ctx.font = '22px serif';
-  ctx.fillStyle = '#e8c87a';
-  ctx.fillText(`【 ${rank} 】`, W/2, 172);
+  ctx.font = 'bold 130px serif';
+  ctx.fillStyle = score >= 90 ? '#ffe866' : score >= 70 ? '#88ccff' : '#ff9966';
+  ctx.textAlign = 'center';
+  ctx.fillText(Math.round(score), W/2, 260);
+  ctx.font = '42px serif';
+  ctx.fillStyle = '#ffcc88';
+  ctx.fillText('点 / pts', W/2 + 100, 225);
+  ctx.font = '44px serif';
+  ctx.fillStyle = '#ffddaa';
+  ctx.fillText(`【 ${rankJa} / ${rankEn} 】`, W/2, 330);
 
   // Divider
-  ctx.strokeStyle = 'rgba(232,200,122,0.3)';
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(30, 195); ctx.lineTo(W-30, 195); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,120,80,0.5)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(50, 360); ctx.lineTo(W-50, 360); ctx.stroke();
 
-  // Detail
-  const shapingScoreDisplay = Math.round(Math.max(0, Math.min(100, 100 - bladeStateSnap.symmetryError * 4)));
+  // フェーズ①②③スコア明示
+  const forgingScore  = Math.round(Math.max(0, 100 - bladeStateSnap.shapeDistortion));
+  const shapingScore2 = Math.round(Math.max(0, Math.min(100, 100 - bladeStateSnap.symmetryError * 4)));
+  const sharpenScore  = Math.round(bladeStateSnap.sharpness);
   const details = [
-    ['鍛造 Forging',  Math.round(100 - bladeStateSnap.shapeDistortion), 0.4],
-    ['成形 Shaping',  shapingScoreDisplay,                               0.3],
-    ['研ぎ Sharpen',  Math.round(bladeStateSnap.sharpness),              0.3],
+    ['① 鍛造 Forging',  forgingScore,  0.4],
+    ['② 成形 Shaping',  shapingScore2, 0.3],
+    ['③ 研ぎ Sharpen',  sharpenScore,  0.3],
   ];
-  ctx.font = '20px serif';
+
+  const BAR_X   = 420;   // ゲージ開始X
+  const BAR_W   = 560;   // ゲージ最大幅（W全体の約47%、7割に短縮）
+  const SCORE_X = 1010;  // スコア文字X（ゲージ右端+余白）
+
   ctx.textAlign = 'left';
   details.forEach(([label, val, weight], i) => {
-    const y = 230 + i * 52;
-    ctx.fillStyle = '#c8a060';
+    const y = 440 + i * 110;
+    // ラベル
+    ctx.font = 'bold 38px serif';
+    ctx.fillStyle = '#ffddaa';
     ctx.fillText(label, 50, y);
-    // Bar
+    // 重みバッジ
+    ctx.font = '26px serif';
+    ctx.fillStyle = '#ffaa66';
+    ctx.fillText(`×${weight}`, 50, y + 40);
+    // ゲージ背景
     ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    ctx.fillRect(220, y - 16, 280, 20);
-    const barW = (val / 100) * 280;
-    const barColor = val > 70 ? '#66cc88' : val > 40 ? '#e8c87a' : '#cc6644';
-    ctx.fillStyle = barColor;
-    ctx.fillRect(220, y - 16, barW, 20);
+    ctx.beginPath(); ctx.roundRect(BAR_X, y - 30, BAR_W, 36, 8); ctx.fill();
+    // ゲージ本体（最大幅の70%=BAR_W*0.7まで）
+    const maxBarW = BAR_W * 0.70;
+    const barW    = (val / 100) * maxBarW;
+    const barColor = val > 70 ? '#44dd88' : val > 40 ? '#ffcc44' : '#ee5533';
+    const barGrad  = ctx.createLinearGradient(BAR_X, 0, BAR_X + maxBarW, 0);
+    barGrad.addColorStop(0, barColor);
+    barGrad.addColorStop(1, barColor + '99');
+    ctx.fillStyle = barGrad;
+    if (barW > 0) { ctx.beginPath(); ctx.roundRect(BAR_X, y - 30, barW, 36, 8); ctx.fill(); }
+    // スコア数値（ゲージ右外）
+    ctx.font = 'bold 42px monospace';
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'right';
-    ctx.fillText(`${val}点 × ${weight}`, W - 50, y);
+    ctx.fillText(`${val}pt`, SCORE_X, y + 6);
     ctx.textAlign = 'left';
   });
 
   // Divider
-  ctx.strokeStyle = 'rgba(232,200,122,0.3)';
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(30, 390); ctx.lineTo(W-30, 390); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,120,80,0.4)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(50, 790); ctx.lineTo(W-50, 790); ctx.stroke();
+
+  // Total breakdown
+  const computed = Math.max(0, Math.min(100,
+    forgingScore  * 0.4 +
+    shapingScore2 * 0.3 +
+    sharpenScore  * 0.3
+  ));
+  ctx.font = '32px serif';
+  ctx.fillStyle = '#ffcc88';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${forgingScore}×0.4 + ${shapingScore2}×0.3 + ${sharpenScore}×0.3 = ${Math.round(computed)}点`, W/2, 840);
 
   // Ranking
-  ctx.fillStyle = '#e8c87a';
-  ctx.font = 'bold 20px serif';
+  ctx.font = 'bold 40px serif';
+  ctx.fillStyle = '#ffddaa';
   ctx.textAlign = 'center';
-  ctx.fillText('─ ランキング / Ranking ─', W/2, 420);
+  ctx.fillText('─ ランキング / Ranking ─', W/2, 900);
 
-  ctx.font = '18px monospace';
+  ctx.font = '34px monospace';
   scores.slice(0, 5).forEach((s, i) => {
-    const y = 455 + i * 44;
+    const y = 960 + i * 76;
     const isNew = i === 0 && Math.abs(s.score - score) < 0.5;
-    ctx.fillStyle = isNew ? '#ffe066' : (i === 0 ? '#e8c87a' : 'rgba(200,170,100,0.7)');
+    ctx.fillStyle = isNew ? '#ffe066' : (i === 0 ? '#ffcc88' : 'rgba(255,200,150,0.7)');
     const medal = ['🥇', '🥈', '🥉', '  4', '  5'][i] || String(i+1);
     ctx.textAlign = 'left';
-    ctx.fillText(`${medal}  ${Math.round(s.score)}pts`, 60, y);
+    ctx.fillText(`${medal}  ${Math.round(s.score)}pts`, 80, y);
     ctx.textAlign = 'right';
-    ctx.fillStyle = 'rgba(200,170,100,0.5)';
-    ctx.fillText(s.date, W - 50, y);
+    ctx.fillStyle = 'rgba(255,180,130,0.6)';
+    ctx.font = '26px monospace';
+    ctx.fillText(s.date, W - 80, y);
+    ctx.font = '34px monospace';
   });
 
-  ctx.fillStyle = 'rgba(232,200,122,0.5)';
-  ctx.font = '15px serif';
+  ctx.fillStyle = 'rgba(255,200,150,0.6)';
+  ctx.font = '30px serif';
   ctx.textAlign = 'center';
-  ctx.fillText('Aボタンで再プレイ / Press A to Replay', W/2, H - 25);
+  ctx.fillText('Aボタンで再プレイ / Press A to Replay', W/2, H - 50);
   return c;
 }
 
@@ -1220,7 +1302,7 @@ function showResultPanel(score, bladeStateSnap, scores) {
   const tex = new THREE.CanvasTexture(c);
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, side: THREE.DoubleSide });
-  resultPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.75), mat);
+  resultPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.1), mat);
   resultPanelMesh.position.set(0, 1.55, -2.5);  // 奥へ移動 (-1.6 → -2.5)
   resultPanelMesh.rotation.set(0, 0, 0);
   resultPanel.add(resultPanelMesh);
@@ -1437,8 +1519,8 @@ function setVisibility() {
   groupSharpening.visible = currentState === State.SHARPENING;
   resultBladeGroup.visible = currentState === State.RESULT;
   resultPanel.visible     = currentState === State.RESULT;
-  // RESULT時はinfoパネルを非表示
-  infoPanel.visible = currentState !== State.RESULT;
+  infoPanel.visible       = currentState !== State.RESULT;
+  scorePanelGroup.visible = (currentState === State.FORGING || currentState === State.SHAPING || currentState === State.SHARPENING);
 }
 
 function nextState() {
@@ -1520,7 +1602,7 @@ function onEnterState(state, prev) {
       depthTest:  false,
       depthWrite: false,
     });
-    resultBlade.renderOrder = 10;
+    resultBlade.renderOrder = 99;
     updateStatusBar('結果', `スコア: ${Math.round(finalScore)}`, finalScore);
   }
 }
@@ -1684,7 +1766,8 @@ function updateForging(delta) {
       rightController.gamepad.hapticActuators[0].pulse(result === 'Perfect' ? 0.8 : 0.3, 80);
     }
 
-    updateInfoPanel(`打撃 ${forgingHitCount}/${CONFIG.FORGING.TOTAL_HITS}\n${result}\n温度: ${Math.round(ironTemperature)}°\n歪み: ${Math.round(shapeDistortion)}`);
+    updateInfoPanel(`フェーズ①：鍛造 / Forging\n打撃 ${forgingHitCount}/${CONFIG.FORGING.TOTAL_HITS}  ${result}\n温度: ${Math.round(ironTemperature)}°`);
+    updateScorePanel(`① ${result}  歪み:${Math.round(shapeDistortion)}`, new THREE.Vector3(0, workbenchPos.y + 0.58, -1.1));
     updateStatusBar('鍛造', `打撃 ${forgingHitCount}/${CONFIG.FORGING.TOTAL_HITS} | 温度: ${Math.round(ironTemperature)}°`, 100 - shapeDistortion);
 
     if (forgingHitCount >= CONFIG.FORGING.TOTAL_HITS) {
@@ -1820,6 +1903,7 @@ function updateShaping(delta) {
     bladeState.symmetryError = avgAbs;
     updateInfoPanel(`フェーズ②：成形\nShaping\n打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS}\n平均歪み: ${Math.round(avgAbs)} / スコア: ${Math.round(shapingScore)}\nX：表裏反転 | A：終了`);
     updateStatusBar('成形', `打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS} | 歪み: ${Math.round(avgAbs)}`, shapingScore);
+    updateScorePanel(`② 歪み:${Math.round(avgAbs)} → ${Math.round(shapingScore)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.58, -1.25));
   }
   prevShapingTrigger = shapingTrig;
 
@@ -1906,7 +1990,9 @@ function updateSharpening(delta) {
     const dz  = midZ - prevSharpenZ;
     const dir = Math.sign(dz);
 
-    if (Math.abs(dz) > 0.015 && dir !== 0 && dir !== lastStrokeDir) {
+    // 砥石上にあるかチェック（stoneMesh.z=-1.1, 判定幅を3倍=±0.54m）
+    const onStone = midZ > -1.64 && midZ < -0.56;
+    if (Math.abs(dz) > 0.0075 && dir !== 0 && dir !== lastStrokeDir && onStone) {
       lastStrokeDir = dir;
 
       if (strokeCount < CONFIG.SHARPENING.TOTAL_STROKES) {
@@ -1924,16 +2010,17 @@ function updateSharpening(delta) {
           let addPoints = 0;
           let grade     = '×';
 
-          if (bladeAngleDeg >= -20 && bladeAngleDeg <= -10) {
-            // ◎：目標-15°の±5°以内
+          // 角度範囲3割増し（甘め判定）
+          if (bladeAngleDeg >= -22 && bladeAngleDeg <= -8) {
+            // ◎：目標-15°の±7°以内（元±5°の1.3倍）
             addPoints = 3;
             grade     = '◎';
-          } else if ((bladeAngleDeg > -10 && bladeAngleDeg < -5) ||
-                     (bladeAngleDeg >= -30 && bladeAngleDeg < -20)) {
-            // ○：目標に近い
+          } else if ((bladeAngleDeg > -8 && bladeAngleDeg < -3) ||
+                     (bladeAngleDeg >= -35 && bladeAngleDeg < -22)) {
+            // ○：やや近い
             addPoints = 2;
             grade     = '○';
-          } else if (bladeAngleDeg >= -5 && bladeAngleDeg <= 2) {
+          } else if (bladeAngleDeg >= -3 && bladeAngleDeg <= 4) {
             // △：水平付近（ぎりぎり得点）
             addPoints = 1;
             grade     = '△';
@@ -1943,15 +2030,14 @@ function updateSharpening(delta) {
             grade     = '×';
           }
 
-          // ◎連続ボーナス
+          // ◎累積ボーナス（30回中10回で+10点、連続不要）
           if (grade === '◎') {
             consecutivePerfect++;
-            if (consecutivePerfect % 10 === 0) {
-              addPoints += 10; // ◎10回ごとに+10ボーナス
+            if (consecutivePerfect === 10) {
+              addPoints += 10; // ◎累計10回で+10ボーナス（1回のみ）
             }
-          } else {
-            consecutivePerfect = 0; // ◎以外でリセット
           }
+          // リセットしない（累積カウント）
 
           totalSharpness += addPoints;
 
@@ -1980,6 +2066,7 @@ function updateSharpening(delta) {
             `ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES} | ${Math.round(totalSharpness)}点`,
             Math.min(100, totalSharpness * (100 / (CONFIG.SHARPENING.TOTAL_STROKES * 3)))
           );
+          updateScorePanel(`③ ${grade} 合計:${Math.round(totalSharpness)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.58, -1.2));
         }
       }
     }
@@ -2021,30 +2108,44 @@ function updateIntro(delta) {
 // Ambient particles — 真の球体（SphereGeometry + InstancedMesh）
 const particleCount    = 120;
 const particleSphereGeo = new THREE.SphereGeometry(0.018, 5, 4);
-const particleSphereMat = new THREE.MeshBasicMaterial({
-  color: 0xff6600,
-  transparent: true, opacity: 0.5,
-  blending: THREE.AdditiveBlending,
-  depthWrite: false,
+// 橙と黄色を交互に2マテリアルで表現（70%橙 + 30%黄）
+const _ptOrangeMat = new THREE.MeshBasicMaterial({
+  color: 0xff5500, transparent: true, opacity: 0.88,
+  blending: THREE.AdditiveBlending, depthWrite: false,
 });
-const particles = new THREE.InstancedMesh(particleSphereGeo, particleSphereMat, particleCount);
-particles.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-scene.add(particles);
+const _ptYellowMat = new THREE.MeshBasicMaterial({
+  color: 0xffcc00, transparent: true, opacity: 0.80,
+  blending: THREE.AdditiveBlending, depthWrite: false,
+});
+// 2種のInstancedMesh（橙70%、黄30%）
+const _ptCountOrange = Math.round(particleCount * 0.7);
+const _ptCountYellow = particleCount - _ptCountOrange;
+const _ptOrange = new THREE.InstancedMesh(particleSphereGeo, _ptOrangeMat, _ptCountOrange);
+const _ptYellow = new THREE.InstancedMesh(particleSphereGeo, _ptYellowMat, _ptCountYellow);
+_ptOrange.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+_ptYellow.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+scene.add(_ptOrange);
+scene.add(_ptYellow);
+// particles は互換性のためエイリアス（更新はまとめて行う）
 
-// 各パーティクルの状態
+// 各パーティクルの状態（横方向ランダムウォーク付き）
 const _ptPos = Array.from({ length: particleCount }, () => ({
-  x: (Math.random()-0.5)*8,
-  y: Math.random()*3,
-  z: (Math.random()-0.5)*8,
+  x:  (Math.random()-0.5)*8,
+  y:  Math.random()*3,
+  z:  (Math.random()-0.5)*8,
+  vx: (Math.random()-0.5)*0.4,  // 横方向ランダムウォーク速度
+  vz: (Math.random()-0.5)*0.4,
 }));
 const _ptDummy = new THREE.Object3D();
 // 初期行列を設定
 for (let i = 0; i < particleCount; i++) {
   _ptDummy.position.set(_ptPos[i].x, _ptPos[i].y, _ptPos[i].z);
   _ptDummy.updateMatrix();
-  particles.setMatrixAt(i, _ptDummy.matrix);
+  if (i < _ptCountOrange) _ptOrange.setMatrixAt(i, _ptDummy.matrix);
+  else _ptYellow.setMatrixAt(i - _ptCountOrange, _ptDummy.matrix);
 }
-particles.instanceMatrix.needsUpdate = true;
+_ptOrange.instanceMatrix.needsUpdate = true;
+_ptYellow.instanceMatrix.needsUpdate = true;
 
 /* ================================================================
    XR & UI SETUP
@@ -2185,15 +2286,29 @@ renderer.setAnimationLoop((t) => {
   const delta = Math.min((t - lastTime) / 1000, 0.033);
   lastTime = t;
 
-  // アンビエント球体パーティクル更新
+  // アンビエント球体パーティクル更新（横方向ランダムウォーク）
   for (let i = 0; i < particleCount; i++) {
-    _ptPos[i].y += delta * (0.08 + Math.random()*0.04);
-    if (_ptPos[i].y > 3.5) _ptPos[i].y = 0;
-    _ptDummy.position.set(_ptPos[i].x, _ptPos[i].y, _ptPos[i].z);
+    const p = _ptPos[i];
+    // 縦方向上昇
+    p.y += delta * (0.08 + Math.random()*0.04);
+    if (p.y > 3.5) p.y = 0;
+    // 横方向ランダムウォーク
+    p.vx += (Math.random()-0.5) * 0.12;
+    p.vz += (Math.random()-0.5) * 0.12;
+    p.vx = Math.max(-0.6, Math.min(0.6, p.vx));
+    p.vz = Math.max(-0.6, Math.min(0.6, p.vz));
+    p.x  += p.vx * delta;
+    p.z  += p.vz * delta;
+    // 範囲外は折り返す
+    if (p.x > 4 || p.x < -4) p.vx *= -1;
+    if (p.z > 4 || p.z < -4) p.vz *= -1;
+    _ptDummy.position.set(p.x, p.y, p.z);
     _ptDummy.updateMatrix();
-    particles.setMatrixAt(i, _ptDummy.matrix);
+    if (i < _ptCountOrange) _ptOrange.setMatrixAt(i, _ptDummy.matrix);
+    else _ptYellow.setMatrixAt(i - _ptCountOrange, _ptDummy.matrix);
   }
-  particles.instanceMatrix.needsUpdate = true;
+  _ptOrange.instanceMatrix.needsUpdate = true;
+  _ptYellow.instanceMatrix.needsUpdate = true;
 
   updateSparks(delta);
   handleGlobalInput();
