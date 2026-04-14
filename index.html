@@ -328,13 +328,16 @@ const CONFIG = {
    STATE MACHINE
 ================================================================ */
 const State = {
-  INTRO: 'INTRO',
+  INTRO_0: 'INTRO_0',   // 歴史
+  INTRO_1: 'INTRO_1',   // 特徴（二枚広げ）
+  INTRO_2: 'INTRO_2',   // 製造工程
+  INTRO_3: 'INTRO_3',   // 体験内容
   FORGING: 'FORGING',
   SHAPING: 'SHAPING',
   SHARPENING: 'SHARPENING',
   RESULT: 'RESULT',
 };
-let currentState = State.INTRO;
+let currentState = State.INTRO_0;
 
 let bladeState = { shapeDistortion: 0, symmetryError: 0, sharpness: 0 };
 
@@ -513,12 +516,12 @@ ctrl1.addEventListener('disconnected', onControllerDisconnected);
 // VRではgamepadのpollingが遅れる場合があるため、イベントベースでも補足
 ctrl0.addEventListener('selectstart', () => {
   // INTRO/RESULTでトリガーを引いたら次フェーズへ（A代わり）
-  if (currentState === State.INTRO || currentState === State.RESULT) {
+  if ([State.INTRO_0,State.INTRO_1,State.INTRO_2,State.INTRO_3,State.RESULT].includes(currentState)) {
     if (!wasAPressed) { nextState(); wasAPressed = true; }
   }
 });
 ctrl1.addEventListener('selectstart', () => {
-  if (currentState === State.INTRO || currentState === State.RESULT) {
+  if ([State.INTRO_0,State.INTRO_1,State.INTRO_2,State.INTRO_3,State.RESULT].includes(currentState)) {
     if (!wasAPressed) { nextState(); wasAPressed = true; }
   }
 });
@@ -1130,16 +1133,67 @@ function updateScorePanel(text, worldPos) {
 const infoPanel = new THREE.Group();
 scene.add(infoPanel);
 let infoPanelMesh = null;
-function updateInfoPanel(text) {
+// リッチなinfoPanelを生成（タイトルと本文を分けてレイアウト）
+function makeRichInfoCanvas(titleText, bodyText, W, H) {
+  const cv  = document.createElement('canvas');
+  cv.width  = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  // 背景：深い藍色ベース
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, 'rgba(8,16,40,0.96)');
+  grad.addColorStop(1, 'rgba(4,8,24,0.96)');
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.roundRect(0, 0, W, H, 28); ctx.fill();
+  // 金色の枠線
+  ctx.strokeStyle = 'rgba(220,180,70,0.75)';
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.roundRect(6, 6, W-12, H-12, 22); ctx.stroke();
+  // タイトル
+  if (titleText) {
+    ctx.fillStyle = '#ffd060';
+    ctx.font = 'bold 52px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(titleText, W/2, 32);
+    // タイトル下線
+    ctx.strokeStyle = 'rgba(220,180,70,0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(60, 96); ctx.lineTo(W-60, 96); ctx.stroke();
+  }
+  // 本文（改行対応）
+  const lines = bodyText.split('\n');
+  ctx.fillStyle = '#f0e8d0';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  const startY = titleText ? 108 : 40;
+  let y = startY;
+  for (const line of lines) {
+    if (line.trim() === '') { y += 22; continue; }
+    // 英語行は色を変える（ASCII比率で判定）
+    const isEn = (line.match(/[a-zA-Z]/g)||[]).length / Math.max(1, line.length) > 0.35;
+    if (isEn) {
+      ctx.fillStyle = '#b8d4f8';
+      ctx.font = '36px sans-serif';
+    } else {
+      ctx.fillStyle = '#f0e8d0';
+      ctx.font = '40px serif';
+    }
+    ctx.fillText(line, 60, y);
+    y += isEn ? 44 : 50;
+  }
+  return cv;
+}
+
+function updateInfoPanel(text, titleText) {
   if (infoPanelMesh) infoPanel.remove(infoPanelMesh);
-  // 解像度を上げて読みやすくする（1024x512）
-  const c   = makeTextCanvas(text, 1024, 512, 'rgba(0,0,0,0.88)', '#e8c87a', 38);
-  const tex = new THREE.CanvasTexture(c);
+  const W = 1600, H = 900;
+  const cv  = makeRichInfoCanvas(titleText || null, text, W, H);
+  const tex = new THREE.CanvasTexture(cv);
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, side: THREE.DoubleSide });
-  infoPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.5), mat);
-  infoPanelMesh.position.set(0, 1.3, -1.5);  // 目の高さ(1.3m)
-  // 正面を向かせる（回転なし = ワールド座標系でZ-方向を向く）
+  // パネルを大きく（2.2m幅 × 1.24m高、目の高さ1.3m、前方2.2m）
+  infoPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.24), mat);
+  infoPanelMesh.position.set(0, 1.38, -2.2);
   infoPanelMesh.rotation.set(0, 0, 0);
   infoPanel.add(infoPanelMesh);
 }
@@ -1527,6 +1581,7 @@ function resetSharpening() {
 }
 
 function setVisibility() {
+  const isIntro = [State.INTRO_0, State.INTRO_1, State.INTRO_2, State.INTRO_3].includes(currentState);
   groupForging.visible    = currentState === State.FORGING;
   groupShaping.visible    = currentState === State.SHAPING;
   groupSharpening.visible = currentState === State.SHARPENING;
@@ -1541,11 +1596,14 @@ function setVisibility() {
 function nextState() {
   playTransition();
   const prev = currentState;
-  if (currentState === State.INTRO)      currentState = State.FORGING;
-  else if (currentState === State.FORGING)   currentState = State.SHAPING;
-  else if (currentState === State.SHAPING)   currentState = State.SHARPENING;
-  else if (currentState === State.SHARPENING) currentState = State.RESULT;
-  else if (currentState === State.RESULT)    currentState = State.INTRO;
+  if      (currentState === State.INTRO_0)     currentState = State.INTRO_1;
+  else if (currentState === State.INTRO_1)     currentState = State.INTRO_2;
+  else if (currentState === State.INTRO_2)     currentState = State.INTRO_3;
+  else if (currentState === State.INTRO_3)     currentState = State.FORGING;
+  else if (currentState === State.FORGING)     currentState = State.SHAPING;
+  else if (currentState === State.SHAPING)     currentState = State.SHARPENING;
+  else if (currentState === State.SHARPENING)  currentState = State.RESULT;
+  else if (currentState === State.RESULT)      currentState = State.INTRO_0;
 
   setVisibility();
   onEnterState(currentState, prev);
@@ -1564,28 +1622,152 @@ function retryState() {
 }
 
 function onEnterState(state, prev) {
-  if (state === State.INTRO) {
-    bladeState = { shapeDistortion: 0, symmetryError: 0, sharpness: 0 };
-    resetForging(); resetShaping(); resetSharpening();
-    updateInfoPanel('越前打刃物 / Echizen Blades\n\n鍛冶職人VR体験\nBlacksmith Experience\n\nAボタンで開始\nPress A Button to Start');
+  if ([State.INTRO_0, State.INTRO_1, State.INTRO_2, State.INTRO_3].includes(state)) {
+    if (state === State.INTRO_0) {
+      bladeState = { shapeDistortion: 0, symmetryError: 0, sharpness: 0 };
+      resetForging(); resetShaping(); resetSharpening();
+    }
+    // INTROスライドのテキスト
+    const introData = {
+      [State.INTRO_0]: {
+        title: '① 歴史 / History',
+        body: `越前打刃物は、1337年に始まりました。
+京都の刀匠・千代鶴国安がこの地に移り、
+農民のために鎌を作ったことが起源です。
+600年以上にわたり、その技は受け継がれています。
+
+Echizen Hamono (blades) began in 1337.
+Master swordsmith Chiyotsuru Kuniyasu
+moved here from Kyoto and forged sickles
+for local farmers. The craft has been
+passed down for over 600 years.
+
+　　　A / Press A ▶ 次へ / Next`,
+      },
+      [State.INTRO_1]: {
+        title: '② 特徴：二枚広げ / Feature: Nimai-hiroge',
+        body: `越前打刃物の特徴は、「二枚広げ」という技法です。
+2枚の刃を重ねたまま叩くことで、
+均一に、速く、薄く伸ばすことができます。
+厚みがあることで力が伝わり、
+温度も保たれ、ムラが生まれにくくなります。
+
+The hallmark of Echizen blades is
+"Nimai-hiroge" (double-layer forging).
+By hammering two stacked blades together,
+the metal spreads evenly, quickly, and thinly.
+The thickness transmits force, retains heat,
+and prevents uneven results.
+
+　　　A / Press A ▶ 次へ / Next`,
+      },
+      [State.INTRO_2]: {
+        title: '③ 製造工程 / Manufacturing Process',
+        body: `刃物は、いくつもの工程を経て作られます。
+その中でも重要な3つの工程があります。
+
+　鍛造　：熱して叩く　／ Forging: Heat and hammer
+　成形　：歪みを整える　／ Shaping: Fix distortion
+　研ぎ　：刃を仕上げる　／ Sharpening: Finish the edge
+
+A blade passes through many stages.
+These three are the most essential.
+Each step demands skill, focus,
+and respect for the metal.
+
+　　　A / Press A ▶ 次へ / Next`,
+      },
+      [State.INTRO_3]: {
+        title: '④ 体験内容 / Your Challenge',
+        body: `この体験では、職人の工程を再現します。
+あなたの技術で、一本の刃物を完成させてください。
+
+　① 鍛造　熱した鉄を叩く
+　　　Forging: Hammer heated iron
+　② 成形　歪みを整える
+　　　Shaping: Correct distortions
+　③ 研ぎ　刃を仕上げる
+　　　Sharpening: Finish the blade edge
+
+In this experience, you recreate the
+craftsman's process. Complete all three
+phases and forge your own blade.
+
+　　　A / Press A ▶ 体験開始 / Start`,
+      },
+    };
+    const d = introData[state];
+    updateInfoPanel(d.body, d.title);
 
   } else if (state === State.FORGING) {
     resetForging();
     shapeDistortion = 100;
-    updateInfoPanel('① 鍛造 / Phase 1: Forging\n\n炉に入れて鉄を加熱、適温で作業台に置きハンマーで叩く\nHeat iron in furnace, place on bench and hammer\n\n左グリップ：鉄を掴む / Left Grip: Hold iron\n右トリガー：打撃 / Right Trigger: Hammer\n\n温度帯：80-60°=○Perfect/Good/Miss\n　　　100-80°=△Good/Miss 60°未満=×Miss\n\nAボタン：次のフェーズへ / A: Next Phase');
+    updateInfoPanel(
+`鍛造は最初の工程です。炉の中で鉄を赤く熱し、
+適温になったら作業台に置き、ハンマーで打ちます。
+打つことで刃物の基礎となる形が作られます。
+
+Forging is the first step. Heat the iron red-hot
+in the furnace, then place it on the bench and
+hammer it. This shapes the foundation of the blade.
+
+　左グリップ：鉄を掴む　Left Grip: Hold iron
+　右トリガー：打撃　　　Right Trigger: Hammer
+
+　温度 80〜60°＝○ 最も効果的　Most effective
+　温度 100〜80°＝△ 熱すぎ　　Too hot
+　温度 60°未満＝× 冷めすぎ　Too cold
+
+　Aボタン：次のフェーズへ　A: Next Phase`,
+'① 鍛造 / Phase 1: Forging');
 
   } else if (state === State.SHAPING) {
     resetShaping();
     bladeState.shapeDistortion = shapeDistortion;
     bladeState.symmetryError   = 100;
-    updateInfoPanel('② 成形 / Phase 2: Shaping\n\n赤いゾーンを叩いて刃物の歪みを修正する\nHammer red zones to fix blade distortion\n\n右トリガー：ゾーンを叩く / Right Trigger: Hammer zone\nXボタン：表裏反転 / X Button: Flip blade\n\n表(+)の歪みは表から、裏(-)の歪みは裏から叩く\nHit from same side as distortion sign\n\n歪み=0で最高得点(100pt)\nDistortion=0 gives max score (100pt)\n\nAボタン：終了 / A: Finish');
+    updateInfoPanel(
+`越前打刃物の技「二枚広げ」では、
+表と裏のバランスが重要です。
+ゾーンの数値を0に近づけることで、
+均一な刃物が仕上がります。
+
+The Echizen technique "Nimai-hiroge" requires
+balance between both sides.
+Bring each zone value close to 0
+to achieve a uniform blade.
+
+　右トリガー：ゾーンを叩く　Trigger: Hammer zone
+　Xボタン：表裏反転　　　　X: Flip blade
+　表(+)歪み→表から叩く　Hit same side as sign(+/-)
+　裏(-)歪み→裏から叩く
+
+　歪み=0→100点　Distortion=0 → 100pt
+　Aボタン：終了　A: Finish`,
+'② 成形 / Phase 2: Shaping');
 
   } else if (state === State.SHARPENING) {
     resetSharpening();
     if (shapingComplete) {
       bladeState.symmetryError = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
     }
-    updateInfoPanel('③ 研ぎ / Phase 3: Sharpening\n\n両手グリップで刃物を保持し、砥石の上で前後にスライド\nHold blade with both grips, slide back & forth on whetstone\n\n目標角度：-15°（コントローラーを手前に傾ける）\nTarget angle: -15° (tilt controller toward you)\n\n両手の角度を揃えること（HUDにNG表示=不一致）\nAlign both hands (HUD shows NG if misaligned)\n\n◎(-22〜-8°)=3pt  ○=2pt  △(水平付近)=1pt  ×=0pt\n◎10回達成で+10ptボーナス\n10x ◎ bonus: +10pt\n\nAボタン：次のフェーズへ / A: Next Phase');
+    updateInfoPanel(
+`研ぎは刃を完成させる最後の工程です。
+砥石の角度を守ることで、鋭い刃が生まれます。
+職人は長年の経験で角度を体で覚えています。
+
+Sharpening is the final step to complete the edge.
+Maintaining the correct angle creates a sharp blade.
+Craftsmen learn this angle through years of practice.
+
+　両グリップ：刃物を保持　Both Grips: Hold blade
+　前後スライド　　　　　　Slide back & forth
+　目標角度：-15°（手前に傾ける）　Target: -15°
+　両手の角度を揃えること　Align both hands (HUD: NG=misaligned)
+
+　◎(-22〜-8°)=3pt  ○=2pt  △=1pt  ×=0pt
+　◎10回で+10ptボーナス　10x ◎: +10pt bonus
+　Aボタン：次のフェーズへ　A: Next Phase`,
+'③ 研ぎ / Phase 3: Sharpening');
 
   } else if (state === State.RESULT) {
     // symmetryError=0→shapingScore=100, symmetryError=25→shapingScore=0
@@ -1776,7 +1958,7 @@ function updateForging(delta) {
 
     if (forgingHitCount >= CONFIG.FORGING.TOTAL_HITS) {
       forgingComplete = true;
-      updateInfoPanel(`鍛造完了！\nAボタンで次へ\n歪み: ${Math.round(shapeDistortion)}`);
+      updateInfoPanel(`鍛造が完了しました！\n歪み: ${Math.round(shapeDistortion)}\n\nForging complete!\nDistortion: ${Math.round(shapeDistortion)}\n\nAボタン：次のフェーズへ　A: Next Phase`, '① 鍛造完了 / Forging Complete');
       playComplete();
     }
   }
@@ -1914,7 +2096,7 @@ function updateShaping(delta) {
     shapingComplete = true;
     const avg = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
     const score = Math.max(0, Math.min(100, 100 - avg * 4));
-    updateInfoPanel(`成形完了！ / Shaping Done!\nAボタンで次へ / Press A to continue\n歪み: ${Math.round(avg)} → スコア: ${Math.round(score)}`);
+    updateInfoPanel(`成形が完了しました！\n平均歪み: ${Math.round(avg)} → スコア: ${Math.round(score)}pt\n\nShaping complete!\nAvg distortion: ${Math.round(avg)} → Score: ${Math.round(score)}pt\n\nAボタン：次のフェーズへ　A: Next Phase`, '② 成形完了 / Shaping Complete');
     bladeState.symmetryError = avg;
     playComplete();
   }
@@ -2081,7 +2263,7 @@ function updateSharpening(delta) {
 
   if (strokeCount >= CONFIG.SHARPENING.TOTAL_STROKES && !sharpenComplete) {
     sharpenComplete = true;
-    updateInfoPanel(`研ぎ完了！ / Sharpening Done!\nAボタンで結果へ / Press A\n鋭さ: ${Math.round(totalSharpness)}点`);
+    updateInfoPanel(`研ぎが完了しました！\n合計ポイント: ${Math.round(totalSharpness)}pt\n\nSharpening complete!\nTotal points: ${Math.round(totalSharpness)}pt\n\nAボタン：結果へ　A: See Results`, '③ 研ぎ完了 / Sharpening Complete');
     playComplete();
   }
 }
@@ -2286,7 +2468,7 @@ setupUI();
 /* ================================================================
    INITIAL STATE
 ================================================================ */
-currentState = State.INTRO;
+currentState = State.INTRO_0;
 setVisibility();
 onEnterState(State.INTRO, null);
 
@@ -2325,7 +2507,10 @@ renderer.setAnimationLoop((t) => {
   handleGlobalInput();
 
   switch(currentState) {
-    case State.INTRO:      updateIntro(delta);      break;
+    case State.INTRO_0:
+    case State.INTRO_1:
+    case State.INTRO_2:
+    case State.INTRO_3:    updateIntro(delta);      break;
     case State.FORGING:    updateForging(delta);    break;
     case State.SHAPING:    updateShaping(delta);    break;
     case State.SHARPENING: updateSharpening(delta); break;
