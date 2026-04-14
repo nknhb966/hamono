@@ -865,14 +865,17 @@ const bladeGeo = createBladeGeometry();
 const bladeMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.4, metalness: 0.9 });
 const bladeMesh = new THREE.Mesh(bladeGeo, bladeMat);
 bladeMesh.castShadow = true;
-// bladeGeo: X:0〜0.5, Y:0〜0.09
-// 作業台に寝かせる: rotation.x = -PI/2
-// 刃先をプレイヤー手前(-Z)方向に：position.x=-0.25でX中心補正
-// bladePivotを使うが、反転はbladeMesh.rotation.xのみで行う（位置はズレない）
+// bladeGeo: X:0〜0.5, Y:0〜0.12 (新ジオメトリ)
+// rotation.x=-PI/2: 元Y軸 → ワールド-Z軸 (Y:0.06中心 → Z:-0.06)
+// rotation.x=+PI/2: 元Y軸 → ワールド+Z軸 (Y:0.06中心 → Z:+0.06)
+// bladeMesh.position.z で補正し、表裏どちらでもZワールド中心をbladePivot.zに合わせる
+// 表(rotation.x=-PI/2): mesh.position.z = +0.06 → 中心Z=0に補正
+// 裏(rotation.x=+PI/2): mesh.position.z = -0.06 → 中心Z=0に補正
 const bladePivot = new THREE.Group();
-bladeMesh.position.set(-0.25, 0, 0);  // X中心補正
-bladeMesh.rotation.x = -Math.PI / 2; // 表: 表面が上
+bladeMesh.position.set(-0.25, 0, 0.06);  // X中心補正 + Z補正(表用)
+bladeMesh.rotation.x = -Math.PI / 2;     // 表: 表面が上
 bladePivot.add(bladeMesh);
+// bladePivotを作業台中央に（ゾーンのZ=bladePivot.zと一致させる）
 bladePivot.position.set(0, workbenchPos.y + 0.04, -1.25);
 groupShaping.add(bladePivot);
 
@@ -911,10 +914,10 @@ function updateZoneSprite(idx) {
 // 刃物のXZ平面上の配置に合わせたゾーン設定
 // bladeGeo は X: 0〜0.5, Y: 0〜0.09 の形状 → rotation.x=-PI/2後は X: 0〜0.5, Z: 0〜0.09
 // bladeMesh.position.x = -0.25 なので ワールドX: -0.25 〜 +0.25
-const BLADE_WORLD_X0 = -0.25;  // 柄側
-const BLADE_WORLD_X1 =  0.25;  // 切先側 (X: 0〜0.5 → -0.25〜+0.25)
-const BLADE_WORLD_Z  = -1.25;  // bladePivot.position.z と一致
-const BLADE_Y        = workbenchPos.y + 0.05; // ゾーン表示高さ（少し上）
+const BLADE_WORLD_X0 = -0.25;  // 柄側（bladeGeo X:0 → -0.25）
+const BLADE_WORLD_X1 =  0.25;  // 切先側（bladeGeo X:0.5 → +0.25）
+const BLADE_WORLD_Z  = -1.25;  // bladePivot.position.z（刃物中心Z）
+const BLADE_Y        = workbenchPos.y + 0.045; // ゾーン表示高さ
 
 for (let i = 0; i < ZONE_COUNT; i++) {
   const t = i / (ZONE_COUNT - 1);
@@ -1045,7 +1048,7 @@ const edgeMarker    = new THREE.Mesh(edgeMarkerGeo, edgeMarkerMat);
 edgeMarker.position.set(0.25, 0.001, 0); // ローカルY=0（刃先側）にX中心補正付きで配置
 sharpenBladeMesh.add(edgeMarker); // meshの子 → 常に一緒に動く
 sharpenBladeGroup.add(sharpenBladeMesh);
-sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.1);
+sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.2);
 groupSharpening.add(sharpenBladeGroup);
 
 // ============ RESULT BLADE DISPLAY ============
@@ -1410,8 +1413,9 @@ function resetShaping() {
     updateZoneSprite(i);
   });
   bladePivot.position.set(0, workbenchPos.y + 0.04, -1.25);
-  bladePivot.rotation.y = 0;         // ピボットは常にY=0
-  bladeMesh.rotation.x = -Math.PI/2; // 表を上に
+  bladePivot.rotation.y = 0;
+  bladeMesh.rotation.x  = -Math.PI/2; // 表を上に
+  bladeMesh.position.z  = 0.06;       // Z中心補正（表用）
 }
 function resetSharpening() {
   strokeCount     = 0;
@@ -1422,7 +1426,7 @@ function resetSharpening() {
   prevSharpenZ       = 0;
   sharpenStreak      = 0;
   consecutivePerfect = 0;
-  sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.1);
+  sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.2);
   sharpenBladeGroup.rotation.set(0, 0, 0);
   sharpenBladeMesh.rotation.set(Math.PI / 2, 0, 0); // 刃先を奥に
 }
@@ -1706,10 +1710,9 @@ function updateShaping(delta) {
   const xBtn     = getXButton();
 
   // 刃物は作業台に固定（左手追従なし）
-  // ---- 表裏反転：bladeMesh.rotation.xのみ変更（位置はズレない）----
-  // 表: rotation.x = -PI/2（表面が上）
-  // 裏: rotation.x = +PI/2（裏面が上）
-  // どちらも刃先の向きと位置は変わらない
+  // ---- 表裏反転：bladeMesh.rotation.xのみ変更 + Z位置補正 ----
+  // 表(rotation.x=-PI/2): mesh.position.z=+0.06 で刃物中心をZ=0に
+  // 裏(rotation.x=+PI/2): mesh.position.z=-0.06 で刃物中心をZ=0に
   if (xBtn && !wasXPressed) {
     bladeFlipped  = !bladeFlipped;
     bladeFlipAnim = 1.0;
@@ -1720,8 +1723,13 @@ function updateShaping(delta) {
     const from = bladeFlipped ? -Math.PI/2 :  Math.PI/2;
     const to   = bladeFlipped ?  Math.PI/2 : -Math.PI/2;
     bladeMesh.rotation.x = from + (to - from) * (1 - bladeFlipAnim);
+    // Z補正もアニメーション（+0.06 ↔ -0.06）
+    const zFrom = bladeFlipped ? 0.06 : -0.06;
+    const zTo   = bladeFlipped ? -0.06 : 0.06;
+    bladeMesh.position.z = zFrom + (zTo - zFrom) * (1 - bladeFlipAnim);
   } else {
-    bladeMesh.rotation.x = bladeFlipped ? Math.PI/2 : -Math.PI/2;
+    bladeMesh.rotation.x = bladeFlipped ?  Math.PI/2 : -Math.PI/2;
+    bladeMesh.position.z = bladeFlipped ? -0.06 : 0.06;
   }
 
   // ---- ゾーンインジケーター更新（刃物固定のため位置はそのまま、色のみ更新）----
@@ -1878,10 +1886,12 @@ function updateSharpening(delta) {
   updateAngleHud(leftTiltDeg, rightTiltDeg, isAligned, bladeAngleDeg);
 
   if (held) {
+    // コントローラーのトリガー位置（midから少し先端方向）が刃物中心になるよう調整
+    // コントローラーグリップの中心より少し奥(-Z)に刃物を配置
     sharpenBladeGroup.position.set(
       midX,
       Math.max(midY - 0.02, workbenchPos.y + 0.06),
-      midZ
+      midZ - 0.06  // 0.06m 奥にオフセット（トリガー位置を刃物中心に合わせる）
     );
 
     if (isAligned) {
@@ -1976,7 +1986,7 @@ function updateSharpening(delta) {
     prevSharpenZ = midZ;
 
   } else {
-    sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.1);
+    sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.2);
     sharpenBladeGroup.rotation.set(0, 0, 0);
     sharpenBladeMesh.rotation.set(Math.PI / 2, 0, 0);
     prevSharpenZ  = midZ;
