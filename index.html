@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -768,8 +768,8 @@ const tempTex = new THREE.CanvasTexture(tempCanvas);
 const tempSprite = new THREE.Sprite(
   new THREE.SpriteMaterial({ map: tempTex, transparent: true, depthTest: false })
 );
-tempSprite.scale.set(0.40, 0.125, 1);
-tempSprite.position.set(0, 0.24, 0);
+tempSprite.scale.set(0.35, 0.11, 1);
+tempSprite.position.set(0.22, 0.02, 0);  // 鉄の右横（X方向）
 ironMesh.add(tempSprite);
 
 function getTempZone(temp) {
@@ -837,36 +837,50 @@ tongGroup.position.set(0, -0.03, -0.1);
 const shapingBench = makeWorkbench(groupShaping);
 
 // Blade model — リアルな和包丁/刃物形状
-// X: 0=柄側〜0.5=切先, Y: 0=刃先(薄)〜0.10=峰(厚)
-// なかご(中子)がみね側（Y上方向）に延びる
-// 刃先(Y=0)は鋭く薄く、峰(Y=0.10)はほぼまっすぐ
+// 日本の包丁型ジオメトリ
+// メイン部分（刃+峰）: X:0〜0.34, Y:0〜0.07
+// なかご部分: X:-0.085〜0, Y:0.049〜0.07（みね上辺に揃え、縦3割=0.021）
+// メイン部分にnakago Meshを子として追加（分離しない）
 function createBladeGeometry() {
   const shape = new THREE.Shape();
-  // なかご部分（柄側、峰上方向に突き出す）
-  shape.moveTo(0.02, 0.10);   // 峰・柄側
-  shape.lineTo(-0.04, 0.10);  // なかご・峰側端
-  shape.lineTo(-0.06, 0.07);  // なかご・斜め
-  shape.lineTo(-0.04, 0.00);  // なかご・刃先側
-  shape.lineTo(0.0,   0.00);  // 刃先・柄元
-  // 刃先ライン（下辺）: 柄側から切先へ
-  shape.lineTo(0.46, 0.005);  // 切先近く（わずかに上がる）
-  // 切先（鋭い三角形）
-  shape.lineTo(0.50, 0.035);  // 切先
-  // 峰ライン（上辺）: 切先から柄元へ
-  shape.lineTo(0.46, 0.10);   // 切先・峰
-  shape.lineTo(0.02, 0.10);   // 峰・まっすぐ（閉じる）
+  // メイン部分の輪郭（なかごなし）
+  shape.moveTo(0,     0);        // 刃先・柄元
+  shape.lineTo(0.32,  0.004);    // 刃先ライン（緩やかに上がる）
+  shape.lineTo(0.34,  0.022);    // 切先（鋭い先端）
+  shape.lineTo(0.32,  0.07);     // 切先・峰
+  shape.lineTo(0,     0.07);     // 峰・まっすぐ（柄元）
+  shape.lineTo(0,     0);        // 閉じる
   const extrudeSettings = {
-    depth: 0.007,
+    depth: 0.006,
     bevelEnabled: true,
     bevelThickness: 0.001,
-    bevelSize: 0.002,
+    bevelSize: 0.0015,
     bevelSegments: 2,
   };
   return new THREE.ExtrudeGeometry(shape, extrudeSettings);
 }
-const bladeGeo = createBladeGeometry();
-const bladeMat = new THREE.MeshStandardMaterial({ color: 0x7a8a95, roughness: 0.25, metalness: 0.92 }); // 包丁・刀の青みがかった鋼色
-const bladeMesh = new THREE.Mesh(bladeGeo, bladeMat);
+// なかご部分（メイン部分の子Meshとして追加）
+function createNakagoGeometry() {
+  // X: -0.085〜0, Y: 0.049〜0.07（縦=0.021、みね上辺に揃える）
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.085, 0.049);  // 下端・左
+  shape.lineTo(-0.085, 0.07);   // 上端・左（みね上辺に揃える）
+  shape.lineTo(0,      0.07);   // 上端・右
+  shape.lineTo(0,      0.049);  // 下端・右
+  shape.lineTo(-0.085, 0.049);  // 閉じる
+  return new THREE.ExtrudeGeometry(shape, {
+    depth: 0.005,
+    bevelEnabled: false,
+  });
+}
+const bladeGeo  = createBladeGeometry();
+const nakagoGeo = createNakagoGeometry();
+const bladeMat  = new THREE.MeshStandardMaterial({ color: 0x7a8a95, roughness: 0.25, metalness: 0.92 });
+const nakagoMat = new THREE.MeshStandardMaterial({ color: 0x5a6268, roughness: 0.55, metalness: 0.75 });
+const bladeMesh  = new THREE.Mesh(bladeGeo, bladeMat);
+const nakagoMesh = new THREE.Mesh(nakagoGeo, nakagoMat);
+nakagoMesh.castShadow = true;
+bladeMesh.add(nakagoMesh); // メイン部分の子 → 常に一緒に動く
 bladeMesh.castShadow = true;
 // bladeGeo: X:0〜0.5, Y:0〜0.12 (新ジオメトリ)
 // rotation.x=-PI/2: 元Y軸 → ワールド-Z軸 (Y:0.06中心 → Z:-0.06)
@@ -875,10 +889,9 @@ bladeMesh.castShadow = true;
 // 表(rotation.x=-PI/2): mesh.position.z = +0.06 → 中心Z=0に補正
 // 裏(rotation.x=+PI/2): mesh.position.z = -0.06 → 中心Z=0に補正
 const bladePivot = new THREE.Group();
-bladeMesh.position.set(-0.25, 0, 0.06);  // X中心補正 + Z補正(表用)
-bladeMesh.rotation.x = -Math.PI / 2;     // 表: 表面が上
+bladeMesh.position.set(-0.17, 0, 0.035);  // X中心補正(0.34/2) + Z補正(表用:Y中心0.035)
+bladeMesh.rotation.x = -Math.PI / 2;      // 表: 表面が上
 bladePivot.add(bladeMesh);
-// bladePivotを作業台中央に（ゾーンのZ=bladePivot.zと一致させる）
 bladePivot.position.set(0, workbenchPos.y + 0.04, -1.25);
 groupShaping.add(bladePivot);
 
@@ -917,18 +930,21 @@ function updateZoneSprite(idx) {
 // 刃物のXZ平面上の配置に合わせたゾーン設定
 // bladeGeo は X: 0〜0.5, Y: 0〜0.09 の形状 → rotation.x=-PI/2後は X: 0〜0.5, Z: 0〜0.09
 // bladeMesh.position.x = -0.25 なので ワールドX: -0.25 〜 +0.25
-const BLADE_WORLD_X0 = -0.25;  // 柄側（bladeGeo X:0 → -0.25）
-const BLADE_WORLD_X1 =  0.25;  // 切先側（bladeGeo X:0.5 → +0.25）
+const BLADE_WORLD_X0 = -0.17;  // 柄側（bladeGeo X:0, pos.x=-0.17 → worldX=-0.17）
+const BLADE_WORLD_X1 =  0.17;  // 切先側（bladeGeo X:0.34, pos.x=-0.17 → worldX=+0.17）
 const BLADE_WORLD_Z  = -1.25;  // bladePivot.position.z（刃物中心Z）
 const BLADE_Y        = workbenchPos.y + 0.045; // ゾーン表示高さ
 
-// ゾーン配置: なかご1か所(X≈-0.22) + 刃4か所(X:-0.08〜+0.22)
+// ゾーン配置: なかご1か所 + 刃4か所（均等割り）
+// bladeMesh X:0〜0.34, position.x=-0.17 → worldX:-0.17〜+0.17
+// なかごX:-0.085〜0 → worldX:-0.255〜-0.17 → 中心-0.21
+// 刃部分worldX:-0.17〜+0.17を4等分: -0.13, -0.05, +0.03, +0.11
 const ZONE_POSITIONS = [
-  -0.22,  // なかご（柄側）
-  -0.08,  // 刃・柄寄り
-   0.06,  // 刃・中央寄り
-   0.16,  // 刃・中央
-   0.24,  // 刃・切先寄り
+  -0.21,  // なかご（柄側）
+  -0.13,  // 刃①・柄寄り
+  -0.05,  // 刃②・中央寄り
+  +0.03,  // 刃③・中央
+  +0.11,  // 刃④・切先寄り
 ];
 for (let i = 0; i < ZONE_COUNT; i++) {
   const wx = ZONE_POSITIONS[i];
@@ -1046,16 +1062,17 @@ function updateAngleHud(leftDeg, rightDeg, isAligned, bladeAngleDeg) {
   angleHudTex.needsUpdate = true;
 }
 
-// 研ぎフェーズ用刃物
+// 研ぎフェーズ用刃物（SHAPINGと同じ形状）
 const sharpenBladeGroup = new THREE.Group();
-const sharpenBladeMesh  = bladeMesh.clone();
-sharpenBladeMesh.position.set(-0.25, 0, 0); // X中心補正
+const sharpenBladeMesh  = bladeMesh.clone(); // nakagoも子としてclone済み
+// X中心補正: pos.x=-0.17, Y中心=0.035→回転後Z=0
+sharpenBladeMesh.position.set(-0.17, 0, 0);
 sharpenBladeMesh.rotation.set(Math.PI / 2, 0, 0); // 刃先を奥(+Z)へ
-// 刃先マーカーをsharpenBladeMeshの子にする（分離しないよう一緒に回転）
-const edgeMarkerGeo = new THREE.BoxGeometry(0.50, 0.003, 0.001);
+// edgeMarker（刃先=Y=0側 → rotation後+Z側）をsharpenBladeMeshの子に
+const edgeMarkerGeo = new THREE.BoxGeometry(0.34, 0.002, 0.001);
 const edgeMarkerMat = new THREE.MeshBasicMaterial({ color: 0x44aaff, transparent: true, opacity: 0.6 });
 const edgeMarker    = new THREE.Mesh(edgeMarkerGeo, edgeMarkerMat);
-edgeMarker.position.set(0.25, 0.001, 0); // ローカルY=0（刃先側）にX中心補正付きで配置
+edgeMarker.position.set(0.17, 0.001, 0); // X中心補正(0.34/2)、ローカルY=0（刃先側）
 sharpenBladeMesh.add(edgeMarker); // meshの子 → 常に一緒に動く
 sharpenBladeGroup.add(sharpenBladeMesh);
 sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.2);
@@ -1232,12 +1249,12 @@ function buildResultCanvas(score, bladeStateSnap, scores) {
     ctx.font = '26px serif';
     ctx.fillStyle = '#ffaa66';
     ctx.fillText(`×${weight}`, 50, y + 40);
-    // ゲージ背景
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    ctx.beginPath(); ctx.roundRect(BAR_X, y - 30, BAR_W, 36, 8); ctx.fill();
-    // ゲージ本体（最大幅の70%=BAR_W*0.7まで）
+    // ゲージ背景（70%幅のみ = スコア文字と重ならない幅）
     const maxBarW = BAR_W * 0.70;
-    const barW    = (val / 100) * maxBarW;
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.beginPath(); ctx.roundRect(BAR_X, y - 30, maxBarW, 36, 8); ctx.fill();
+    // ゲージ本体（100点=maxBarW幅ちょうど）
+    const barW = (val / 100) * maxBarW;
     const barColor = val > 70 ? '#44dd88' : val > 40 ? '#ffcc44' : '#ee5533';
     const barGrad  = ctx.createLinearGradient(BAR_X, 0, BAR_X + maxBarW, 0);
     barGrad.addColorStop(0, barColor);
@@ -1248,7 +1265,7 @@ function buildResultCanvas(score, bladeStateSnap, scores) {
     ctx.font = 'bold 42px monospace';
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'right';
-    ctx.fillText(`${val}pt`, SCORE_X, y + 6);
+    ctx.fillText(`${val}pt`, W - 40, y + 6);  // 枠右端から40px padding
     ctx.textAlign = 'left';
   });
 
@@ -1497,7 +1514,7 @@ function resetShaping() {
   bladePivot.position.set(0, workbenchPos.y + 0.04, -1.25);
   bladePivot.rotation.y = 0;
   bladeMesh.rotation.x  = -Math.PI/2; // 表を上に
-  bladeMesh.position.z  = 0.06;       // Z中心補正（表用）
+  bladeMesh.position.z  = 0.035;      // Z中心補正（表用、Y中心=0.035）
 }
 function resetSharpening() {
   strokeCount     = 0;
@@ -1595,14 +1612,21 @@ function onEnterState(state, prev) {
     const quality = finalScore / 100;
     showResultPanel(finalScore, bladeState, scores);
     // 刃物マテリアルを品質に応じて更新（depthTest:falseで常にパネルの前面に表示）
-    resultBlade.material = new THREE.MeshStandardMaterial({
+    const newMat = new THREE.MeshStandardMaterial({
       color:     new THREE.Color().setHSL(0.12 + quality * 0.13, 0.3 + quality * 0.5, 0.4 + quality * 0.3),
       roughness: 0.4 - quality * 0.2,
       metalness: 0.5 + quality * 0.5,
       depthTest:  false,
       depthWrite: false,
+      side: THREE.DoubleSide,
     });
-    resultBlade.renderOrder = 99;
+    // resultBlade自身とすべての子Mesh（nakago等）にrenderOrderと材質を適用
+    resultBladeGroup.traverse((obj) => {
+      if (obj.isMesh) {
+        obj.material    = newMat.clone();
+        obj.renderOrder = 99;
+      }
+    });
     updateStatusBar('結果', `スコア: ${Math.round(finalScore)}`, finalScore);
   }
 }
@@ -1767,7 +1791,7 @@ function updateForging(delta) {
     }
 
     updateInfoPanel(`フェーズ①：鍛造 / Forging\n打撃 ${forgingHitCount}/${CONFIG.FORGING.TOTAL_HITS}  ${result}\n温度: ${Math.round(ironTemperature)}°`);
-    updateScorePanel(`① ${result}  歪み:${Math.round(shapeDistortion)}`, new THREE.Vector3(0, workbenchPos.y + 0.58, -1.1));
+    updateScorePanel(`① ${result}  歪み:${Math.round(shapeDistortion)}`, new THREE.Vector3(0, workbenchPos.y + 0.23, -1.1));
     updateStatusBar('鍛造', `打撃 ${forgingHitCount}/${CONFIG.FORGING.TOTAL_HITS} | 温度: ${Math.round(ironTemperature)}°`, 100 - shapeDistortion);
 
     if (forgingHitCount >= CONFIG.FORGING.TOTAL_HITS) {
@@ -1807,12 +1831,12 @@ function updateShaping(delta) {
     const to   = bladeFlipped ?  Math.PI/2 : -Math.PI/2;
     bladeMesh.rotation.x = from + (to - from) * (1 - bladeFlipAnim);
     // Z補正もアニメーション（+0.06 ↔ -0.06）
-    const zFrom = bladeFlipped ? 0.06 : -0.06;
-    const zTo   = bladeFlipped ? -0.06 : 0.06;
+    const zFrom = bladeFlipped ? 0.035 : -0.035;
+    const zTo   = bladeFlipped ? -0.035 : 0.035;
     bladeMesh.position.z = zFrom + (zTo - zFrom) * (1 - bladeFlipAnim);
   } else {
     bladeMesh.rotation.x = bladeFlipped ?  Math.PI/2 : -Math.PI/2;
-    bladeMesh.position.z = bladeFlipped ? -0.06 : 0.06;
+    bladeMesh.position.z = bladeFlipped ? -0.035 : 0.035;
   }
 
   // ---- ゾーンインジケーター更新（刃物固定のため位置はそのまま、色のみ更新）----
@@ -1903,7 +1927,7 @@ function updateShaping(delta) {
     bladeState.symmetryError = avgAbs;
     updateInfoPanel(`フェーズ②：成形\nShaping\n打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS}\n平均歪み: ${Math.round(avgAbs)} / スコア: ${Math.round(shapingScore)}\nX：表裏反転 | A：終了`);
     updateStatusBar('成形', `打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS} | 歪み: ${Math.round(avgAbs)}`, shapingScore);
-    updateScorePanel(`② 歪み:${Math.round(avgAbs)} → ${Math.round(shapingScore)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.58, -1.25));
+    updateScorePanel(`② 歪み:${Math.round(avgAbs)} → ${Math.round(shapingScore)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.23, -1.25));
   }
   prevShapingTrigger = shapingTrig;
 
@@ -1990,8 +2014,12 @@ function updateSharpening(delta) {
     const dz  = midZ - prevSharpenZ;
     const dir = Math.sign(dz);
 
-    // 砥石上にあるかチェック（stoneMesh.z=-1.1, 判定幅を3倍=±0.54m）
-    const onStone = midZ > -1.64 && midZ < -0.56;
+    // 砥石上にあるかチェック
+    // stoneMesh.position.z=-1.1, size.z=0.36 → 実Z範囲: -1.28〜-0.92
+    // コントローラーはbladeGroup.z+0.06の位置なので補正: -1.22〜-0.86
+    // 3倍甘め（±0.18*3=±0.54）: -1.1+0.06-0.54=-1.58 〜 -1.1+0.06+0.54=-0.50
+    // ただし「砥石がない奥側」は除外: 奥の限界を -1.34（砥石後端より少し余裕）
+    const onStone = midZ > -1.34 && midZ < -0.50;
     if (Math.abs(dz) > 0.0075 && dir !== 0 && dir !== lastStrokeDir && onStone) {
       lastStrokeDir = dir;
 
@@ -2066,7 +2094,7 @@ function updateSharpening(delta) {
             `ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES} | ${Math.round(totalSharpness)}点`,
             Math.min(100, totalSharpness * (100 / (CONFIG.SHARPENING.TOTAL_STROKES * 3)))
           );
-          updateScorePanel(`③ ${grade} 合計:${Math.round(totalSharpness)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.58, -1.2));
+          updateScorePanel(`③ ${grade} 合計:${Math.round(totalSharpness)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.23, -1.2));
         }
       }
     }
@@ -2292,16 +2320,18 @@ renderer.setAnimationLoop((t) => {
     // 縦方向上昇
     p.y += delta * (0.08 + Math.random()*0.04);
     if (p.y > 3.5) p.y = 0;
-    // 横方向ランダムウォーク
-    p.vx += (Math.random()-0.5) * 0.12;
-    p.vz += (Math.random()-0.5) * 0.12;
-    p.vx = Math.max(-0.6, Math.min(0.6, p.vx));
-    p.vz = Math.max(-0.6, Math.min(0.6, p.vz));
+    // 横方向ランダムウォーク（1/3のゆっくり速さ、なめらかな動き）
+    p.vx += (Math.random()-0.5) * 0.04;  // 加速度1/3
+    p.vz += (Math.random()-0.5) * 0.04;
+    p.vx *= 0.97;  // 減衰でなめらかに
+    p.vz *= 0.97;
+    p.vx = Math.max(-0.2, Math.min(0.2, p.vx));  // 最大速度1/3
+    p.vz = Math.max(-0.2, Math.min(0.2, p.vz));
     p.x  += p.vx * delta;
     p.z  += p.vz * delta;
     // 範囲外は折り返す
-    if (p.x > 4 || p.x < -4) p.vx *= -1;
-    if (p.z > 4 || p.z < -4) p.vz *= -1;
+    if (p.x > 4 || p.x < -4) p.vx *= -0.8;
+    if (p.z > 4 || p.z < -4) p.vz *= -0.8;
     _ptDummy.position.set(p.x, p.y, p.z);
     _ptDummy.updateMatrix();
     if (i < _ptCountOrange) _ptOrange.setMatrixAt(i, _ptDummy.matrix);
