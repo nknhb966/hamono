@@ -440,14 +440,24 @@ document.addEventListener('keydown', resumeAudio, { once: true });
 /* ================================================================
    LIGHTING
 ================================================================ */
-scene.add(new THREE.AmbientLight(0x201510, 1.2));
-const sunLight = new THREE.DirectionalLight(0xfff0d0, 1.5);
-sunLight.position.set(2, 5, 3);
+// 環境光：明るめに
+scene.add(new THREE.AmbientLight(0x304050, 2.5));
+// メイン光源（右上前方）：影付き
+const sunLight = new THREE.DirectionalLight(0xfff8f0, 2.2);
+sunLight.position.set(2, 6, 2);
 sunLight.castShadow = true;
 sunLight.shadow.mapSize.set(1024, 1024);
 sunLight.shadow.camera.near = 0.1;
 sunLight.shadow.camera.far = 20;
 scene.add(sunLight);
+// 刃物専用：作業台真上からの強いライト（金属の輝きを強調）
+const bladeTopLight = new THREE.DirectionalLight(0xe8f0ff, 1.8);
+bladeTopLight.position.set(0, 4, -1);
+scene.add(bladeTopLight);
+// フィルライト（左側から補助）
+const fillLight = new THREE.DirectionalLight(0xb0c8e0, 1.0);
+fillLight.position.set(-3, 2, -1);
+scene.add(fillLight);
 
 const forgeLight = new THREE.PointLight(0xff4400, 0, 3);
 forgeLight.position.set(-1.2, 1.0, -1.5);
@@ -938,7 +948,7 @@ for (let i = 0; i < ZONE_COUNT; i++) {
 
   // 色ボックス（刃物の上に薄く被せる）
   const zoneIndMat = new THREE.MeshBasicMaterial({
-    color: 0x4499ff, transparent: true, opacity: 0.008, depthTest: true
+    color: 0x88bbff, transparent: true, opacity: 0.003, depthTest: true
   });
   const zoneInd = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.01, 0.08), zoneIndMat);
   zoneInd.position.set(wx, BLADE_Y, BLADE_WORLD_Z);
@@ -1000,7 +1010,7 @@ const arrowTex    = new THREE.CanvasTexture(arrowCanvas);
 
 // 角度表示 HUD パネル（右手トリガー右側に動的配置）
 const angleHudCanvas = document.createElement('canvas');
-angleHudCanvas.width = 256; angleHudCanvas.height = 80;  // tempSpriteと同じ縦サイズ
+angleHudCanvas.width = 272; angleHudCanvas.height = 200;  // メッシュ比(0.15:0.11=1.36:1)に合わせた解像度
 const angleHudTex = new THREE.CanvasTexture(angleHudCanvas);
 const angleHudMesh = new THREE.Mesh(
   new THREE.PlaneGeometry(0.15, 0.11),
@@ -1014,14 +1024,14 @@ function updateAngleHud(leftDeg, rightDeg, isAligned, bladeAngleDeg) {
   // Canvasは 256x80 だがメッシュは(0.15,0.11)なので縦長に圧縮される
   // → テキストを上下に分けてコンパクトに
   const ctx = angleHudCanvas.getContext('2d');
-  ctx.clearRect(0, 0, 256, 80);
+  ctx.clearRect(0, 0, 272, 200);
   ctx.fillStyle = 'rgba(0,0,0,0.85)';
-  ctx.beginPath(); ctx.roundRect(2, 2, 252, 76, 8); ctx.fill();
+  ctx.beginPath(); ctx.roundRect(3, 3, 266, 194, 10); ctx.fill();
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   if (!isAligned) {
     ctx.fillStyle = '#ff4411';
-    ctx.font = 'bold 52px monospace';
-    ctx.fillText('NG', 128, 40);
+    ctx.font = 'bold 80px monospace';
+    ctx.fillText('NG', 136, 100);
   } else {
     // 角度 + グレード記号
     const err = bladeAngleDeg - CONFIG.SHARPENING.IDEAL_ANGLE;
@@ -1032,9 +1042,9 @@ function updateAngleHud(leftDeg, rightDeg, isAligned, bladeAngleDeg) {
     else if ((bladeAngleDeg > -8 && bladeAngleDeg < -3) || (bladeAngleDeg >= -35 && bladeAngleDeg < -22)) gradeSymbol = '○';
     else if (bladeAngleDeg >= -3 && bladeAngleDeg <= 4)    gradeSymbol = '△';
     ctx.fillStyle = col;
-    ctx.font = 'bold 34px monospace';
+    ctx.font = 'bold 54px monospace';
     const sign = bladeAngleDeg >= 0 ? '+' : '';
-    ctx.fillText(`${sign}${Math.round(bladeAngleDeg)}° ${gradeSymbol}`, 128, 40);
+    ctx.fillText(`${sign}${Math.round(bladeAngleDeg)}° ${gradeSymbol}`, 136, 100);
   }
   angleHudTex.needsUpdate = true;
   // 右手コントローラー右側+0.15mに動的配置
@@ -1057,24 +1067,6 @@ sharpenBladeMesh.rotation.set(Math.PI / 2, 0, 0); // 刃先を奥(+Z)へ
 sharpenBladeGroup.add(sharpenBladeMesh);
 sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.2);
 groupSharpening.add(sharpenBladeGroup);
-
-// ============ RESULT BLADE DISPLAY ============
-const resultBladeGroup = new THREE.Group();
-const resultBlade = bladeMesh.clone();
-resultBlade.position.set(-0.25, 0, 0);  // X中心補正
-resultBlade.rotation.x = -Math.PI / 2;  // 平置き
-resultBlade.scale.set(1, 1, 1);         // 現在の1/2サイズ（元が2倍だった）
-// material を depthTest:false にして常にパネルの前面に描画
-resultBlade.material = resultBlade.material.clone();
-resultBlade.material.depthTest  = false;
-resultBlade.material.depthWrite = false;
-resultBlade.material.side       = THREE.DoubleSide;
-resultBlade.renderOrder = 99;
-resultBladeGroup.position.set(0, 1.5, -2.0);
-resultBladeGroup.renderOrder = 99;
-resultBladeGroup.add(resultBlade);
-scene.add(resultBladeGroup);
-resultBladeGroup.visible = false;
 
 /* ================================================================
    VR CANVAS TEXT PANEL
@@ -1359,15 +1351,6 @@ function saveScore(score) {
 /* ================================================================
    UI HTML UPDATES
 ================================================================ */
-function updateStatusBar(label, info, score) {
-  const sl = document.getElementById('state-label');
-  const pi = document.getElementById('phase-info');
-  const sd = document.getElementById('score-display');
-  if (sl) sl.textContent = label;
-  if (pi) pi.textContent = info;
-  if (sd && score !== null) sd.textContent = `Score: ${Math.round(score)}`;
-}
-
 /* ================================================================
    FORGING STATE VARIABLES
 ================================================================ */
@@ -1547,7 +1530,6 @@ function setVisibility() {
   groupForging.visible    = currentState === State.FORGING;
   groupShaping.visible    = currentState === State.SHAPING;
   groupSharpening.visible = currentState === State.SHARPENING;
-  resultBladeGroup.visible = currentState === State.RESULT;
   resultPanel.visible     = currentState === State.RESULT;
   infoPanel.visible       = currentState !== State.RESULT;
   scorePanelGroup.visible = (currentState === State.FORGING || currentState === State.SHAPING || currentState === State.SHARPENING);
@@ -1585,29 +1567,25 @@ function onEnterState(state, prev) {
   if (state === State.INTRO) {
     bladeState = { shapeDistortion: 0, symmetryError: 0, sharpness: 0 };
     resetForging(); resetShaping(); resetSharpening();
-    updateInfoPanel('越前打刃物 / Echizen Blades\n鍛冶職人VR体験\nAボタンで開始 / Press A');
-    updateStatusBar('INTRO', 'Aボタン：開始 / Press A', null);
+    updateInfoPanel('越前打刃物 / Echizen Blades\n\n鍛冶職人VR体験\nBlacksmith Experience\n\nAボタンで開始\nPress A Button to Start');
 
   } else if (state === State.FORGING) {
     resetForging();
     shapeDistortion = 100;
-    updateInfoPanel('① 鍛造 / Forging\n炉で熱を→作業台で叩く\nGrip:掴む Trigger:打撃\n温度80-60°=○最高 | A:次へ');
-    updateStatusBar('① 鍛造', '', 0);
+    updateInfoPanel('① 鍛造 / Phase 1: Forging\n\n炉に入れて鉄を加熱、適温で作業台に置きハンマーで叩く\nHeat iron in furnace, place on bench and hammer\n\n左グリップ：鉄を掴む / Left Grip: Hold iron\n右トリガー：打撃 / Right Trigger: Hammer\n\n温度帯：80-60°=○Perfect/Good/Miss\n　　　100-80°=△Good/Miss 60°未満=×Miss\n\nAボタン：次のフェーズへ / A: Next Phase');
 
   } else if (state === State.SHAPING) {
     resetShaping();
     bladeState.shapeDistortion = shapeDistortion;
     bladeState.symmetryError   = 100;
-    updateInfoPanel('② 成形 / Shaping\n赤ゾーンを叩いて歪み修正\nTrigger:叩く X:表裏反転\n歪み0=100pt | A:終了');
-    updateStatusBar('② 成形', '', 0);
+    updateInfoPanel('② 成形 / Phase 2: Shaping\n\n赤いゾーンを叩いて刃物の歪みを修正する\nHammer red zones to fix blade distortion\n\n右トリガー：ゾーンを叩く / Right Trigger: Hammer zone\nXボタン：表裏反転 / X Button: Flip blade\n\n表(+)の歪みは表から、裏(-)の歪みは裏から叩く\nHit from same side as distortion sign\n\n歪み=0で最高得点(100pt)\nDistortion=0 gives max score (100pt)\n\nAボタン：終了 / A: Finish');
 
   } else if (state === State.SHARPENING) {
     resetSharpening();
     if (shapingComplete) {
       bladeState.symmetryError = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
     }
-    updateInfoPanel('③ 研ぎ / Sharpening\n両グリップ:刃物保持→前後スライド\n目標角度 -15°(手前傾け)\n両手角度揃える(HUD:NG=不一致)\n◎3pt ○2pt △1pt ×0pt');
-    updateStatusBar('③ 研ぎ', '', 0);
+    updateInfoPanel('③ 研ぎ / Phase 3: Sharpening\n\n両手グリップで刃物を保持し、砥石の上で前後にスライド\nHold blade with both grips, slide back & forth on whetstone\n\n目標角度：-15°（コントローラーを手前に傾ける）\nTarget angle: -15° (tilt controller toward you)\n\n両手の角度を揃えること（HUDにNG表示=不一致）\nAlign both hands (HUD shows NG if misaligned)\n\n◎(-22〜-8°)=3pt  ○=2pt  △(水平付近)=1pt  ×=0pt\n◎10回達成で+10ptボーナス\n10x ◎ bonus: +10pt\n\nAボタン：次のフェーズへ / A: Next Phase');
 
   } else if (state === State.RESULT) {
     // symmetryError=0→shapingScore=100, symmetryError=25→shapingScore=0
@@ -1629,25 +1607,9 @@ function onEnterState(state, prev) {
       sharpenScoreFinal * 0.3
     ));
     const scores  = saveScore(finalScore);
-    const quality = finalScore / 100;
     showResultPanel(finalScore, bladeState, scores);
     // 刃物マテリアルを品質に応じて更新（depthTest:falseで常にパネルの前面に表示）
-    // 結果刃物: depthTest:false + renderOrder:99 で確実にパネルの前に表示
-    const newMat = new THREE.MeshStandardMaterial({
-      color:     new THREE.Color().setHSL(0.12 + quality * 0.13, 0.3 + quality * 0.5, 0.4 + quality * 0.3),
-      roughness: 0.4 - quality * 0.2,
-      metalness: 0.5 + quality * 0.5,
-      depthTest:  false,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
-    resultBladeGroup.traverse((obj) => {
-      if (obj.isMesh) {
-        obj.material    = newMat.clone();
-        obj.renderOrder = 99;
-      }
-    });
-    updateStatusBar('結果', `スコア: ${Math.round(finalScore)}`, finalScore);
+    // 刃物出力なし
   }
 }
 
@@ -1810,9 +1772,7 @@ function updateForging(delta) {
       rightController.gamepad.hapticActuators[0].pulse(result === 'Perfect' ? 0.8 : 0.3, 80);
     }
 
-    updateInfoPanel(`フェーズ①：鍛造 / Forging\n打撃 ${forgingHitCount}/${CONFIG.FORGING.TOTAL_HITS}  ${result}\n温度: ${Math.round(ironTemperature)}°`);
-    updateScorePanel(`① 打撃 ${forgingHitCount}/${CONFIG.FORGING.TOTAL_HITS}\n${result}  歪み:${Math.round(shapeDistortion)}`, new THREE.Vector3(0, workbenchPos.y + 0.23, -1.1));
-    updateStatusBar('鍛造', `打撃 ${forgingHitCount}/${CONFIG.FORGING.TOTAL_HITS} | 温度: ${Math.round(ironTemperature)}°`, 100 - shapeDistortion);
+    updateScorePanel(`① 打撃 ${forgingHitCount}/${CONFIG.FORGING.TOTAL_HITS}\n${result}  歪み:${Math.round(shapeDistortion)}`, new THREE.Vector3(0, workbenchPos.y + 0.43, -1.1));
 
     if (forgingHitCount >= CONFIG.FORGING.TOTAL_HITS) {
       forgingComplete = true;
@@ -1946,8 +1906,7 @@ function updateShaping(delta) {
     // bladeState.symmetryErrorをリアルタイム更新（RESULT遷移時に使用）
     bladeState.symmetryError = avgAbs;
     updateInfoPanel(`フェーズ②：成形\nShaping\n打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS}\n平均歪み: ${Math.round(avgAbs)} / スコア: ${Math.round(shapingScore)}\nX：表裏反転 | A：終了`);
-    updateStatusBar('成形', `打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS} | 歪み: ${Math.round(avgAbs)}`, shapingScore);
-    updateScorePanel(`② 打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS}\n歪み:${Math.round(avgAbs)} → ${Math.round(shapingScore)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.23, -1.25));
+    updateScorePanel(`② 打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS}\n歪み:${Math.round(avgAbs)} → ${Math.round(shapingScore)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.43, -1.25));
   }
   prevShapingTrigger = shapingTrig;
 
@@ -2106,15 +2065,7 @@ function updateSharpening(delta) {
           const bonusMsg = consecutivePerfect > 0 && consecutivePerfect % 10 === 0
             ? '\n★ ◎×10 ボーナス +10!'
             : '';
-          updateInfoPanel(
-            `ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES}\n刃角: ${Math.round(bladeAngleDeg)}° (目標-15°)\n${grade} +${addPoints}点 → 合計: ${Math.round(totalSharpness)}点${bonusMsg}`
-          );
-          updateStatusBar(
-            '研ぎ',
-            `ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES} | ${Math.round(totalSharpness)}点`,
-            Math.min(100, totalSharpness * (100 / (CONFIG.SHARPENING.TOTAL_STROKES * 3)))
-          );
-          updateScorePanel(`③ ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES}\n${grade} 合計:${Math.round(totalSharpness)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.23, -1.2));
+          updateScorePanel(`③ ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES}\n${grade} 合計:${Math.round(totalSharpness)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.43, -1.2));
         }
       }
     }
@@ -2139,8 +2090,7 @@ function updateSharpening(delta) {
    UPDATE RESULT
 ================================================================ */
 function updateResult(delta) {
-  // 結果刃物グループをゆっくり回転（Y軸）
-  resultBladeGroup.rotation.y += delta * 0.8;
+  // 結果パネルのみ表示（刃物なし）
 }
 
 /* ================================================================
