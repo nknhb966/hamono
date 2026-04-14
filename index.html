@@ -659,57 +659,49 @@ const workbenchPos = new THREE.Vector3(0, 0.85, -1.1);
 
 function makeWorkbench(parent) {
   const group = new THREE.Group();
-
-  // レンガ色のモルタルベース（暗め）
   const mortarMat = new THREE.MeshStandardMaterial({ color: 0x2a1e14, roughness: 0.95 });
-  // 天板：鉄や刃物と区別できる深い赤錆色
   const topMat    = new THREE.MeshStandardMaterial({ color: 0x5c3020, roughness: 0.85, metalness: 0.05 });
 
-  // 天板
+  // 天板（Y=workbenchPos.y に直接配置）
   const top = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.06, 0.5), topMat);
+  top.position.y = workbenchPos.y;
   top.castShadow = true; top.receiveShadow = true;
   group.add(top);
 
-  // レンガ段（3段積み）
-  const brickColors = [0x7a3a22, 0x6a2e1a, 0x7e3e28];
-  const brickH = 0.12;
-  for (let row = 0; row < 3; row++) {
-    const bmat = new THREE.MeshStandardMaterial({ color: brickColors[row % 3], roughness: 0.9 });
-    // 各段に交互にずらしたレンガを並べる
-    const brickW = 0.215; const brickD = 0.22; const gap = 0.012;
+  // レンガ積み：天板下面(workbenchPos.y - 0.03)から床(y=0)まで積む
+  // 天板下面 = workbenchPos.y(0.85) - 0.03 = 0.82
+  // nRows = ceil(0.82 / 0.12) = 7段
+  const brickColors = [0x7a3a22, 0x6a2e1a, 0x7e3e28, 0x5a2a14, 0x6e3420, 0x7a3a22, 0x6a2e1a];
+  const brickH = 0.12; const nRows = 7;
+  const brickW = 0.215; const brickD = 0.22; const gap = 0.012;
+  for (let row = 0; row < nRows; row++) {
+    // row=nRows-1 が一番上（天板直下）, row=0 が一番下（床近く）
+    const rowY = workbenchPos.y - 0.03 - brickH * (nRows - 1 - row) - (brickH - gap) / 2;
+    const bmat = new THREE.MeshStandardMaterial({ color: brickColors[row % brickColors.length], roughness: 0.9 });
     const brickCount = 4;
     const offset = (row % 2 === 0) ? 0 : brickW * 0.5;
     for (let col = 0; col < brickCount; col++) {
       const bk = new THREE.Mesh(new THREE.BoxGeometry(brickW, brickH - gap, brickD - gap), bmat);
-      bk.position.set(
-        -0.43 + col * (brickW + gap) + offset,
-        -0.03 - brickH * (2 - row),
-        0
-      );
+      bk.position.set(-0.43 + col * (brickW + gap) + offset, rowY, 0);
       bk.castShadow = true; bk.receiveShadow = true;
       group.add(bk);
     }
-    // 前後レンガ（奥・手前）
-    for (let side of [-1, 1]) {
+    for (const side of [-1, 1]) {
       const bk2 = new THREE.Mesh(new THREE.BoxGeometry(0.88, brickH - gap, brickD * 0.5 - gap), bmat);
-      bk2.position.set(0, -0.03 - brickH * (2 - row), side * 0.19);
+      bk2.position.set(0, rowY, side * 0.19);
       bk2.castShadow = true;
       group.add(bk2);
     }
   }
 
-  // モルタルベース（底部）
-  const base = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.05, 0.52), mortarMat);
-  base.position.set(0, -0.03 - brickH * 3 - 0.025, 0);
+  // モルタルベース（床に接地）
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.04, 0.52), mortarMat);
+  base.position.set(0, 0.02, 0);
   base.castShadow = true; base.receiveShadow = true;
   group.add(base);
 
-  // 床から接地：group.y=0, 天板をworkbenchPos.yの高さに
+  // グループを床(y=0)に配置
   group.position.set(workbenchPos.x, 0, workbenchPos.z);
-  // 既存の相対Y座標にworkbenchPos.yを加算してシフト
-  group.children.forEach(obj => {
-    obj.position.y += workbenchPos.y;
-  });
   parent.add(group);
   return group;
 }
@@ -946,7 +938,7 @@ for (let i = 0; i < ZONE_COUNT; i++) {
 
   // 色ボックス（刃物の上に薄く被せる）
   const zoneIndMat = new THREE.MeshBasicMaterial({
-    color: 0x0066ff, transparent: true, opacity: 0.12, depthTest: true
+    color: 0x0066ff, transparent: true, opacity: 0.03, depthTest: true
   });
   const zoneInd = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.01, 0.08), zoneIndMat);
   zoneInd.position.set(wx, BLADE_Y, BLADE_WORLD_Z);
@@ -1011,7 +1003,7 @@ const angleHudCanvas = document.createElement('canvas');
 angleHudCanvas.width = 256; angleHudCanvas.height = 80;  // tempSpriteと同じ縦サイズ
 const angleHudTex = new THREE.CanvasTexture(angleHudCanvas);
 const angleHudMesh = new THREE.Mesh(
-  new THREE.PlaneGeometry(0.35, 0.11),  // tempSpriteと同サイズ
+  new THREE.PlaneGeometry(0.15, 0.11),
   new THREE.MeshBasicMaterial({ map: angleHudTex, transparent: true, depthTest: true, side: THREE.DoubleSide })
 );
 // 初期位置（右手が取れるまでのデフォルト）
@@ -1069,7 +1061,7 @@ resultBlade.rotation.x = -Math.PI / 2;  // 平置き
 resultBlade.scale.set(1, 1, 1);         // 現在の1/2サイズ（元が2倍だった）
 // material を depthTest:false にして常にパネルの前面に描画
 resultBlade.material = resultBlade.material.clone();
-resultBlade.material.depthTest  = true;
+resultBlade.material.depthTest  = false;
 resultBlade.material.depthWrite = false;
 resultBlade.material.side       = THREE.DoubleSide;
 resultBlade.renderOrder = 99;
@@ -1145,7 +1137,7 @@ function updateInfoPanel(text) {
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, side: THREE.DoubleSide });
   infoPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.5), mat);
-  infoPanelMesh.position.set(0, 2.0, -1.3);
+  infoPanelMesh.position.set(0, 1.3, -1.5);  // 目の高さ(1.3m)
   // 正面を向かせる（回転なし = ワールド座標系でZ-方向を向く）
   infoPanelMesh.rotation.set(0, 0, 0);
   infoPanel.add(infoPanelMesh);
@@ -1188,6 +1180,16 @@ function buildResultCanvas(score, bladeStateSnap, scores) {
   ctx.fillStyle = '#ffaa88';
   ctx.fillText('Echizen Blades Complete', W/2, 120);
 
+  // フェーズ①②③スコア（onEnterStateと同じ計算式）— まず計算
+  const forgingScore  = Math.round(Math.max(0, Math.min(100, 100 - bladeStateSnap.shapeDistortion)));
+  const shapingScore2 = Math.round(Math.max(0, Math.min(100, 100 - bladeStateSnap.symmetryError * 4)));
+  const sharpenScore  = Math.round(Math.max(0, Math.min(100, bladeStateSnap.sharpness)));
+  const recomputedFinal = Math.max(0, Math.min(100,
+    forgingScore  * 0.4 +
+    shapingScore2 * 0.3 +
+    sharpenScore  * 0.3
+  ));
+
   // Score big
   const rankJa = recomputedFinal >= 90 ? '名人' : recomputedFinal >= 70 ? '職人' : '見習い';
   const rankEn = recomputedFinal >= 90 ? 'Master' : recomputedFinal >= 70 ? 'Craftsman' : 'Apprentice';
@@ -1206,17 +1208,6 @@ function buildResultCanvas(score, bladeStateSnap, scores) {
   ctx.strokeStyle = 'rgba(255,120,80,0.5)';
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(50, 360); ctx.lineTo(W-50, 360); ctx.stroke();
-
-  // フェーズ①②③スコア（onEnterStateと同じ計算式）
-  const forgingScore  = Math.round(Math.max(0, Math.min(100, 100 - bladeStateSnap.shapeDistortion)));
-  const shapingScore2 = Math.round(Math.max(0, Math.min(100, 100 - bladeStateSnap.symmetryError * 4)));
-  const sharpenScore  = Math.round(Math.max(0, Math.min(100, bladeStateSnap.sharpness)));
-  // 総合スコアもonEnterStateと同じ計算式で再計算
-  const recomputedFinal = Math.max(0, Math.min(100,
-    forgingScore  * 0.4 +
-    shapingScore2 * 0.3 +
-    sharpenScore  * 0.3
-  ));
   const details = [
     ['① 鍛造 Forging',  forgingScore,  0.4],
     ['② 成形 Shaping',  shapingScore2, 0.3],
@@ -1584,29 +1575,29 @@ function onEnterState(state, prev) {
   if (state === State.INTRO) {
     bladeState = { shapeDistortion: 0, symmetryError: 0, sharpness: 0 };
     resetForging(); resetShaping(); resetSharpening();
-    updateInfoPanel('越前打刃物\nEchizen Blades\n\n鍛冶職人体験VR / Blacksmith VR\nAボタンで開始 / Press A to Start');
+    updateInfoPanel('越前打刃物 / Echizen Blades\n\nAボタンで開始 / Press A to Start');
     updateStatusBar('INTRO', 'Aボタン：開始 / Press A', null);
 
   } else if (state === State.FORGING) {
     resetForging();
     shapeDistortion = 100;
-    updateInfoPanel('フェーズ①：鍛造 / Phase 1: Forging\n\n炉で鉄を熱し、作業台で叩け\nHeat iron, then hammer on bench\n左グリップ：掴む / Left Grip: Hold\n右トリガー：打撃 / Right Trigger: Hit');
-    updateStatusBar('鍛造 Forging', '打撃 0/30 | Temp: 0', 0);
+    updateInfoPanel('鍛造 / Forging\n左グリップ：鉄を掴む / Grip: Hold iron\n右トリガー：ハンマー / Trigger: Hammer\nAボタン：次へ / A: Next');
+    updateStatusBar('① 鍛造', '', 0);
 
   } else if (state === State.SHAPING) {
     resetShaping();
     bladeState.shapeDistortion = shapeDistortion;
     bladeState.symmetryError   = 100;
-    updateInfoPanel('フェーズ②：成形 / Phase 2: Shaping\n\n赤いゾーンを叩いて歪みを修正\nHammer red zones to fix distortion\nXボタン：表裏反転 / X: Flip blade\nAボタン：終了 / A: Finish');
-    updateStatusBar('成形 Shaping', '打撃 0/100 | A: Finish', 0);
+    updateInfoPanel('成形 / Shaping\n右トリガー：ゾーンを叩く / Hammer zones\nXボタン：表裏反転 / X: Flip\nAボタン：終了 / A: Finish');
+    updateStatusBar('② 成形', '', 0);
 
   } else if (state === State.SHARPENING) {
     resetSharpening();
     if (shapingComplete) {
       bladeState.symmetryError = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
     }
-    updateInfoPanel('フェーズ③：研ぎ / Phase 3: Sharpening\n両手グリップで刃物を保持\nGrip blade with both hands\n前後に動かして研ぐ / Slide back & forth\n目標角度 -15°（手前に傾ける）\n両手の角度を揃えること（HUD:NGは角度不一致）\nAlign both hands（HUD shows NG if misaligned）');
-    updateStatusBar('研ぎ Sharpening', 'Strokes 0/30', 0);
+    updateInfoPanel('研ぎ / Sharpening\n両グリップ：刃物を保持 / Both grips: Hold\n前後にスライド / Slide back & forth\n目標角度 -15° (手前傾け)\n両手の角度を揃える / Align hands (HUD:NG=misaligned)');
+    updateStatusBar('③ 研ぎ', '', 0);
 
   } else if (state === State.RESULT) {
     // symmetryError=0→shapingScore=100, symmetryError=25→shapingScore=0
@@ -2175,13 +2166,26 @@ scene.add(_ptOrange);
 scene.add(_ptYellow);
 // particles は互換性のためエイリアス（更新はまとめて行う）
 
-// 各パーティクルの状態（横方向ランダムウォーク付き）
-const _ptPos = Array.from({ length: particleCount }, () => ({
-  x:  (Math.random()-0.5)*8,
-  y:  Math.random()*3,
-  z:  (Math.random()-0.5)*8,
-  vx: (Math.random()-0.5)*0.4,  // 横方向ランダムウォーク速度
-  vz: (Math.random()-0.5)*0.4,
+// Perlinノイズ用シンプルスムーズノイズ
+function smoothNoise(x) {
+  const i = Math.floor(x);
+  const f = x - i;
+  const u = f * f * (3 - 2 * f); // smoothstep
+  const a = Math.sin(i * 127.1) * 43758.5453;
+  const b = Math.sin((i+1) * 127.1) * 43758.5453;
+  return (a - Math.floor(a)) * (1 - u) + (b - Math.floor(b)) * u;
+}
+function perlin2(x, z) {
+  return smoothNoise(x * 2.1) * 2 - 1 + (smoothNoise(z * 1.7 + 100) * 2 - 1);
+}
+
+// 各パーティクルの状態（Perlinノイズによる横移動）
+const _ptPos = Array.from({ length: particleCount }, (_, idx) => ({
+  x:    (Math.random()-0.5)*8,
+  y:    Math.random()*3,
+  z:    (Math.random()-0.5)*8,
+  seed: Math.random() * 100,    // 個別ノイズオフセット
+  t:    Math.random() * 10,     // ノイズ時間オフセット
 }));
 const _ptDummy = new THREE.Object3D();
 // 初期行列を設定
@@ -2333,24 +2337,21 @@ renderer.setAnimationLoop((t) => {
   const delta = Math.min((t - lastTime) / 1000, 0.033);
   lastTime = t;
 
-  // アンビエント球体パーティクル更新（横方向ランダムウォーク）
+  // アンビエント球体パーティクル更新（Perlinノイズによる横移動）
   for (let i = 0; i < particleCount; i++) {
     const p = _ptPos[i];
-    // 縦方向上昇
-    p.y += delta * (0.08 + Math.random()*0.04);
-    if (p.y > 3.5) p.y = 0;
-    // 横方向ランダムウォーク（1/3のゆっくり速さ、なめらかな動き）
-    p.vx += (Math.random()-0.5) * 0.04;  // 加速度1/3
-    p.vz += (Math.random()-0.5) * 0.04;
-    p.vx *= 0.985;  // 強い減衰でよりなめらかに
-    p.vz *= 0.985;
-    p.vx = Math.max(-0.2, Math.min(0.2, p.vx));  // 最大速度1/3
-    p.vz = Math.max(-0.2, Math.min(0.2, p.vz));
-    p.x  += p.vx * delta;
-    p.z  += p.vz * delta;
-    // 範囲外は折り返す
-    if (p.x > 4 || p.x < -4) p.vx *= -0.8;
-    if (p.z > 4 || p.z < -4) p.vz *= -0.8;
+    p.t += delta * 0.18;  // ノイズ時間を緩やかに進める
+    // 縦方向上昇（変更なし）
+    p.y += delta * (0.08 + Math.sin(p.seed + p.t)*0.015);
+    if (p.y > 3.5) { p.y = 0; p.t = Math.random() * 10; }
+    // Perlinノイズで横方向をなめらかに
+    const nx = perlin2(p.t + p.seed,       p.seed * 0.3) * 0.07;
+    const nz = perlin2(p.seed * 0.5, p.t + p.seed * 0.7) * 0.07;
+    p.x += nx * delta;
+    p.z += nz * delta;
+    // 範囲外は中央に引き戻す
+    if (Math.abs(p.x) > 4) p.x *= 0.95;
+    if (Math.abs(p.z) > 4) p.z *= 0.95;
     _ptDummy.position.set(p.x, p.y, p.z);
     _ptDummy.updateMatrix();
     if (i < _ptCountOrange) _ptOrange.setMatrixAt(i, _ptDummy.matrix);
