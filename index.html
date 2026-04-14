@@ -557,6 +557,7 @@ const spkMat = new THREE.PointsMaterial({
   depthWrite: false,
 });
 const spkMesh = new THREE.Points(spkGeo, spkMat);
+spkMesh.frustumCulled = false; // バウンディング球の計算をスキップ（確実に描画）
 scene.add(spkMesh);
 
 const _spk = Array.from({ length: SPARK_MAX }, () => ({
@@ -570,6 +571,7 @@ let _spkHead = 0;
 
 for (let i = 0; i < SPARK_MAX; i++) _spkPositions[i*3+1] = -200;
 _spkPosBuf.needsUpdate = true;
+spkGeo.computeBoundingSphere(); // バウンディング球を明示的に計算
 
 function spawnSparks(origin, count, mode = 'forge', spread = 1.0) {
   for (let n = 0; n < count; n++) {
@@ -581,9 +583,16 @@ function spawnSparks(origin, count, mode = 'forge', spread = 1.0) {
     s.px = origin.x + (Math.random()-0.5)*0.06*spread;
     s.py = origin.y + Math.random()*0.04*spread;
     s.pz = origin.z + (Math.random()-0.5)*0.06*spread;
-    s.vx = (Math.random()-0.5)*6*spread;
-    s.vy = (Math.random()*7+2)*spread;
-    s.vz = (Math.random()-0.5)*6*spread;
+    if (mode === 'water') {
+      // 水滴：横方向に広がり、少し飛ぶ
+      s.vx = (Math.random()-0.5)*3;
+      s.vy = Math.random()*2 + 0.5;
+      s.vz = (Math.random()-0.5)*3;
+    } else {
+      s.vx = (Math.random()-0.5)*6*spread;
+      s.vy = (Math.random()*7+2)*spread;
+      s.vz = (Math.random()-0.5)*6*spread;
+    }
     s.maxLife = (0.30+Math.random()*0.45)*spread + 0.1;
     s.life    = s.maxLife;
   }
@@ -607,6 +616,11 @@ function updateSparks(delta) {
     if (s.mode === 'shape') {
       _spkColors[b]   = 0.4 + t*0.6;
       _spkColors[b+1] = 0.6 + t*0.4;
+      _spkColors[b+2] = 1.0;
+    } else if (s.mode === 'water') {
+      // 水滴：明るい水色〜透明
+      _spkColors[b]   = 0.2 + t*0.3;
+      _spkColors[b+1] = 0.5 + t*0.5;
       _spkColors[b+2] = 1.0;
     } else {
       _spkColors[b]   = 1.0;
@@ -822,16 +836,29 @@ tongGroup.position.set(0, -0.03, -0.1);
 // ============ SHAPING OBJECTS ============
 const shapingBench = makeWorkbench(groupShaping);
 
-// Blade model (knife-like shape via custom geometry)
+// Blade model — 包丁らしい形状
+// X: 0=柄側〜0.5=切先, Y: 0=刃先(薄)〜0.12=峰(厚)
+// 刃先(Y=0)は鋭く薄く、峰(Y=0.12)は厚くまっすぐ
 function createBladeGeometry() {
   const shape = new THREE.Shape();
-  shape.moveTo(0, 0);
-  shape.lineTo(0.5, 0.02);
-  shape.lineTo(0.45, 0.08);
-  shape.lineTo(0.0, 0.09);
-  shape.lineTo(-0.05, 0.04);
-  shape.lineTo(0, 0);
-  const extrudeSettings = { depth: 0.012, bevelEnabled: true, bevelThickness: 0.003, bevelSize: 0.003, bevelSegments: 2 };
+  // 刃先ライン（Y=0、下辺）: 柄側から切先へ
+  shape.moveTo(0,    0);      // 柄元・刃先
+  shape.lineTo(0.48, 0.01);   // 切先・刃先（わずかに上がる）
+  // 切先（鋭い先端）
+  shape.lineTo(0.50, 0.04);   // 切先の尖り
+  // 峰ライン（上辺）: 切先から柄元へ
+  shape.lineTo(0.44, 0.12);   // 切先・峰
+  shape.lineTo(0.02, 0.12);   // 峰・まっすぐ
+  // 柄元
+  shape.lineTo(-0.02, 0.06);  // 柄元の端
+  shape.lineTo(0,    0);      // 閉じる
+  const extrudeSettings = {
+    depth: 0.008,              // 刃の厚み（薄め）
+    bevelEnabled: true,
+    bevelThickness: 0.001,
+    bevelSize: 0.002,
+    bevelSegments: 2,
+  };
   return new THREE.ExtrudeGeometry(shape, extrudeSettings);
 }
 const bladeGeo = createBladeGeometry();
@@ -884,10 +911,10 @@ function updateZoneSprite(idx) {
 // 刃物のXZ平面上の配置に合わせたゾーン設定
 // bladeGeo は X: 0〜0.5, Y: 0〜0.09 の形状 → rotation.x=-PI/2後は X: 0〜0.5, Z: 0〜0.09
 // bladeMesh.position.x = -0.25 なので ワールドX: -0.25 〜 +0.25
-const BLADE_WORLD_X0 = -0.25;  // 刃先側
-const BLADE_WORLD_X1 =  0.25;  // 峰側 (0.5幅)
-const BLADE_WORLD_Z  = -1.22;  // 刃物中心Z
-const BLADE_Y        = workbenchPos.y + 0.045; // ゾーン表示高さ
+const BLADE_WORLD_X0 = -0.25;  // 柄側
+const BLADE_WORLD_X1 =  0.25;  // 切先側 (X: 0〜0.5 → -0.25〜+0.25)
+const BLADE_WORLD_Z  = -1.25;  // bladePivot.position.z と一致
+const BLADE_Y        = workbenchPos.y + 0.05; // ゾーン表示高さ（少し上）
 
 for (let i = 0; i < ZONE_COUNT; i++) {
   const t = i / (ZONE_COUNT - 1);
@@ -1030,7 +1057,7 @@ groupSharpening.add(sharpenBladeGroup);
 // ============ RESULT BLADE DISPLAY ============
 const resultBladeGroup = new THREE.Group();
 const resultBlade = bladeMesh.clone();
-resultBlade.position.set(0, 1.5, -1.5);
+resultBlade.position.set(0, 1.5, -1.0);  // 手前に移動 (-1.5 → -1.0)
 resultBlade.scale.set(2, 2, 2);
 resultBladeGroup.add(resultBlade);
 scene.add(resultBladeGroup);
@@ -1189,8 +1216,8 @@ function showResultPanel(score, bladeStateSnap, scores) {
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, side: THREE.DoubleSide });
   resultPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.75), mat);
-  resultPanelMesh.position.set(0, 1.55, -1.6);
-  resultPanelMesh.rotation.set(0, 0, 0); // 正面固定
+  resultPanelMesh.position.set(0, 1.55, -2.5);  // 奥へ移動 (-1.6 → -2.5)
+  resultPanelMesh.rotation.set(0, 0, 0);
   resultPanel.add(resultPanelMesh);
   resultPanel.visible = true;
 }
@@ -1875,8 +1902,14 @@ function updateSharpening(delta) {
           strokeScores  += score;
           totalSharpness = strokeScores / strokeCount;
 
-          if (score > 30) playSharpenGood();
-          else            playSharpenBad();
+          if (score > 30) {
+            playSharpenGood();
+            // 良い判定時：水滴エフェクト（研ぎ水が飛ぶ）
+            const waterOrigin = sharpenBladeGroup.position.clone().add(new THREE.Vector3(0, 0.05, 0));
+            spawnSparks(waterOrigin, 20, 'water', 0.8);
+          } else {
+            playSharpenBad();
+          }
 
           if (rightController?.gamepad?.hapticActuators?.[0]) {
             rightController.gamepad.hapticActuators[0].pulse(score > 70 ? 0.5 : 0.2, 50);
