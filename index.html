@@ -404,10 +404,14 @@ function _spawnPt(existingY) {
   };
 }
 
-// ── 粒子配列（パネル種別ごと）──────────────────────────────────
-const _cvPtsIntro  = Array.from({ length: 160 }, () => _spawnPt()); // intro_0 / intro_1-4
-const _cvPtsGame   = Array.from({ length: 60  }, () => _spawnPt()); // 体験中
-const _cvPtsResult = Array.from({ length: 100 }, () => _spawnPt()); // 結果
+// ── 粒子配列（用途ごとに独立・サイズ明確化）────────────────────
+const PARTICLE_BASE        = 160;
+const PARTICLE_COUNT_INTRO = PARTICLE_BASE * 3;   // intro系: 480個
+const PARTICLE_COUNT_GAME  = PARTICLE_BASE * 4;   // 体験中: 640個
+const PARTICLE_COUNT_RESULT = 100;                // 結果パネル
+const _cvPtsIntro  = Array.from({ length: PARTICLE_COUNT_INTRO  }, () => _spawnPt());
+const _cvPtsGame   = Array.from({ length: PARTICLE_COUNT_GAME   }, () => _spawnPt());
+const _cvPtsResult = Array.from({ length: PARTICLE_COUNT_RESULT }, () => _spawnPt());
 
 // ── 現在アクティブなパネルのCanvas/Tex（毎フレーム再描画） ──────
 let _cvPtCanvas      = null;  // 共用オフスクリーンCanvas
@@ -473,22 +477,32 @@ function deactivateCvPanel() {
 }
 
 // ── tick: 毎フレームdelta駆動で粒子状態を更新 ──────────────────
+// 方針: 可視領域 0.0〜1.0、更新領域 -0.1〜1.1（外側で張り付かせて見せない）
 function _tickParticles(particles, delta) {
   for (const p of particles) {
-    p.t   += delta * 0.22;
+    p.t += delta * 0.22;
     // パーリン風ごく小さい左右揺れ（黄金比で非周期、漂う程度）
-    const wobble = (_ptSmooth(p.t, p.f1, p.ph1) * 0.4
-                  + _ptSmooth(p.t, p.f2, p.ph2) * 0.6) * 0.005 * delta * 60;
-    // 中央へ戻す力（弱く自然に、端への溜まりを防ぐ）
-    const centerForce = (0.5 - p.x) * 0.002;
-    p.x = Math.max(0.01, Math.min(0.99, p.x + wobble + centerForce));
-    // 上昇（全画面: y=1.0=下端 → y=0.0=上端）
+    let vx = (_ptSmooth(p.t, p.f1, p.ph1) * 0.4
+            + _ptSmooth(p.t, p.f2, p.ph2) * 0.6) * 0.005 * delta * 60;
+    // 中央へ戻す力（弱く自然に）
+    const centerForce = (0.5 - p.x) * 0.0015;
+    vx += centerForce;
+    // 端に近づくほど速度減衰（端でのロック防止）
+    const edgeDist   = Math.abs(p.x - 0.5);
+    const edgeFactor = 1.0 - Math.min(edgeDist * 2.0, 1.0);
+    vx *= edgeFactor;
+    // 横速度上限
+    const maxVX = 0.002;
+    vx = Math.max(-maxVX, Math.min(maxVX, vx));
+    // 更新領域は -0.1〜1.1（画面外まで許可、端に張り付かない）
+    p.x = Math.max(-0.1, Math.min(1.1, p.x + vx));
+    // 上昇（y=1.0=下端 → y=0.0=上端）
     p.y  -= p.vy * delta * 60;
     p.age += delta;
     const lifeFrac = p.age / p.maxAge;
     // 上端超えまたは寿命 → 下半分でランダム再生成
     if (p.y < -0.02 || lifeFrac >= 1.0) {
-      Object.assign(p, _spawnPt(0.5 + Math.random() * 0.5));   // 下半分(y=0.5〜1.0)でランダム再生成
+      Object.assign(p, _spawnPt(0.5 + Math.random() * 0.5));
       p.age = 0;
     }
   }
@@ -497,6 +511,8 @@ function _tickParticles(particles, delta) {
 // ── draw: 粒子をCanvasに描画（tick後に呼ぶ）────────────────────
 function _drawParticles(ctx, particles, W, H, brightScale) {
   for (const p of particles) {
+    // 画面外の粒子は描画しない（ロジック上は存在、見えないだけ）
+    if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0) continue;
     const lifeFrac = p.age / p.maxAge;
     // 寿命の95%以降でフェードアウト（それ以前は完全不透明）
     const fadeStart = 0.95;
@@ -1398,9 +1414,41 @@ let infoPanelMesh = null;
    INTRO_0 タイトル専用パネル
 ================================================================ */
 // INTRO_0 テキスト描画（背景・粒子の上に重ねる extraFn として使用）
-// INTRO_0 パネルは粒子＋背景グラデーションのみ（テキスト描画なし）
+// INTRO_0: XR中(VR/AR)はタイトルをCanvas内に描画、ブラウザは非表示
 function _drawIntro0Text(ctx, W, H) {
-  // タイトルテキストはHTML側（#uiPanel）で表示するためCanvas内には描画しない
+  const isImmersive = renderer && renderer.xr && renderer.xr.isPresenting;
+  if (!isImmersive) return; // ブラウザモード: Canvas側タイトル不要
+
+  // VR / AR: タイトル「越前打刃物」を描画
+  const fontSize = 220;
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  // 縁取り（銀色）
+  ctx.strokeStyle = 'rgba(192,200,210,0.90)';
+  ctx.lineWidth = 4;
+  ctx.font = `bold ${fontSize}px serif`;
+  ctx.strokeText('越前打刃物', W/2, H/2 - 60);
+  // 文字グラデーション（暗赤〜橙赤）
+  const grad = ctx.createLinearGradient(W/2-400, H/2-150, W/2+400, H/2+50);
+  grad.addColorStop(0.0, '#8b0000'); grad.addColorStop(0.3, '#cc2200');
+  grad.addColorStop(0.6, '#e84010'); grad.addColorStop(1.0, '#ff6020');
+  ctx.fillStyle = grad;
+  ctx.fillText('越前打刃物', W/2, H/2 - 60);
+  ctx.restore();
+  // サブタイトル（シルバー）
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold 60px serif';
+  ctx.fillStyle = 'rgba(190,195,205,0.92)';
+  ctx.fillText('Echizen Hamono — Blacksmith VR', W/2, H/2 + 110);
+  ctx.restore();
+  // A ボタンガイド
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.font = '42px serif';
+  ctx.fillStyle = 'rgba(180,160,120,0.7)';
+  ctx.fillText('A ▶ Start', W/2, H - 100);
+  ctx.restore();
 }
 
 function updateInfoPanel_INTRO0() {
@@ -3009,4 +3057,3 @@ renderer.setAnimationLoop((t) => {
 </script>
 </body>
 </html>
-
