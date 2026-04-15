@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -447,22 +447,13 @@ function _drawPanelBg(ctx, W, H, mode) {
 }
 
 // ── メイン更新関数：animationLoopから毎フレーム呼ぶ ────────────
-let _cvPanelFrameCount = 0;
 function updateCvPanel(delta) {
   if (!_cvPtCanvas || !_cvPanelPts) return;
-  _cvPanelFrameCount++;
-  // 体験中(game)は3フレームに1回だけCanvas再描画（GPU転送削減）
-  // intro/resultは毎フレーム（見た目重視）
-  const _isGameCv = (_cvPanelMode === 'game');
-  const _skipFrame = _isGameCv && (_cvPanelFrameCount % 3 !== 0);
-  // tickは毎フレーム（粒子の内部状態を進める）
-  _tickParticles(_cvPanelPts, delta);
-  if (_skipFrame) return; // 描画・GPU転送だけスキップ
   const W   = _cvPtCanvas.width, H = _cvPtCanvas.height;
-  // getContext は内部でキャッシュされているが、念のため保存済みを使用
   if (!_cvPtCanvas._ctx2d) _cvPtCanvas._ctx2d = _cvPtCanvas.getContext('2d');
   const ctx = _cvPtCanvas._ctx2d;
   _drawPanelBg(ctx, W, H, _cvPanelMode);
+  _tickParticles(_cvPanelPts, delta);
   _drawParticles(ctx, _cvPanelPts, W, H, _cvPanelBright);
   if (_cvPanelExtraFn) _cvPanelExtraFn(ctx, W, H);
   if (_cvPtTex) _cvPtTex.needsUpdate = true;
@@ -1612,9 +1603,7 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
 function updateInfoPanel(text, titleText, mode) {
   if (infoPanelMesh) infoPanel.remove(infoPanelMesh);
   const _mode = mode || (isIntroState(currentState) ? 'intro' : 'game');
-  // 体験中は低解像度で十分（GPU転送量 75%削減）
-  const W = _mode === 'game' ? 1024 : 2048;
-  const H = _mode === 'game' ?  512 : 1024;
+  const W = 2048, H = 1024;
   const isIntro = isIntroState(currentState);
   const pts    = isIntro ? _cvPtsIntro : _cvPtsGame;
   const bright = isIntro ? 1.0 : 0.45;
@@ -3118,28 +3107,26 @@ renderer.setAnimationLoop((t) => {
   const delta = Math.min((t - lastTime) / 1000, 0.033);
   lastTime = t;
 
-  // アンビエント球体パーティクル更新
-  // 体験中は2フレームに1回更新（VR負荷削減、視覚差は最小限）
-  const _isGamePhase = (currentState === State.FORGING || currentState === State.SHAPING ||
-                        currentState === State.SHARPENING);
-  if (!_isGamePhase || (Math.round(t / 16) % 2 === 0)) {
-    for (let i = 0; i < particleCount; i++) {
-      const p = _ptPos[i];
-      p.t += delta * 0.25;
-      p.y += delta * (0.08 + Math.sin(p.t * 0.7 + p.pax)*0.02);
-      if (p.y > 3.5) p.y = 0;
-      const wx = p.baseX + perlinLike(p.t, p.fax, p.fbx, p.pax, p.pbx) * p.amp;
-      const wz = p.baseZ + perlinLike(p.t, p.faz, p.fbz, p.paz, p.pbz) * p.amp;
-      p.x += (wx - p.x) * Math.min(delta * 1.2, 0.08);
-      p.z += (wz - p.z) * Math.min(delta * 1.2, 0.08);
-      _ptDummy.position.set(p.x, p.y, p.z);
-      _ptDummy.updateMatrix();
-      if (i < _ptCountOrange) _ptOrange.setMatrixAt(i, _ptDummy.matrix);
-      else _ptYellow.setMatrixAt(i - _ptCountOrange, _ptDummy.matrix);
-    }
-    _ptOrange.instanceMatrix.needsUpdate = true;
-    _ptYellow.instanceMatrix.needsUpdate = true;
+  // アンビエント球体パーティクル更新（収束しない準周期的ゆらぎ）
+  for (let i = 0; i < particleCount; i++) {
+    const p = _ptPos[i];
+    p.t += delta * 0.25;  // 時間を進める
+    // 縦方向上昇
+    p.y += delta * (0.08 + Math.sin(p.t * 0.7 + p.pax)*0.02);
+    if (p.y > 3.5) p.y = 0;
+    // 横方向：baseX/baseZを中心に非整数比サインで揺らぐ（収束しない）
+    const wx = p.baseX + perlinLike(p.t, p.fax, p.fbx, p.pax, p.pbx) * p.amp;
+    const wz = p.baseZ + perlinLike(p.t, p.faz, p.fbz, p.paz, p.pbz) * p.amp;
+    // なめらかに追従（lerp）
+    p.x += (wx - p.x) * Math.min(delta * 1.2, 0.08);
+    p.z += (wz - p.z) * Math.min(delta * 1.2, 0.08);
+    _ptDummy.position.set(p.x, p.y, p.z);
+    _ptDummy.updateMatrix();
+    if (i < _ptCountOrange) _ptOrange.setMatrixAt(i, _ptDummy.matrix);
+    else _ptYellow.setMatrixAt(i - _ptCountOrange, _ptDummy.matrix);
   }
+  _ptOrange.instanceMatrix.needsUpdate = true;
+  _ptYellow.instanceMatrix.needsUpdate = true;
 
   updateSparks(delta);
   updateFade(delta);   // フェードをすべてのフェーズで更新
