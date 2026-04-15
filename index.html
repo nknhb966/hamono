@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -1481,8 +1481,7 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
 
       // 左カラム
       function drawCol(text, startX, endX, startY) {
-        const lines = text.split('
-');
+        const lines = text.split('\n');
         ctx.textBaseline = 'top';
         ctx.textAlign = 'left';
         let y = startY;
@@ -1511,8 +1510,7 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
         y += 20;
       }
       // 行高さを事前計算して縦中央寄せ
-      const lines = bodyText.split('
-');
+      const lines = bodyText.split('\n');
       let totalH = 0;
       for (const line of lines) {
         if (line.trim() === '') { totalH += 20; continue; }
