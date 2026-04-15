@@ -1454,8 +1454,7 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
 
       // 左カラム
       function drawCol(text, startX, endX, startY) {
-        const lines = text.split('
-');
+        const lines = text.split('\n');
         ctx.textBaseline = 'top';
         ctx.textAlign = 'left';
         let y = startY;
@@ -1484,8 +1483,7 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
         y += 20;
       }
       // 行高さを事前計算して縦中央寄せ
-      const lines = bodyText.split('
-');
+      const lines = bodyText.split('\n');
       let totalH = 0;
       for (const line of lines) {
         if (line.trim() === '') { totalH += 20; continue; }
