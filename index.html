@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -328,18 +328,126 @@ const CONFIG = {
    STATE MACHINE
 ================================================================ */
 const State = {
-  INTRO_0: 'INTRO_0',   // 歴史
-  INTRO_1: 'INTRO_1',   // 特徴（二枚広げ）
-  INTRO_2: 'INTRO_2',   // 製造工程
-  INTRO_3: 'INTRO_3',   // 体験内容
+  INTRO_0: 'INTRO_0',   // タイトル演出（越前打刃物）
+  INTRO_1: 'INTRO_1',   // 歴史
+  INTRO_2: 'INTRO_2',   // 特徴（二枚広げ）
+  INTRO_3: 'INTRO_3',   // 製造工程
+  INTRO_4: 'INTRO_4',   // 体験内容
   FORGING: 'FORGING',
   SHAPING: 'SHAPING',
   SHARPENING: 'SHARPENING',
   RESULT: 'RESULT',
 };
+const INTRO_STATES = ['INTRO_0','INTRO_1','INTRO_2','INTRO_3','INTRO_4'];
+function isIntroState(s) { return INTRO_STATES.includes(s); }
 let currentState = State.INTRO_0;
 
 let bladeState = { shapeDistortion: 0, symmetryError: 0, sharpness: 0 };
+
+/* ================================================================
+   FADE & TRANSITION SYSTEM
+================================================================ */
+let _fadeOpacity     = 1.0;   // 現在の透明度（0=透明, 1=不透明）
+let _fadeDir         = 0;     // +1=フェードイン, -1=フェードアウト, 0=静止
+let _fadeDuration    = 1.0;   // 秒
+let _fadeElapsed     = 0.0;
+let _fadeCallback    = null;  // フェードアウト完了時コールバック
+let _inputLocked     = false; // フェード中は入力無効
+
+// intro_0 スケールアニメーション
+let _intro0ScaleAnim = 0.0;   // 0〜1 (進捗)
+let _intro0ScaleDone = false;
+
+// フェードオーバーレイ（Three.js 全画面Planeを使用）
+const _fadeGeo = new THREE.PlaneGeometry(100, 100);
+const _fadeMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, depthTest: false, depthWrite: false });
+const _fadePlane = new THREE.Mesh(_fadeGeo, _fadeMat);
+_fadePlane.renderOrder = 999;
+_fadePlane.position.set(0, 0, -0.5);
+camera.add(_fadePlane);
+scene.add(camera);
+
+function easeInOutQuad(t) { return t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t+2,2)/2; }
+function easeOutCubic(t)  { return 1 - Math.pow(1-t, 3); }
+
+function startFade(dir, duration, callback) {
+  _fadeDir      = dir;
+  _fadeDuration = duration;
+  _fadeElapsed  = 0;
+  _inputLocked  = true;
+  if (dir === -1) {
+    // フェードアウト: 暗くなる
+    _fadeOpacity  = 0.0;
+    _fadeCallback = callback;
+  } else {
+    // フェードイン: 明るくなる
+    _fadeOpacity  = 1.0;
+    _fadeCallback = callback; // フェードイン完了時にも呼ぶ
+  }
+  _fadeMat.opacity = _fadeOpacity;
+}
+
+function updateFade(delta) {
+  if (_fadeDir === 0) return;
+  _fadeElapsed += delta;
+  const t = Math.min(_fadeElapsed / _fadeDuration, 1.0);
+  const e = easeInOutQuad(t);
+  if (_fadeDir === -1) {
+    // フェードアウト：画面が暗くなる（opacity 0→1）
+    _fadeMat.opacity = e;
+    if (t >= 1.0) {
+      _fadeMat.opacity = 1.0;
+      _fadeDir = 0;
+      _inputLocked = false;
+      if (_fadeCallback) { const cb = _fadeCallback; _fadeCallback = null; cb(); }
+    }
+  } else {
+    // フェードイン：画面が明るくなる（opacity 1→0）
+    _fadeMat.opacity = 1.0 - e;
+    if (t >= 1.0) {
+      _fadeMat.opacity = 0.0;
+      _fadeDir = 0;
+      _inputLocked = false;
+      // フェードイン完了コールバック（スケールアニメ等）
+      if (_fadeCallback) { const cb = _fadeCallback; _fadeCallback = null; cb(); }
+    }
+  }
+}
+
+// フェード音：低い金属音
+function playFadeSound() {
+  try {
+    resumeAudio();
+    const ctx = audioCtx;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(80, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(55, ctx.currentTime + 0.6);
+    gain.gain.setValueAtTime(0.0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.7);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.7);
+  } catch(e) {}
+}
+
+// INTRO→次のINTROへのフェード遷移
+function fadeToNext(duration = 1.0) {
+  playFadeSound();
+  // フェードアウト完了 → 次stateに遷移 → フェードイン開始
+  startFade(-1, duration, () => {
+    nextState();
+    if (currentState === State.INTRO_0) {
+      // INTRO_0: フェードイン完了後にスケールアニメ開始
+      startFade(1, duration, () => {
+        _intro0ScaleAnim = 0; _intro0ScaleDone = false;
+      });
+    } else {
+      startFade(1, duration, null);
+    }
+  });
+}
 
 /* ================================================================
    THREE.JS CORE
@@ -516,13 +624,13 @@ ctrl1.addEventListener('disconnected', onControllerDisconnected);
 // VRではgamepadのpollingが遅れる場合があるため、イベントベースでも補足
 ctrl0.addEventListener('selectstart', () => {
   // INTRO/RESULTでトリガーを引いたら次フェーズへ（A代わり）
-  if ([State.INTRO_0,State.INTRO_1,State.INTRO_2,State.INTRO_3,State.RESULT].includes(currentState)) {
-    if (!wasAPressed) { nextState(); wasAPressed = true; }
+  if (isIntroState(currentState) || currentState === State.RESULT) {
+    if (!wasAPressed && !_inputLocked) { if (isIntroState(currentState) || currentState === State.RESULT) { /* handled by handleGlobalInput */ } else { nextState(); wasAPressed = true; } }
   }
 });
 ctrl1.addEventListener('selectstart', () => {
-  if ([State.INTRO_0,State.INTRO_1,State.INTRO_2,State.INTRO_3,State.RESULT].includes(currentState)) {
-    if (!wasAPressed) { nextState(); wasAPressed = true; }
+  if (isIntroState(currentState) || currentState === State.RESULT) {
+    if (!wasAPressed && !_inputLocked) { if (isIntroState(currentState) || currentState === State.RESULT) { /* handled by handleGlobalInput */ } else { nextState(); wasAPressed = true; } }
   }
 });
 ctrl0.addEventListener('selectend', () => { wasAPressed = false; });
@@ -1133,6 +1241,65 @@ function updateScorePanel(text, worldPos) {
 const infoPanel = new THREE.Group();
 scene.add(infoPanel);
 let infoPanelMesh = null;
+/* ================================================================
+   INTRO_0 タイトル専用パネル
+================================================================ */
+function updateInfoPanel_INTRO0() {
+  if (infoPanelMesh) infoPanel.remove(infoPanelMesh);
+  const W = 2048, H = 1024;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  // 背景は透過（黒背景描画なし）
+  ctx.clearRect(0, 0, W, H);
+
+  // テキスト「越前打刃物」
+  const fontSize = 220; // 他introの約1.8倍
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // 縁取り（銀色・細め）
+  ctx.strokeStyle = 'rgba(200,210,220,0.85)';
+  ctx.lineWidth   = 4;
+  ctx.font        = `bold ${fontSize}px serif`;
+  ctx.strokeText('越前打刃物', W/2, H/2 - 60);
+  // 本文グラデーション（暗赤〜橙赤）
+  const grad = ctx.createLinearGradient(W/2 - 400, H/2 - 150, W/2 + 400, H/2 + 50);
+  grad.addColorStop(0.0, '#8b0000');
+  grad.addColorStop(0.3, '#cc2200');
+  grad.addColorStop(0.6, '#e84010');
+  grad.addColorStop(1.0, '#ff6020');
+  ctx.fillStyle = grad;
+  ctx.fillText('越前打刃物', W/2, H/2 - 60);
+  ctx.restore();
+
+  // サブタイトル
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold 60px serif';
+  ctx.fillStyle = 'rgba(200,180,140,0.9)';
+  ctx.fillText('Echizen Hamono — Blacksmith VR', W/2, H/2 + 110);
+  ctx.restore();
+
+  // "A → 次へ" ガイド
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.font = '42px serif';
+  ctx.fillStyle = 'rgba(180,160,120,0.7)';
+  ctx.fillText('A ▶ Start', W/2, H - 100);
+  ctx.restore();
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, side: THREE.DoubleSide });
+  infoPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 1.4), mat);
+  infoPanelMesh.position.set(0, 1.38, -2.2);
+  infoPanelMesh.rotation.set(0, 0, 0);
+  infoPanelMesh.scale.set(0.95, 0.95, 0.95); // スケールアニメ開始値
+  infoPanel.add(infoPanelMesh);
+}
+
 // リッチなinfoPanelを生成（タイトルと本文を分けてレイアウト）
 function makeRichInfoCanvas(titleText, bodyText, W, H) {
   const cv  = document.createElement('canvas');
@@ -1140,8 +1307,8 @@ function makeRichInfoCanvas(titleText, bodyText, W, H) {
   const ctx = cv.getContext('2d');
   // 背景：深い藍色ベース
   const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, 'rgba(8,16,40,0.96)');
-  grad.addColorStop(1, 'rgba(4,8,24,0.96)');
+  grad.addColorStop(0, 'rgba(12,4,4,0.95)');
+  grad.addColorStop(1, 'rgba(4,2,2,0.97)');
   ctx.fillStyle = grad;
   ctx.beginPath(); ctx.roundRect(0, 0, W, H, 28); ctx.fill();
   // 金色の枠線
@@ -1156,9 +1323,9 @@ function makeRichInfoCanvas(titleText, bodyText, W, H) {
     ctx.textBaseline = 'top';
     ctx.fillText(titleText, W/2, 32);
     // タイトル下線
-    ctx.strokeStyle = 'rgba(220,180,70,0.4)';
+    ctx.strokeStyle = 'rgba(180,60,20,0.5)';
     ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(60, 96); ctx.lineTo(W-60, 96); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(90, 100); ctx.lineTo(W-90, 100); ctx.stroke();
   }
   // 本文（改行対応）
   const lines = bodyText.split('\n');
@@ -1178,7 +1345,7 @@ function makeRichInfoCanvas(titleText, bodyText, W, H) {
       ctx.fillStyle = '#f0e8d0';
       ctx.font = '40px serif';
     }
-    ctx.fillText(line, 60, y);
+    ctx.fillText(line, 90, y);  // 余白90px
     y += isEn ? 44 : 50;
   }
   return cv;
@@ -1186,13 +1353,13 @@ function makeRichInfoCanvas(titleText, bodyText, W, H) {
 
 function updateInfoPanel(text, titleText) {
   if (infoPanelMesh) infoPanel.remove(infoPanelMesh);
-  const W = 1600, H = 900;
+  const W = 2048, H = 1024;
   const cv  = makeRichInfoCanvas(titleText || null, text, W, H);
   const tex = new THREE.CanvasTexture(cv);
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, side: THREE.DoubleSide });
   // パネルを大きく（2.2m幅 × 1.24m高、目の高さ1.3m、前方2.2m）
-  infoPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.24), mat);
+  infoPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 1.40), mat);
   infoPanelMesh.position.set(0, 1.38, -2.2);
   infoPanelMesh.rotation.set(0, 0, 0);
   infoPanel.add(infoPanelMesh);
@@ -1581,7 +1748,7 @@ function resetSharpening() {
 }
 
 function setVisibility() {
-  const isIntro = [State.INTRO_0, State.INTRO_1, State.INTRO_2, State.INTRO_3].includes(currentState);
+  const isIntro = isIntroState(currentState);
   groupForging.visible    = currentState === State.FORGING;
   groupShaping.visible    = currentState === State.SHAPING;
   groupSharpening.visible = currentState === State.SHARPENING;
@@ -1594,12 +1761,12 @@ function setVisibility() {
 }
 
 function nextState() {
-  playTransition();
   const prev = currentState;
   if      (currentState === State.INTRO_0)     currentState = State.INTRO_1;
   else if (currentState === State.INTRO_1)     currentState = State.INTRO_2;
   else if (currentState === State.INTRO_2)     currentState = State.INTRO_3;
-  else if (currentState === State.INTRO_3)     currentState = State.FORGING;
+  else if (currentState === State.INTRO_3)     currentState = State.INTRO_4;
+  else if (currentState === State.INTRO_4)     currentState = State.FORGING;
   else if (currentState === State.FORGING)     currentState = State.SHAPING;
   else if (currentState === State.SHAPING)     currentState = State.SHARPENING;
   else if (currentState === State.SHARPENING)  currentState = State.RESULT;
@@ -1622,14 +1789,21 @@ function retryState() {
 }
 
 function onEnterState(state, prev) {
-  if ([State.INTRO_0, State.INTRO_1, State.INTRO_2, State.INTRO_3].includes(state)) {
+  if (isIntroState(state)) {
     if (state === State.INTRO_0) {
       bladeState = { shapeDistortion: 0, symmetryError: 0, sharpness: 0 };
       resetForging(); resetShaping(); resetSharpening();
     }
     // INTROスライドのテキスト
+    // INTRO_0はタイトル演出（updateInfoPanelは特別処理）
+    if (state === State.INTRO_0) {
+      // スケールアニメーション開始
+      _intro0ScaleAnim = 0; _intro0ScaleDone = false;
+      updateInfoPanel_INTRO0(); // タイトル専用
+      return; // 以下のintroData処理をスキップ
+    }
     const introData = {
-      [State.INTRO_0]: {
+      [State.INTRO_1]: {
         title: '① 歴史 / History',
         body: `越前打刃物は、1337年に始まりました。
 京都の刀匠・千代鶴国安がこの地に移り、
@@ -1644,7 +1818,7 @@ passed down for over 600 years.
 
 　　　A / Press A ▶ 次へ / Next`,
       },
-      [State.INTRO_1]: {
+      [State.INTRO_2]: {
         title: '② 特徴：二枚広げ / Feature: Nimai-hiroge',
         body: `越前打刃物の特徴は、「二枚広げ」という技法です。
 2枚の刃を重ねたまま叩くことで、
@@ -1661,7 +1835,7 @@ and prevents uneven results.
 
 　　　A / Press A ▶ 次へ / Next`,
       },
-      [State.INTRO_2]: {
+      [State.INTRO_3]: {
         title: '③ 製造工程 / Manufacturing Process',
         body: `刃物は、いくつもの工程を経て作られます。
 その中でも重要な3つの工程があります。
@@ -1677,7 +1851,7 @@ and respect for the metal.
 
 　　　A / Press A ▶ 次へ / Next`,
       },
-      [State.INTRO_3]: {
+      [State.INTRO_4]: {
         title: '④ 体験内容 / Your Challenge',
         body: `この体験では、職人の工程を再現します。
 あなたの技術で、一本の刃物を完成させてください。
@@ -1802,15 +1976,32 @@ function handleGlobalInput() {
   const aPressed = getAButton();
   const bPressed = getBButton();
 
-  if (aPressed && !wasAPressed) {
-    // INTRO / RESULT は常に遷移OK
-    // FORGING / SHAPING / SHARPENING は各フェーズ完了 or 強制スキップ
-    // → 仕様：Aボタンで常に次へ進める（フェーズ中でも任意終了可）
-    nextState();
+  if (aPressed && !wasAPressed && !_inputLocked) {
+    if (isIntroState(currentState)) {
+      // INTRO_0 はスケールアニメ完了後のみ
+      if (currentState === State.INTRO_0 && (!_intro0ScaleDone || _fadeDir !== 0)) {
+        // スケールアニメ未完了またはフェード中 → 入力無効
+      } else {
+        const dur = currentState === State.INTRO_0 ? 1.0 : 1.0;
+        fadeToNext(dur);
+      }
+    } else if (currentState === State.RESULT) {
+      // RESULT → INTRO_0: フェード3秒
+      playFadeSound();
+      startFade(-1, 3.0, () => {
+        nextState(); // currentState = INTRO_0
+        startFade(1, 3.0, () => {
+          // フェードイン完了後にスケールアニメ開始
+          _intro0ScaleAnim = 0; _intro0ScaleDone = false;
+        });
+      });
+    } else {
+      nextState();
+    }
   }
   wasAPressed = aPressed;
 
-  if (bPressed && !wasBPressed) retryState();
+  if (bPressed && !wasBPressed && !_inputLocked) retryState();
   wasBPressed = bPressed;
 }
 
@@ -2279,7 +2470,16 @@ function updateResult(delta) {
    UPDATE INTRO
 ================================================================ */
 function updateIntro(delta) {
-  // infoPanelは正面固定のため追従処理不要
+  // INTRO_0: スケールアニメーション (0.95→1.0, easeOutCubic, 0.8秒)
+  if (currentState === State.INTRO_0 && !_intro0ScaleDone && infoPanelMesh) {
+    _intro0ScaleAnim = Math.min(1.0, _intro0ScaleAnim + delta / 0.8);
+    const s = 0.95 + 0.05 * easeOutCubic(_intro0ScaleAnim);
+    infoPanelMesh.scale.set(s, s, s);
+    if (_intro0ScaleAnim >= 1.0) {
+      _intro0ScaleDone = true;
+      infoPanelMesh.scale.set(1, 1, 1);
+    }
+  }
 }
 
 /* ================================================================
@@ -2342,6 +2542,77 @@ for (let i = 0; i < particleCount; i++) {
 }
 _ptOrange.instanceMatrix.needsUpdate = true;
 _ptYellow.instanceMatrix.needsUpdate = true;
+
+
+/* ================================================================
+   INTRO PARTICLE SYSTEM（赤〜橙の浮遊粒子）
+================================================================ */
+const _introPtCount = 200;
+const _introPtGeo   = new THREE.BufferGeometry();
+const _introPtPos   = new Float32Array(_introPtCount * 3);
+const _introPtCol   = new Float32Array(_introPtCount * 3);
+const _introPtData  = Array.from({ length: _introPtCount }, () => ({
+  // 中央寄り: gaussian-likeな分布（Box-Muller簡易版）
+  x: (Math.random()+Math.random()+Math.random()-1.5) * 3.5,
+  y: Math.random() * 5,
+  z: -2.0 - Math.random() * 2,
+  vy: 0.005 + Math.random() * 0.045,   // 上昇速度(遅い)
+  life: Math.random(),                   // 0〜1
+  lifeSpeed: 0.003 + Math.random()*0.012, // フェード速度
+  lifeDir: Math.random() > 0.5 ? 1 : -1,
+  cx: 0.5 - Math.abs(Math.random()-0.5)*0.8, // 中央寄り密度係数
+}));
+for (let i = 0; i < _introPtCount; i++) {
+  _introPtPos[i*3]   = _introPtData[i].x;
+  _introPtPos[i*3+1] = _introPtData[i].y;
+  _introPtPos[i*3+2] = _introPtData[i].z;
+  // 色: 赤〜橙（#ff4000〜#ffb040）+ 少量白
+  const r = 0.8 + Math.random()*0.2;
+  const g = 0.2 + Math.random()*0.5;
+  const b = 0.0 + Math.random()*0.1;
+  _introPtCol[i*3]=r; _introPtCol[i*3+1]=g; _introPtCol[i*3+2]=b;
+}
+const _introPtPosBuf = new THREE.BufferAttribute(_introPtPos, 3);
+const _introPtColBuf = new THREE.BufferAttribute(_introPtCol, 3);
+_introPtPosBuf.setUsage(THREE.DynamicDrawUsage);
+_introPtGeo.setAttribute('position', _introPtPosBuf);
+_introPtGeo.setAttribute('color',    _introPtColBuf);
+_introPtGeo.drawRange = { start:0, count: _introPtCount };
+const _introPtMat = new THREE.PointsMaterial({
+  size: 0.018, vertexColors: true, sizeAttenuation: true,
+  transparent: true, opacity: 0.0,
+  blending: THREE.AdditiveBlending, depthWrite: false,
+});
+const _introPtMesh = new THREE.Points(_introPtGeo, _introPtMat);
+_introPtMesh.frustumCulled = false;
+scene.add(_introPtMesh);
+
+function updateIntroParticles(delta, intensity) {
+  // intensity: 1.0=INTRO, 0.25=体験中
+  _introPtMat.opacity = 0.28 * intensity;
+  for (let i = 0; i < _introPtCount; i++) {
+    const p = _introPtData[i];
+    // 上昇
+    p.y += p.vy * delta * 60;
+    if (p.y > 5.5) { p.y = -0.5; p.x = (Math.random()-0.5)*8; }
+    // フェードイン/アウト
+    p.life += p.lifeDir * p.lifeSpeed * delta * 60;
+    if (p.life > 1) { p.life = 1; p.lifeDir = -1; }
+    if (p.life < 0) { p.life = 0; p.lifeDir = 1; }
+    // 下ほど明るく、上ほど暗く消える
+    const heightFade = Math.max(0, 1.0 - p.y / 5.0);
+    const alpha = p.life * heightFade;
+    _introPtPos[i*3]   = p.x;
+    _introPtPos[i*3+1] = p.y;
+    _introPtPos[i*3+2] = p.z;
+    // 色のアルファをRGBスケールで表現
+    _introPtCol[i*3]   = (0.8+Math.random()*0.2) * alpha;
+    _introPtCol[i*3+1] = (0.2+Math.random()*0.3) * alpha;
+    _introPtCol[i*3+2] = 0;
+  }
+  _introPtPosBuf.needsUpdate = true;
+  _introPtColBuf.needsUpdate = true;
+}
 
 /* ================================================================
    XR & UI SETUP
@@ -2470,7 +2741,12 @@ setupUI();
 ================================================================ */
 currentState = State.INTRO_0;
 setVisibility();
-onEnterState(State.INTRO, null);
+onEnterState(State.INTRO_0, null);
+// 初期フェードイン（2秒）完了後にスケールアニメ開始
+_fadeMat.opacity = 1.0;
+startFade(1, 2.0, () => {
+  _intro0ScaleAnim = 0; _intro0ScaleDone = false;
+});
 
 /* ================================================================
    ANIMATION LOOP
@@ -2504,13 +2780,24 @@ renderer.setAnimationLoop((t) => {
   _ptYellow.instanceMatrix.needsUpdate = true;
 
   updateSparks(delta);
+  updateFade(delta);   // フェードをすべてのフェーズで更新
+
+  // INTRO粒子とシーン背景
+  const _nowIsIntro = isIntroState(currentState);
+  updateIntroParticles(delta, _nowIsIntro ? 1.0 : 0.25);
+  // 背景色: INTRO時は深い赤黒、体験中は黒
+  const _bgCol = _nowIsIntro ? 0x0d0404 : 0x080808;
+  scene.background = new THREE.Color(_bgCol);
+  if (scene.fog) scene.fog.color.set(_bgCol);
+
   handleGlobalInput();
 
   switch(currentState) {
     case State.INTRO_0:
     case State.INTRO_1:
     case State.INTRO_2:
-    case State.INTRO_3:    updateIntro(delta);      break;
+    case State.INTRO_3:
+    case State.INTRO_4:    updateIntro(delta);      break;
     case State.FORGING:    updateForging(delta);    break;
     case State.SHAPING:    updateShaping(delta);    break;
     case State.SHARPENING: updateSharpening(delta); break;
