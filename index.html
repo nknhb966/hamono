@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -203,6 +203,9 @@
 <!-- ═══ タイトルパネル ═══ -->
 <div id="uiPanel">
   <div class="panel-inner">
+    <p class="main-title">越前打刃物</p>
+    <p class="sub-title">Echizen Blades — 鍛冶職人 VR 体験<br><span style="font-size:0.85em;letter-spacing:1px;">Blacksmith VR Experience</span></p>
+
     <div id="vrButtonWrap">
       <button id="btn-vr" disabled>🥽 VR を開始する</button>
       <button id="btn-ar" disabled style="margin-top:10px; background:linear-gradient(135deg,#006060,#003a3a) !important; box-shadow:0 0 28px rgba(0,180,160,0.5), inset 0 1px 0 rgba(255,255,255,0.12) !important;">📱 AR を開始する</button>
@@ -381,7 +384,7 @@ function _spawnPt(existingY) {
   for (let attempt = 0; attempt < 8; attempt++) {
     const gx = (Math.random()+Math.random()+Math.random()+Math.random()-2) * 0.32;
     x = 0.5 + gx;
-    if (x >= 0.06 && x <= 0.94) break; // 端回避: 再試行
+    if (x >= -0.06 && x <= 1.06) break; // 端回避 (条件緩和)
   }
   x = Math.max(0.04, Math.min(0.96, x));
 
@@ -396,7 +399,7 @@ function _spawnPt(existingY) {
     ph2: Math.random() * 6.28,
     t:   Math.random() * 40,
     age:    0,
-    maxAge: 7.0 + Math.random() * 10.0,      // 寿命1.7〜2倍（元: 4〜10秒 → 7〜17秒）
+    maxAge: 14.0 + Math.random() * 20.0,     // さらに2倍（14〜34秒）
     col:  Math.random() < 0.07 ? 'w' : (Math.random() < 0.45 ? 'o' : 'r'),
   };
 }
@@ -476,14 +479,16 @@ function _tickParticles(particles, delta) {
     // パーリン風ごく小さい左右揺れ（黄金比で非周期、漂う程度）
     const wobble = (_ptSmooth(p.t, p.f1, p.ph1) * 0.4
                   + _ptSmooth(p.t, p.f2, p.ph2) * 0.6) * 0.005 * delta * 60;
-    p.x = Math.max(0.04, Math.min(0.96, p.x + wobble));
+    // 中央へ戻す力（弱く自然に、端への溜まりを防ぐ）
+    const centerForce = (0.5 - p.x) * 0.002;
+    p.x = Math.max(0.01, Math.min(0.99, p.x + wobble + centerForce));
     // 上昇（全画面: y=1.0=下端 → y=0.0=上端）
     p.y  -= p.vy * delta * 60;
     p.age += delta;
     const lifeFrac = p.age / p.maxAge;
-    // 上端超えまたは寿命 → 下端で再生成
+    // 上端超えまたは寿命 → 下半分でランダム再生成
     if (p.y < -0.02 || lifeFrac >= 1.0) {
-      Object.assign(p, _spawnPt(0.97 + Math.random() * 0.05)); // 下端(y≈1)から再出現
+      Object.assign(p, _spawnPt(0.5 + Math.random() * 0.5));   // 下半分(y=0.5〜1.0)でランダム再生成
       p.age = 0;
     }
   }
@@ -493,8 +498,11 @@ function _tickParticles(particles, delta) {
 function _drawParticles(ctx, particles, W, H, brightScale) {
   for (const p of particles) {
     const lifeFrac = p.age / p.maxAge;
-    // ライフ後半50%でフェードアウト
-    const fadeFrac = lifeFrac < 0.5 ? 1.0 : 1.0 - (lifeFrac - 0.5) * 2.0;
+    // 寿命の95%以降でフェードアウト（それ以前は完全不透明）
+    const fadeStart = 0.95;
+    const fadeFrac  = lifeFrac < fadeStart
+      ? 1.0
+      : 1.0 - (lifeFrac - fadeStart) / (1.0 - fadeStart);
     // 上端80〜100%付近（y=0〜0.20）でフェードアウト
     // y=0が上端、y=1が下端 → y < 0.20 でフェード開始
     const heightFade = Math.max(0, Math.min(1, p.y / 0.18));
@@ -1473,7 +1481,8 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
 
       // 左カラム
       function drawCol(text, startX, endX, startY) {
-        const lines = text.split('\n');
+        const lines = text.split('
+');
         ctx.textBaseline = 'top';
         ctx.textAlign = 'left';
         let y = startY;
@@ -1502,7 +1511,8 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
         y += 20;
       }
       // 行高さを事前計算して縦中央寄せ
-      const lines = bodyText.split('\n');
+      const lines = bodyText.split('
+');
       let totalH = 0;
       for (const line of lines) {
         if (line.trim() === '') { totalH += 20; continue; }
