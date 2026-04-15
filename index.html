@@ -384,7 +384,7 @@ function _spawnPt(existingY) {
   for (let attempt = 0; attempt < 8; attempt++) {
     const gx = (Math.random()+Math.random()+Math.random()+Math.random()-2) * 0.32;
     x = 0.5 + gx;
-    if (x >= -0.1 && x <= 1.1) break; // 端回避 (条件緩和)
+    if (x >= -0.2 && x <= 1.2) break; // 端回避 (条件さらに緩和)
   }
   x = Math.max(0.04, Math.min(0.96, x));
 
@@ -1398,36 +1398,9 @@ let infoPanelMesh = null;
    INTRO_0 タイトル専用パネル
 ================================================================ */
 // INTRO_0 テキスト描画（背景・粒子の上に重ねる extraFn として使用）
+// INTRO_0 パネルは粒子＋背景グラデーションのみ（テキスト描画なし）
 function _drawIntro0Text(ctx, W, H) {
-  const fontSize = 220;
-  ctx.save();
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.strokeStyle = 'rgba(192,200,210,0.90)';  // 銀色（VR/AR共通）
-  ctx.lineWidth = 4;
-  ctx.font = `bold ${fontSize}px serif`;
-  ctx.strokeText('越前打刃物', W/2, H/2 - 60);
-  if (isARMode) {
-    ctx.fillStyle = '#1a0808';
-  } else {
-    const grad = ctx.createLinearGradient(W/2-400, H/2-150, W/2+400, H/2+50);
-    grad.addColorStop(0.0, '#8b0000'); grad.addColorStop(0.3, '#cc2200');
-    grad.addColorStop(0.6, '#e84010'); grad.addColorStop(1.0, '#ff6020');
-    ctx.fillStyle = grad;
-  }
-  ctx.fillText('越前打刃物', W/2, H/2 - 60);
-  ctx.restore();
-  ctx.save();
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = 'bold 60px serif';
-  ctx.fillStyle = 'rgba(190,195,205,0.92)';  // シルバー（VR/AR共通）
-  ctx.fillText('Echizen Hamono — Blacksmith VR', W/2, H/2 + 110);
-  ctx.restore();
-  ctx.save();
-  ctx.textAlign = 'center';
-  ctx.font = '42px serif';
-  ctx.fillStyle = isARMode ? 'rgba(40,20,10,0.7)' : 'rgba(180,160,120,0.7)';
-  ctx.fillText('A ▶ Start', W/2, H - 100);
-  ctx.restore();
+  // タイトルテキストはHTML側（#uiPanel）で表示するためCanvas内には描画しない
 }
 
 function updateInfoPanel_INTRO0() {
@@ -1481,7 +1454,8 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
 
       // 左カラム
       function drawCol(text, startX, endX, startY) {
-        const lines = text.split('\n');
+        const lines = text.split('
+');
         ctx.textBaseline = 'top';
         ctx.textAlign = 'left';
         let y = startY;
@@ -1510,7 +1484,8 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
         y += 20;
       }
       // 行高さを事前計算して縦中央寄せ
-      const lines = bodyText.split('\n');
+      const lines = bodyText.split('
+');
       let totalH = 0;
       for (const line of lines) {
         if (line.trim() === '') { totalH += 20; continue; }
@@ -3036,3 +3011,4 @@ renderer.setAnimationLoop((t) => {
 </script>
 </body>
 </html>
+
