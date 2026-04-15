@@ -1167,7 +1167,19 @@ bladeMesh.castShadow = true;
 const bladePivot = new THREE.Group();
 bladeMesh.position.set(-0.204, 0, 0.035); // X中心補正(0.408/2) + Z補正
 bladeMesh.rotation.x = -Math.PI / 2;      // 表: 表面が上
+
+// 二枚広げ演出: 刃物を2枚重ねる（上下に僅かにオフセット）
+const BLADE_OFFSET_Y = 0.003;   // 2枚間のY方向オフセット
+const BLADE_MIN_Y    = 0.005;   // 作業台天板からの最小高さ（埋没防止）
+bladeMesh.position.y += BLADE_OFFSET_Y;  // 1枚目は少し上に
+
+// 2枚目（bladeMeshのクローン）
+const bladeMesh2 = bladeMesh.clone();
+bladeMesh2.position.set(-0.204, -BLADE_OFFSET_Y, 0.035);
+bladeMesh2.rotation.x = -Math.PI / 2;
 bladePivot.add(bladeMesh);
+bladePivot.add(bladeMesh2);
+
 bladePivot.position.set(0, workbenchPos.y + 0.04, workbenchPos.z);  // 作業台中央
 groupShaping.add(bladePivot);
 
@@ -1226,9 +1238,9 @@ const ZONE_POSITIONS = [
 for (let i = 0; i < ZONE_COUNT; i++) {
   const wx = ZONE_POSITIONS[i];
 
-  // 色ボックス（刃物の上に薄く被せる）
+  // ゾーンインジケーター: ワイヤーフレームのみ（塗り無し）
   const zoneIndMat = new THREE.MeshBasicMaterial({
-    color: 0x88bbff, transparent: true, opacity: 0.003, depthTest: true
+    color: 0xffffff, wireframe: true, depthTest: true
   });
   const zoneInd = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.01, 0.08), zoneIndMat);
   zoneInd.position.set(wx, BLADE_Y, BLADE_WORLD_Z);
@@ -1633,115 +1645,118 @@ function buildResultCanvas(score, bladeStateSnap, scores) {
   ctx.fillStyle = '#ffddaa';
   ctx.fillText(`【 ${rankJa} / ${rankEn} 】`, W/2, 330);
 
-  // Divider
+  // ─────────────────────────────────────────────
+  // レイアウト順: Score → フェーズゲージ → Total breakdown → Divider → Ranking
+  // ─────────────────────────────────────────────
+
+  // 区切り線（スコア下）
   ctx.strokeStyle = 'rgba(255,120,80,0.5)';
   ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(50, 360); ctx.lineTo(W-50, 360); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(50, 370); ctx.lineTo(W-50, 370); ctx.stroke();
+
+  // フェーズゲージ（y=400 から）
   const details = [
     ['① 鍛造 Forging',  forgingScore,  0.4],
     ['② 成形 Shaping',  shapingScore2, 0.3],
     ['③ 研ぎ Sharpen',  sharpenScore,  0.3],
   ];
-
-  const BAR_X   = 420;   // ゲージ開始X
-  const BAR_W   = 560;   // ゲージ最大幅（W全体の約47%、7割に短縮）
-  const SCORE_X = 1010;  // スコア文字X（ゲージ右端+余白）
-
+  const BAR_X  = 400;
+  const BAR_W  = 560;
   ctx.textAlign = 'left';
   details.forEach(([label, val, weight], i) => {
-    const y = 440 + i * 110;
-    // ラベル
-    ctx.font = 'bold 38px serif';
+    const y = 430 + i * 105;
+    ctx.font = 'bold 36px serif';
     ctx.fillStyle = '#ffddaa';
     ctx.fillText(label, 50, y);
-    // 重みバッジ
-    ctx.font = '26px serif';
+    ctx.font = '24px serif';
     ctx.fillStyle = '#ffaa66';
-    ctx.fillText(`×${weight}`, 50, y + 40);
-    // ゲージ背景（70%幅のみ = スコア文字と重ならない幅）
-    const maxBarW = BAR_W * 0.91;  // 0.70 * 1.3 = 0.91
+    ctx.fillText(`×${weight}`, 50, y + 38);
+    const maxBarW = BAR_W * 0.91;
     ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    ctx.beginPath(); ctx.roundRect(BAR_X, y - 30, maxBarW, 36, 8); ctx.fill();
-    // ゲージ本体（100点=maxBarW幅ちょうど）
+    ctx.beginPath(); ctx.roundRect(BAR_X, y - 28, maxBarW, 34, 7); ctx.fill();
     const barW = (val / 100) * maxBarW;
     const barColor = val > 70 ? '#44dd88' : val > 40 ? '#ffcc44' : '#ee5533';
-    const barGrad  = ctx.createLinearGradient(BAR_X, 0, BAR_X + maxBarW, 0);
+    const barGrad = ctx.createLinearGradient(BAR_X, 0, BAR_X + maxBarW, 0);
     barGrad.addColorStop(0, barColor);
     barGrad.addColorStop(1, barColor + '99');
     ctx.fillStyle = barGrad;
-    if (barW > 0) { ctx.beginPath(); ctx.roundRect(BAR_X, y - 30, barW, 36, 8); ctx.fill(); }
-    // スコア数値（ゲージ右外）
-    ctx.font = 'bold 42px monospace';
+    if (barW > 0) { ctx.beginPath(); ctx.roundRect(BAR_X, y - 28, barW, 34, 7); ctx.fill(); }
+    ctx.font = 'bold 40px monospace';
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'right';
-    ctx.fillText(`${val}pt`, W - 40, y + 6);  // 枠右端から40px padding
+    ctx.fillText(`${val}pt`, W - 40, y + 4);
     ctx.textAlign = 'left';
   });
 
-  // Divider
-  ctx.strokeStyle = 'rgba(255,120,80,0.4)';
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(50, 790); ctx.lineTo(W-50, 790); ctx.stroke();
-
-  // Total breakdown
+  // Total breakdown（Dividerの上）
+  const yBreakdown = 430 + 3 * 105 + 20; // ゲージ3行の直下
   const computed = Math.max(0, Math.min(100,
     forgingScore  * 0.4 +
     shapingScore2 * 0.3 +
     sharpenScore  * 0.3
   ));
-  ctx.font = '32px serif';
+  ctx.font = '30px serif';
   ctx.fillStyle = '#ffcc88';
   ctx.textAlign = 'center';
-  ctx.fillText(`${forgingScore}×0.4 + ${shapingScore2}×0.3 + ${sharpenScore}×0.3 = ${Math.round(computed)}点`, W/2, 840);
+  ctx.fillText(
+    `${forgingScore}×0.4 + ${shapingScore2}×0.3 + ${sharpenScore}×0.3 = ${Math.round(computed)}点`,
+    W/2, yBreakdown
+  );
 
-  // Ranking
-  ctx.font = 'bold 40px serif';
+  // Divider（breakdown直下、40px余白）
+  const yDivider = yBreakdown + 50;
+  ctx.strokeStyle = 'rgba(255,120,80,0.4)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(50, yDivider); ctx.lineTo(W-50, yDivider); ctx.stroke();
+
+  // Ranking（Divider直下、40px余白）
+  const yRankTitle = yDivider + 56;
+  ctx.font = 'bold 38px serif';
   ctx.fillStyle = '#ffddaa';
   ctx.textAlign = 'center';
-  ctx.fillText('─ ランキング / Ranking ─', W/2, 900);
+  ctx.fillText('─ ランキング / Ranking ─', W/2, yRankTitle);
 
-  // 今回のスコアがどの順位か確認
+  // 今回スコアの順位
   const newRank = scores.findIndex(s => Math.abs(s.score - recomputedFinal) < 0.5);
-  // TOP5入り時のNEW RECORD表示 (W/4の位置)
+  // NEW RECORD表示（Score bigの横 W/4）
   if (newRank >= 0 && newRank < 5) {
-    // Score bigの横（W/4）に表示
-    ctx.font = 'bold 40px serif';
+    ctx.font = 'bold 38px serif';
     ctx.fillStyle = '#ffe066';
     ctx.textAlign = 'center';
     const recLabel = newRank === 0 ? '🥇 NEW\nRECORD!' : `TOP${newRank+1}\nNEW!`;
     recLabel.split('\n').forEach((line, li) => {
-      ctx.fillText(line, W/4, 240 + li * 50);  // Score big(y=260)の隣
+      ctx.fillText(line, W/4, 240 + li * 48);
     });
   }
 
-  ctx.font = '34px monospace';
+  // ランキング一覧（各行 80px間隔）
+  const yRankStart = yRankTitle + 50;
+  ctx.font = '32px monospace';
   scores.slice(0, 5).forEach((s, i) => {
-    const y = 960 + i * 76;
+    const y = yRankStart + i * 82;
     const isThisScore = newRank === i;
     ctx.fillStyle = isThisScore ? '#ffe066' : (i === 0 ? '#ffcc88' : 'rgba(255,200,150,0.7)');
     const medal = ['🥇', '🥈', '🥉', '  4', '  5'][i] || String(i+1);
-    // スコアを中央に配置
     ctx.textAlign = 'center';
     ctx.fillText(`${medal}  ${Math.round(s.score)}pts`, W/2, y);
-    // 日付を右に
     ctx.textAlign = 'right';
     ctx.fillStyle = 'rgba(255,180,130,0.6)';
-    ctx.font = '26px monospace';
+    ctx.font = '24px monospace';
     ctx.fillText(s.date, W - 80, y);
-    // ★NEW（W/3の位置）
     if (isThisScore) {
       ctx.fillStyle = '#ffe066';
-      ctx.font = 'bold 30px monospace';
+      ctx.font = 'bold 28px monospace';
       ctx.textAlign = 'left';
       ctx.fillText('★NEW', W/3, y);
     }
-    ctx.font = '34px monospace';
+    ctx.font = '32px monospace';
   });
 
+  // リプレイガイド（下端から余白80px）
   ctx.fillStyle = 'rgba(255,200,150,0.6)';
-  ctx.font = '30px serif';
+  ctx.font = '28px serif';
   ctx.textAlign = 'center';
-  ctx.fillText('Aボタンで再プレイ / Press A to Replay', W/2, H - 50);
+  ctx.fillText('Aボタンで再プレイ / Press A to Replay', W/2, H - 60);
   return c;
 }
 
@@ -1944,9 +1959,16 @@ function resetShaping() {
   });
   bladePivot.position.set(0, workbenchPos.y + 0.04, workbenchPos.z);  // 作業台中央
   bladePivot.rotation.y = 0;
+  // 1枚目（表）
   bladeMesh.rotation.x  = -Math.PI/2;
-  bladeMesh.position.x  = -0.204;     // X中心補正
-  bladeMesh.position.z  = 0.035;
+  bladeMesh.position.x  = -0.204;
+  bladeMesh.position.y  =  BLADE_OFFSET_Y;  // 上オフセット
+  bladeMesh.position.z  =  0.035;
+  // 2枚目（重ね）
+  bladeMesh2.rotation.x  = -Math.PI/2;
+  bladeMesh2.position.x  = -0.204;
+  bladeMesh2.position.y  = -BLADE_OFFSET_Y; // 下オフセット
+  bladeMesh2.position.z  =  0.035;
 }
 function resetSharpening() {
   strokeCount     = 0;
@@ -2431,10 +2453,24 @@ function updateShaping(delta) {
     // Z補正もアニメーション（+0.06 ↔ -0.06）
     const zFrom = bladeFlipped ? 0.035 : -0.035;
     const zTo   = bladeFlipped ? -0.035 : 0.035;
-    bladeMesh.position.z = zFrom + (zTo - zFrom) * (1 - bladeFlipAnim);
+    // bladeMesh2 の Z も同期（アニメ補間中）
+    bladeMesh.position.z  = zFrom + (zTo - zFrom) * (1 - bladeFlipAnim);
+    // bladeMesh2 アニメ中も同期
+    bladeMesh2.rotation.x = bladeMesh.rotation.x;
+    bladeMesh2.position.z = bladeMesh.position.z;
   } else {
-    bladeMesh.rotation.x = bladeFlipped ?  Math.PI/2 : -Math.PI/2;
-    bladeMesh.position.z = bladeFlipped ? -0.035 : 0.035;
+    bladeMesh.rotation.x  = bladeFlipped ?  Math.PI/2 : -Math.PI/2;
+    bladeMesh.position.z  = bladeFlipped ? -0.035 : 0.035;
+    bladeMesh.position.y  =  BLADE_OFFSET_Y;
+    // bladeMesh2 も同期（埋没防止: 作業台天板より必ず上に）
+    bladeMesh2.rotation.x = bladeMesh.rotation.x;
+    bladeMesh2.position.z = bladeMesh.position.z;
+    bladeMesh2.position.y = Math.max(-BLADE_OFFSET_Y, -BLADE_OFFSET_Y); // 下オフセット維持
+    // 埋没防止: pivotのYが低すぎないようにクランプ
+    const tableTopY = workbenchPos.y + 0.04;
+    if (bladePivot.position.y < tableTopY + BLADE_MIN_Y) {
+      bladePivot.position.y = tableTopY + BLADE_MIN_Y;
+    }
   }
 
   // ---- ゾーンインジケーター更新（刃物固定のため位置はそのまま、色のみ更新）----
