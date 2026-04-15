@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -203,9 +203,6 @@
 <!-- ═══ タイトルパネル ═══ -->
 <div id="uiPanel">
   <div class="panel-inner">
-    <p class="main-title">越前打刃物</p>
-    <p class="sub-title">Echizen Blades — 鍛冶職人 VR 体験<br><span style="font-size:0.85em;letter-spacing:1px;">Blacksmith VR Experience</span></p>
-
     <div id="vrButtonWrap">
       <button id="btn-vr" disabled>🥽 VR を開始する</button>
       <button id="btn-ar" disabled style="margin-top:10px; background:linear-gradient(135deg,#006060,#003a3a) !important; box-shadow:0 0 28px rgba(0,180,160,0.5), inset 0 1px 0 rgba(255,255,255,0.12) !important;">📱 AR を開始する</button>
@@ -378,22 +375,28 @@ function _ptSmooth(t, f, ph) {
 
 // パーティクル生成ヘルパー（新規 or 再生成時に呼ぶ）
 function _spawnPt(existingY) {
-  // X分布: 中央寄り（ガウス近似）
-  const gx = (Math.random()+Math.random()+Math.random()+Math.random()-2) * 0.38;
+  // X分布: 中央寄り＋端に溜まらない工夫
+  // 中央(0.5)からgauss分布で生成し、端(0〜0.08 / 0.92〜1)は確率を大幅に下げる
+  let x;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const gx = (Math.random()+Math.random()+Math.random()+Math.random()-2) * 0.32;
+    x = 0.5 + gx;
+    if (x >= 0.06 && x <= 0.94) break; // 端回避: 再試行
+  }
+  x = Math.max(0.04, Math.min(0.96, x));
+
   return {
-    x:   0.5 + gx,                             // 0〜1, 中央寄り
-    y:   (existingY !== undefined) ? existingY : Math.random(), // 初期=ランダム, 再生成=下部
-    vy:  0.00012 + Math.random() * 0.00022,     // 上昇速度（遅い）
-    r:   0.8 + Math.random() * 1.8,             // 半径 1〜2.6px
-    // 揺れ: 個別周波数と位相（非整数比で収束しない）
-    f1:  0.18 + Math.random() * 0.10,           // 主周波数
-    f2:  0.11 + Math.random() * 0.07,           // 副周波数
+    x,
+    y:   (existingY !== undefined) ? existingY : Math.random(),
+    vy:  0.00025 + Math.random() * 0.00045,  // 速度2倍（元: 0.00012〜0.00034）
+    r:   0.8 + Math.random() * 1.8,
+    f1:  0.18 + Math.random() * 0.10,
+    f2:  0.11 + Math.random() * 0.07,
     ph1: Math.random() * 6.28,
     ph2: Math.random() * 6.28,
-    t:   Math.random() * 40,                    // 時間オフセット
-    // ライフサイクル: 生まれてから上がっていき自然に消える
+    t:   Math.random() * 40,
     age:    0,
-    maxAge: 4.0 + Math.random() * 6.0,          // 4〜10秒で消える
+    maxAge: 7.0 + Math.random() * 10.0,      // 寿命1.7〜2倍（元: 4〜10秒 → 7〜17秒）
     col:  Math.random() < 0.07 ? 'w' : (Math.random() < 0.45 ? 'o' : 'r'),
   };
 }
@@ -470,17 +473,17 @@ function deactivateCvPanel() {
 function _tickParticles(particles, delta) {
   for (const p of particles) {
     p.t   += delta * 0.22;
-    // パーリン風ごく小さい左右揺れ（黄金比で非周期）
+    // パーリン風ごく小さい左右揺れ（黄金比で非周期、漂う程度）
     const wobble = (_ptSmooth(p.t, p.f1, p.ph1) * 0.4
-                  + _ptSmooth(p.t, p.f2, p.ph2) * 0.6) * 0.006 * delta * 60;
-    p.x    = Math.max(0.01, Math.min(0.99, p.x + wobble));
-    // 上昇（0〜1正規化座標、vyは/秒）
-    p.y   -= p.vy * delta * 60;
+                  + _ptSmooth(p.t, p.f2, p.ph2) * 0.6) * 0.005 * delta * 60;
+    p.x = Math.max(0.04, Math.min(0.96, p.x + wobble));
+    // 上昇（全画面: y=1.0=下端 → y=0.0=上端）
+    p.y  -= p.vy * delta * 60;
     p.age += delta;
     const lifeFrac = p.age / p.maxAge;
-    // 上端超えまたは寿命 → 下部で再生成
-    if (p.y < -0.01 || lifeFrac >= 1.0) {
-      Object.assign(p, _spawnPt(0.98 + Math.random() * 0.04));
+    // 上端超えまたは寿命 → 下端で再生成
+    if (p.y < -0.02 || lifeFrac >= 1.0) {
+      Object.assign(p, _spawnPt(0.97 + Math.random() * 0.05)); // 下端(y≈1)から再出現
       p.age = 0;
     }
   }
@@ -489,13 +492,14 @@ function _tickParticles(particles, delta) {
 // ── draw: 粒子をCanvasに描画（tick後に呼ぶ）────────────────────
 function _drawParticles(ctx, particles, W, H, brightScale) {
   for (const p of particles) {
-    const lifeFrac   = p.age / p.maxAge;
-    // 後半50%でフェードアウト
-    const fadeFrac   = lifeFrac < 0.5 ? 1.0 : 1.0 - (lifeFrac - 0.5) * 2.0;
-    // 上端ほど薄くなる（y=0が上端、y=1が下端）
-    const heightFade = Math.max(0, Math.min(1, p.y * 3.5));
-    const alpha      = fadeFrac * heightFade * 0.30 * brightScale;
-    if (alpha < 0.006) continue;
+    const lifeFrac = p.age / p.maxAge;
+    // ライフ後半50%でフェードアウト
+    const fadeFrac = lifeFrac < 0.5 ? 1.0 : 1.0 - (lifeFrac - 0.5) * 2.0;
+    // 上端80〜100%付近（y=0〜0.20）でフェードアウト
+    // y=0が上端、y=1が下端 → y < 0.20 でフェード開始
+    const heightFade = Math.max(0, Math.min(1, p.y / 0.18));
+    const alpha = fadeFrac * heightFade * 0.28 * brightScale;
+    if (alpha < 0.005) continue;
 
     const px = p.x * W, py = p.y * H;
     ctx.save();
@@ -1433,10 +1437,9 @@ function updateInfoPanel_INTRO0() {
   activateCvPanel(cv, tex, 'intro0', _cvPtsIntro, 1.0, _drawIntro0Text);
 }
 
-// テキスト描画関数を生成（タイトル + 本文、毎フレームの extraFn として使用）
+// テキスト描画関数を生成（intro: 中央揃え / game: 2カラム）
 function _makeTextExtraFn(titleText, bodyText, mode) {
   const isGame = mode === 'game';
-  const MARGIN = 90;
   return function(ctx, W, H) {
     // 枠線（introは赤み）
     if (!isGame) {
@@ -1444,33 +1447,82 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.roundRect(5, 5, W-10, H-10, 20); ctx.stroke();
     }
-    let y = 48;
-    if (titleText) {
-      ctx.fillStyle = '#f0c070';
-      ctx.font = 'bold 50px serif';
-      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-      ctx.fillText(titleText, MARGIN, y);
-      y += 68;
-      ctx.strokeStyle = isGame ? 'rgba(120,80,30,0.35)' : 'rgba(160,55,20,0.45)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(MARGIN, y); ctx.lineTo(W-MARGIN, y); ctx.stroke();
-      y += 22;
-    }
-    const lines = bodyText.split('\n');
-    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    for (const line of lines) {
-      if (line.trim() === '') { y += 18; continue; }
-      const isEn = (line.match(/[a-zA-Z]/g)||[]).length / Math.max(1, line.length) > 0.4;
-      if (isEn) {
-        ctx.font = '38px sans-serif';
-        ctx.fillStyle = isGame ? '#a8c8e8' : '#b0d0f0';
-        ctx.fillText(line, MARGIN, y);
-        y += Math.round(38 * 1.55);
-      } else {
-        ctx.font = '42px serif';
-        ctx.fillStyle = isGame ? '#ddd0b8' : '#f0e8d0';
-        ctx.fillText(line, MARGIN, y);
-        y += Math.round(42 * 1.52);
+
+    if (isGame) {
+      // 体験中: 2カラムレイアウト（左:説明 / 右:操作）
+      // bodyText に '---' セパレータで左右を区切る
+      const sepIdx = bodyText.indexOf('\n---\n');
+      const leftText  = sepIdx >= 0 ? bodyText.slice(0, sepIdx) : bodyText;
+      const rightText = sepIdx >= 0 ? bodyText.slice(sepIdx + 5) : '';
+      const COL_PAD = 60, COL_MID = W / 2 - 20;
+      const COL_R   = W / 2 + 20;
+
+      // タイトル（中央）
+      let ty = 38;
+      if (titleText) {
+        ctx.fillStyle = '#f0c070'; ctx.font = 'bold 50px serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillText(titleText, W/2, ty); ty += 66;
+        ctx.strokeStyle = 'rgba(160,55,20,0.45)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(60, ty); ctx.lineTo(W-60, ty); ctx.stroke();
+        ty += 18;
+      }
+      // 中央区切り線
+      ctx.strokeStyle = 'rgba(160,55,20,0.25)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(W/2, ty); ctx.lineTo(W/2, H-30); ctx.stroke();
+
+      // 左カラム
+      function drawCol(text, startX, endX, startY) {
+        const lines = text.split('\n');
+        ctx.textBaseline = 'top';
+        ctx.textAlign = 'left';
+        let y = startY;
+        for (const line of lines) {
+          if (line.trim() === '') { y += 14; continue; }
+          const isEn = (line.match(/[a-zA-Z]/g)||[]).length / Math.max(1, line.length) > 0.4;
+          const fs = isEn ? 34 : 38;
+          ctx.font = isEn ? `${fs}px sans-serif` : `${fs}px serif`;
+          ctx.fillStyle = isEn ? '#a0c4e4' : '#d8ccb4';
+          ctx.fillText(line.trim(), startX, y);
+          y += Math.round(fs * 1.6);
+        }
+      }
+      drawCol(leftText,  COL_PAD, COL_MID, ty);
+      drawCol(rightText, COL_R,   W - 40,  ty);
+
+    } else {
+      // intro_1〜4: 中央揃え、縦中央寄せ
+      let y = 38;
+      if (titleText) {
+        ctx.fillStyle = '#f0c070'; ctx.font = 'bold 50px serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillText(titleText, W/2, y); y += 66;
+        ctx.strokeStyle = 'rgba(160,55,20,0.45)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(90, y); ctx.lineTo(W-90, y); ctx.stroke();
+        y += 20;
+      }
+      // 行高さを事前計算して縦中央寄せ
+      const lines = bodyText.split('\n');
+      let totalH = 0;
+      for (const line of lines) {
+        if (line.trim() === '') { totalH += 20; continue; }
+        const isEn = (line.match(/[a-zA-Z]/g)||[]).length / Math.max(1, line.length) > 0.4;
+        totalH += Math.round((isEn ? 40 : 44) * 1.58);
+      }
+      // 残り高さに対して縦中央寄せ
+      const remaining = H - y - 30;
+      const offset = Math.max(0, (remaining - totalH) / 2);
+      y += offset;
+
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      for (const line of lines) {
+        if (line.trim() === '') { y += 20; continue; }
+        const isEn = (line.match(/[a-zA-Z]/g)||[]).length / Math.max(1, line.length) > 0.4;
+        const fs = isEn ? 40 : 44;
+        ctx.font = isEn ? `${fs}px sans-serif` : `${fs}px serif`;
+        ctx.fillStyle = isEn ? '#b0d0f0' : '#f0e8d0';
+        ctx.fillText(line.trim(), W/2, y);
+        y += Math.round(fs * 1.58);
       }
     }
   };
@@ -2011,22 +2063,33 @@ phases and forge your own blade.
     resetForging();
     shapeDistortion = 100;
     updateInfoPanel(
-`鍛造は最初の工程です。炉の中で鉄を赤く熱し、
-適温になったら作業台に置き、ハンマーで打ちます。
-打つことで刃物の基礎となる形が作られます。
+`鍛造は最初の工程です。
+炉の中で鉄を赤く熱し、
+適温になったら作業台に置き、
+ハンマーで打ちます。
 
-Forging is the first step. Heat the iron red-hot
-in the furnace, then place it on the bench and
-hammer it. This shapes the foundation of the blade.
+Forging is the first step.
+Heat the iron red-hot in the furnace,
+then hammer it on the bench.
+This shapes the foundation of the blade.
+---
+左グリップ：鉄を掴む
+Left Grip: Hold iron
 
-　左グリップ：鉄を掴む　Left Grip: Hold iron
-　右トリガー：打撃　　　Right Trigger: Hammer
+右トリガー：打撃
+Right Trigger: Hammer
 
-　温度 80〜60°＝○ 最も効果的　Most effective
-　温度 100〜80°＝△ 熱すぎ　　Too hot
-　温度 60°未満＝× 冷めすぎ　Too cold
+温度 80〜60°＝○ 最も効果的
+Most effective
 
-　Aボタン：次のフェーズへ　A: Next Phase`,
+温度 100〜80°＝△ 熱すぎ
+Too hot
+
+温度 60°未満＝× 冷めすぎ
+Too cold
+
+Aボタン：次のフェーズへ
+A: Next Phase`,
 '① 鍛造 / Phase 1: Forging');
 
   } else if (state === State.SHAPING) {
@@ -2034,23 +2097,31 @@ hammer it. This shapes the foundation of the blade.
     bladeState.shapeDistortion = shapeDistortion;
     bladeState.symmetryError   = 100;
     updateInfoPanel(
-`越前打刃物の技「二枚広げ」では、
-表と裏のバランスが重要です。
-ゾーンの数値を0に近づけることで、
-均一な刃物が仕上がります。
+`二枚広げとは、2枚の刃を
+重ねたまま叩く越前の技です。
 
-The Echizen technique "Nimai-hiroge" requires
-balance between both sides.
-Bring each zone value close to 0
-to achieve a uniform blade.
+表と裏のバランスを意識して、
+ゾーンの数値を0に近づけましょう。
 
-　右トリガー：ゾーンを叩く　Trigger: Hammer zone
-　Xボタン：表裏反転　　　　X: Flip blade
-　表(+)歪み→表から叩く　Hit same side as sign(+/-)
-　裏(-)歪み→裏から叩く
+"Nimai-hiroge": two blades hammered
+together — Echizen's unique technique.
+Balance both sides to achieve
+a uniform blade.
+---
+右トリガー：ゾーンを叩く
+Right Trigger: Hammer zone
 
-　歪み=0→100点　Distortion=0 → 100pt
-　Aボタン：終了　A: Finish`,
+Xボタン：表裏反転
+X Button: Flip blade
+
+表(+)歪み → 表から叩く
+Minus(-)歪み → 裏から叩く
+
+歪み＝0 → 100点
+Distortion=0 → 100pt
+
+Aボタン：終了
+A: Finish`,
 '② 成形 / Phase 2: Shaping');
 
   } else if (state === State.SHARPENING) {
@@ -2060,21 +2131,34 @@ to achieve a uniform blade.
     }
     updateInfoPanel(
 `研ぎは刃を完成させる最後の工程です。
-砥石の角度を守ることで、鋭い刃が生まれます。
-職人は長年の経験で角度を体で覚えています。
+砥石の角度を保つことで、
+鋭い刃が生まれます。
 
-Sharpening is the final step to complete the edge.
-Maintaining the correct angle creates a sharp blade.
-Craftsmen learn this angle through years of practice.
+職人は長年の経験で
+その角度を体で覚えています。
 
-　両グリップ：刃物を保持　Both Grips: Hold blade
-　前後スライド　　　　　　Slide back & forth
-　目標角度：-15°（手前に傾ける）　Target: -15°
-　両手の角度を揃えること　Align both hands (HUD: NG=misaligned)
+Sharpening completes the blade.
+The correct angle creates a sharp edge.
+Craftsmen master this through years
+of practice.
+---
+両グリップ：刃物を保持
+Both Grips: Hold blade
 
-　◎(-22〜-8°)=3pt  ○=2pt  △=1pt  ×=0pt
-　◎10回で+10ptボーナス　10x ◎: +10pt bonus
-　Aボタン：次のフェーズへ　A: Next Phase`,
+前後にスライド
+Slide back & forth
+
+目標角度：-15°
+Target angle: -15°
+
+両手の角度を揃える
+HUD: NG = 不一致
+
+◎=3pt ○=2pt △=1pt ×=0pt
+◎10回 → +10ptボーナス
+
+Aボタン：次のフェーズへ
+A: Next Phase`,
 '③ 研ぎ / Phase 3: Sharpening');
 
   } else if (state === State.RESULT) {
@@ -2674,80 +2758,35 @@ _ptYellow.instanceMatrix.needsUpdate = true;
 ================================================================ */
 let _uiPtCanvas = null;
 let _uiPtCtx    = null;
-let _uiPts      = [];
-let _uiPtActive = false;   // uiPanel/modal表示中のみ動作
-let _uiRafId    = null;    // requestAnimationFrame ID
+// ── ブラウザUI粒子: 共通システム(_spawnPt/_tick/_draw)を使用 ──
+const _uiPtsCount = 140;
+let _uiPts      = [];           // 共通_spawnPtで生成
+let _uiPtActive = false;
+let _uiRafId    = null;
 let _uiLastTime = 0;
+let _uiCanvas   = null;
+let _uiCtx      = null;
 
 function _initUiParticles() {
-  _uiPtCanvas = document.getElementById('ui-particle-canvas');
-  if (!_uiPtCanvas) return;
-  _uiPtCanvas.width  = window.innerWidth;
-  _uiPtCanvas.height = window.innerHeight;
-  _uiPtCtx = _uiPtCanvas.getContext('2d');
-  // 粒子生成（スクリーン座標で管理）
-  const W = _uiPtCanvas.width, H = _uiPtCanvas.height;
-  const count = 140;
-  // _spawnPt は 0〜1 正規化座標。ブラウザ用にスクリーンpxに変換して保持
-  _uiPts = Array.from({ length: count }, () => {
-    const p = _spawnPt();           // 0〜1 正規化座標ベース
-    p.x = p.x * W;                  // スクリーンpxに変換
-    p.y = Math.random() * H;        // 初期Y: 画面全体に分散
-    p.vy = p.vy * H * 60;           // 上昇速度をpx/secに変換（_spawnPtのvy は normalized/frame）
-    p._W = W; p._H = H;             // スクリーンサイズ記憶（再生成時に使用）
-    return p;
-  });
+  _uiCanvas = document.getElementById('ui-particle-canvas');
+  if (!_uiCanvas) return;
+  _uiCanvas.width  = window.innerWidth;
+  _uiCanvas.height = window.innerHeight;
+  _uiCtx = _uiCanvas.getContext('2d');
+  // 共通_spawnPtで生成（初期y = 画面全体にランダム分布）
+  _uiPts = Array.from({ length: _uiPtsCount }, () => _spawnPt());
 }
 
 function _drawUiParticles(now) {
-  if (!_uiPtCtx || !_uiPtCanvas) return;
+  if (!_uiCtx || !_uiCanvas) return;
   const delta = Math.min((now - _uiLastTime) / 1000, 0.05);
   _uiLastTime = now;
-  const W = _uiPtCanvas.width, H = _uiPtCanvas.height;
-
-  // 背景は透明クリア（#uiPanel / modalの背景が見える）
-  _uiPtCtx.clearRect(0, 0, W, H);
-
-  const scale = Math.max(delta / 0.016, 0.1);
-  for (const p of _uiPts) {
-    p.t   += delta * 0.22;
-    // パーリン風ごく小さい左右揺れ（スクリーンpx換算）
-    const wobble = (_ptSmooth(p.t, p.f1, p.ph1) * 0.4 + _ptSmooth(p.t, p.f2, p.ph2) * 0.6) * 0.006 * scale;
-    p.x = Math.max(W * 0.01, Math.min(W * 0.99, p.x + wobble * W * 0.1));
-    // 上昇（px/sec）
-    p.y  -= p.vy * delta * scale;
-    p.age += delta;
-    const lifeFrac = p.age / p.maxAge;
-    if (p.y < -2 || lifeFrac >= 1.0) {
-      // 再生成：下部ランダム位置
-      const fresh = _spawnPt(1.01);   // y=1.01 正規化 → 画面下端外
-      p.x = fresh.x * W;
-      p.y = H + 2 + Math.random() * 8;
-      p.vy = fresh.vy * H * 60;
-      p.f1 = fresh.f1; p.f2 = fresh.f2;
-      p.ph1 = fresh.ph1; p.ph2 = fresh.ph2;
-      p.t   = fresh.t;
-      p.age = 0; p.maxAge = fresh.maxAge;
-      p.col = fresh.col;
-      continue;
-    }
-    // フェードアウト（後半50%で消える）
-    const fadeFrac   = lifeFrac < 0.5 ? 1.0 : 1.0 - (lifeFrac - 0.5) * 2.0;
-    // 高さフェード（上端で消える）
-    const heightFade = Math.max(0, Math.min(1, (H - p.y) / (H * 0.12)));
-    const alpha = fadeFrac * heightFade * 0.28;
-    if (alpha < 0.006) continue;
-
-    _uiPtCtx.save();
-    _uiPtCtx.globalAlpha = alpha;
-    _uiPtCtx.beginPath();
-    _uiPtCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-    _uiPtCtx.fillStyle = p.col === 'w' ? '#fff9f2'
-                       : p.col === 'o' ? `hsl(${18+Math.random()*18},100%,60%)`
-                       :                 `hsl(${4+Math.random()*10},88%,46%)`;
-    _uiPtCtx.fill();
-    _uiPtCtx.restore();
-  }
+  const W = _uiCanvas.width, H = _uiCanvas.height;
+  // 背景は透明クリア（#uiPanelの背景が透けて見える）
+  _uiCtx.clearRect(0, 0, W, H);
+  // 共通tick/drawを使用（px換算: x*W, y*H）
+  _tickParticles(_uiPts, delta);
+  _drawParticles(_uiCtx, _uiPts, W, H, 0.9);
 }
 
 function _uiParticleLoop(now) {
@@ -2758,9 +2797,9 @@ function _uiParticleLoop(now) {
 
 function startUiParticles() {
   if (!_uiPts.length) _initUiParticles();
-  if (_uiPtCanvas) {
-    _uiPtCanvas.width  = window.innerWidth;
-    _uiPtCanvas.height = window.innerHeight;
+  if (_uiCanvas) {
+    _uiCanvas.width  = window.innerWidth;
+    _uiCanvas.height = window.innerHeight;
   }
   _uiPtActive = true;
   if (!_uiRafId) {
@@ -2772,11 +2811,10 @@ function startUiParticles() {
 function stopUiParticles() {
   _uiPtActive = false;
   if (_uiRafId) { cancelAnimationFrame(_uiRafId); _uiRafId = null; }
-  if (_uiPtCtx && _uiPtCanvas)
-    _uiPtCtx.clearRect(0, 0, _uiPtCanvas.width, _uiPtCanvas.height);
+  if (_uiCtx && _uiCanvas)
+    _uiCtx.clearRect(0, 0, _uiCanvas.width, _uiCanvas.height);
 }
 
-// リサイズ対応
 window.addEventListener('resize', () => {
   if (_uiPtCanvas && _uiPtActive) {
     _uiPtCanvas.width  = window.innerWidth;
