@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -1973,9 +1973,9 @@ function resetForging() {
 // ── 接地補正ヘルパー群 ──────────────────────────────────────
 // 表(flipped=false): rotation.x=-PI/2 → ローカルZ=0 が底面 → groundOff=0
 // 裏(flipped=true) : rotation.x=+PI/2 → ローカルZ=depth が底面 → groundOff=BLADE_DEPTH
-function _bladeGroundOffset(flipped) {
-  return flipped ? BLADE_DEPTH : 0;
-}
+// function _bladeGroundOffset(flipped) {
+//   return flipped ? BLADE_DEPTH : 0;
+// }
 
 function _syncWireMeshes(rot, posZ) {
   // ワイヤーを刃物の「表面側」方向にWIRE_OFFSETだけ押し出す
