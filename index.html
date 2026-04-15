@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2756,7 +2756,6 @@ _ptYellow.instanceMatrix.needsUpdate = true;
    BROWSER UI PARTICLE SYSTEM
    #ui-particle-canvas に粒子演出を描画（ブラウザ画面用）
 ================================================================ */
-let _uiPtCanvas = null;
 let _uiPtCtx    = null;
 // ── ブラウザUI粒子: 共通システム(_spawnPt/_tick/_draw)を使用 ──
 const _uiPtsCount = 140;
@@ -2816,9 +2815,9 @@ function stopUiParticles() {
 }
 
 window.addEventListener('resize', () => {
-  if (_uiPtCanvas && _uiPtActive) {
-    _uiPtCanvas.width  = window.innerWidth;
-    _uiPtCanvas.height = window.innerHeight;
+  if (_uiCanvas && _uiPtActive) {
+    _uiCanvas.width  = window.innerWidth;
+    _uiCanvas.height = window.innerHeight;
   }
 });
 
