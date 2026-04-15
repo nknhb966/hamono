@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -364,8 +364,7 @@ const _fadeMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: tru
 const _fadePlane = new THREE.Mesh(_fadeGeo, _fadeMat);
 _fadePlane.renderOrder = 999;
 _fadePlane.position.set(0, 0, -0.5);
-camera.add(_fadePlane);
-scene.add(camera);
+// camera.add は camera 定義後に行う（下の THREE.JS CORE セクションで実行）
 
 function easeInOutQuad(t) { return t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t+2,2)/2; }
 function easeOutCubic(t)  { return 1 - Math.pow(1-t, 3); }
@@ -458,6 +457,9 @@ scene.fog = new THREE.FogExp2(0x0a0705, 0.04);
 
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
 camera.position.set(0, 1.6, 0);
+// フェードオーバーレイをカメラに追加（camera定義直後）
+camera.add(_fadePlane);
+scene.add(camera);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
