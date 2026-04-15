@@ -384,7 +384,7 @@ function _spawnPt(existingY) {
   for (let attempt = 0; attempt < 8; attempt++) {
     const gx = (Math.random()+Math.random()+Math.random()+Math.random()-2) * 0.32;
     x = 0.5 + gx;
-    if (x >= -0.06 && x <= 1.06) break; // 端回避 (条件緩和)
+    if (x >= -0.1 && x <= 1.1) break; // 端回避 (条件緩和)
   }
   x = Math.max(0.04, Math.min(0.96, x));
 
@@ -1402,7 +1402,7 @@ function _drawIntro0Text(ctx, W, H) {
   const fontSize = 220;
   ctx.save();
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.strokeStyle = isARMode ? 'rgba(60,30,20,0.6)' : 'rgba(200,210,220,0.85)';
+  ctx.strokeStyle = 'rgba(192,200,210,0.90)';  // 銀色（VR/AR共通）
   ctx.lineWidth = 4;
   ctx.font = `bold ${fontSize}px serif`;
   ctx.strokeText('越前打刃物', W/2, H/2 - 60);
@@ -1419,7 +1419,7 @@ function _drawIntro0Text(ctx, W, H) {
   ctx.save();
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = 'bold 60px serif';
-  ctx.fillStyle = isARMode ? 'rgba(30,15,5,0.85)' : 'rgba(200,180,140,0.9)';
+  ctx.fillStyle = 'rgba(190,195,205,0.92)';  // シルバー（VR/AR共通）
   ctx.fillText('Echizen Hamono — Blacksmith VR', W/2, H/2 + 110);
   ctx.restore();
   ctx.save();
