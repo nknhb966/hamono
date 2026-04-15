@@ -1970,17 +1970,33 @@ function resetForging() {
   ironMesh.material.color.copy(tempToColor(70));
   updateTempSprite(70);
 }
-// ── 接地補正ヘルパー群 ──────────────────────────────────────
-// 表(flipped=false): rotation.x=-PI/2 → ローカルZ=0 が底面 → groundOff=0
-// 裏(flipped=true) : rotation.x=+PI/2 → ローカルZ=depth が底面 → groundOff=BLADE_DEPTH
-// function _bladeGroundOffset(flipped) {
-//   return flipped ? BLADE_DEPTH : 0;
-// }
+// ── BoundingBoxベース接地補正 ─────────────────────────────────
+// 天板上面: workbenchPos.y + (天板厚み/2) = 0.85 + 0.03 = 0.88
+const TABLE_SURFACE_Y = workbenchPos.y + 0.03;
+const _bbBox = new THREE.Box3(); // 毎回再利用するBox3インスタンス
 
+// blade1/blade2 のみを対象にBBを計算（ワイヤーは除く）
+function _getBladeBB() {
+  _bbBox.makeEmpty();
+  _bbBox.expandByObject(bladeMesh);
+  _bbBox.expandByObject(bladeMesh2);
+  return _bbBox;
+}
+
+// BoundingBoxを使ってbladePivotを接地させる
+function _groundBladeByBB() {
+  // 現在のワールドBBを取得
+  const bb   = _getBladeBB();
+  const minY = bb.min.y;                   // 現在の最下点
+  const diff = TABLE_SURFACE_Y - minY;     // 不足分 or 超過分
+  bladePivot.position.y += diff;           // 補正
+}
+
+// ワイヤーメッシュを刃物の同じTransformに追従させ、ローカル法線方向にオフセット
+// bladePivotの子なので、bladeMesh/bladeMesh2 のpivotローカル座標で設定
 function _syncWireMeshes(rot, posZ) {
-  // ワイヤーを刃物の「表面側」方向にWIRE_OFFSETだけ押し出す
-  // 表(rot<0)のとき: ローカル+Z がワールド上方 → posZ + WIRE_OFFSET
-  // 裏(rot>0)のとき: ローカル+Z がワールド下方 → posZ - WIRE_OFFSET
+  // 表(rot<0): ローカル+Z → ワールド上方 → posZ + WIRE_OFFSET（上面に表示）
+  // 裏(rot>0): ローカル+Z → ワールド下方 → posZ - WIRE_OFFSET（上面=裏面に表示）
   const zDir = rot < 0 ? +WIRE_OFFSET : -WIRE_OFFSET;
   wireMesh1.rotation.x = rot;
   wireMesh1.position.set(-0.204, +BLADE_HALF, posZ + zDir);
@@ -1988,15 +2004,18 @@ function _syncWireMeshes(rot, posZ) {
   wireMesh2.position.set(-0.204, -BLADE_HALF, posZ + zDir);
 }
 
+// 回転・位置を設定してからBB接地補正 → ワイヤー同期
 function _applyBladeGround(flipped) {
-  // pivotYを接地面に合わせる（浮き・埋没なし）
-  bladePivot.position.y = workbenchPos.y + _bladeGroundOffset(flipped);
   const rot  = flipped ? Math.PI/2 : -Math.PI/2;
   const posZ = flipped ? -0.035 : 0.035;
+  // まず回転・位置を確定
   bladeMesh.rotation.x  = rot;
   bladeMesh.position.set(-0.204, +BLADE_HALF, posZ);
   bladeMesh2.rotation.x = rot;
   bladeMesh2.position.set(-0.204, -BLADE_HALF, posZ);
+  // BoundingBoxで接地
+  _groundBladeByBB();
+  // ワイヤー同期（接地後、pivotローカル座標は変わらないのでそのまま）
   _syncWireMeshes(rot, posZ);
 }
 
@@ -2492,7 +2511,7 @@ function updateShaping(delta) {
   }
   wasXPressed = xBtn;
   if (bladeFlipAnim > 0) {
-    // フリップアニメーション中: 補間 + 接地補正も補間
+    // フリップアニメーション中: 補間後にBBで接地
     bladeFlipAnim = Math.max(0, bladeFlipAnim - delta * 5);
     const t     = 1 - bladeFlipAnim;               // 0→1
     const from  = bladeFlipped ? -Math.PI/2 :  Math.PI/2;
@@ -2501,18 +2520,16 @@ function updateShaping(delta) {
     const zFrom = bladeFlipped ?  0.035 : -0.035;
     const zTo   = bladeFlipped ? -0.035 :  0.035;
     const posZ  = zFrom + (zTo - zFrom) * t;
-    // 接地補正を補間（表:0 → 裏:BLADE_DEPTH）
-    const gFrom = _bladeGroundOffset(!bladeFlipped);
-    const gTo   = _bladeGroundOffset( bladeFlipped);
-    bladePivot.position.y = workbenchPos.y + gFrom + (gTo - gFrom) * t;
-    // 2枚＋ワイヤー同期
+    // 回転・位置を設定
     bladeMesh.rotation.x  = rot;
     bladeMesh.position.set(-0.204, +BLADE_HALF, posZ);
     bladeMesh2.rotation.x = rot;
     bladeMesh2.position.set(-0.204, -BLADE_HALF, posZ);
+    // BoundingBoxで毎ステップ接地（アニメ中も埋没しない）
+    _groundBladeByBB();
     _syncWireMeshes(rot, posZ);
   } else {
-    // フリップ完了: 接地補正を正確に適用（浮き・埋没なし）
+    // フリップ完了: 完全接地 + ワイヤー同期
     _applyBladeGround(bladeFlipped);
   }
 
