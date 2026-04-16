@@ -438,6 +438,8 @@ function isIntroState(s) { return INTRO_STATES.includes(s); }
 let currentState = State.INTRO_0;
 
 let bladeState = { shapeDistortion: 0, symmetryError: 0, sharpness: 0 };
+// フェーズ確定スコア（終了時に保存、最終結果でそのまま使用）
+const _phaseScores = { forging: 0, shaping: 0, sharpening: 0 };
 
 /* ================================================================
    FADE & TRANSITION SYSTEM
@@ -452,7 +454,7 @@ let _inputLocked     = false; // フェード中は入力無効
 // intro_0 スケールアニメーション
 // フェードオーバーレイ（Three.js 全画面Planeを使用）
 const _fadeGeo = new THREE.PlaneGeometry(100, 100);
-const _fadeMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, depthTest: true, depthWrite: false });
+const _fadeMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, depthTest: false, depthWrite: false });
 const _fadePlane = new THREE.Mesh(_fadeGeo, _fadeMat);
 _fadePlane.renderOrder = 999;
 _fadePlane.position.set(0, 0, -0.5);
@@ -1781,16 +1783,10 @@ function buildResultCanvas(score, bladeStateSnap, scores) {
   ctx.fillStyle = '#ffaa88';
   ctx.fillText('Echizen Blades Complete', W/2, 120);
 
-  // フェーズ①②③スコア（onEnterStateと同じ計算式）— まず計算
-  const forgingScore  = Math.round(Math.max(0, Math.min(100, 100 - bladeStateSnap.shapeDistortion)));
-  // symmetryError は RMS誤差。L2スコアは onEnterState で再計算済みだが
-  // スナップショットからは直接再計算できないため RMS→スコアへ変換
-  // RMS=0→100点, RMS=初期RMS→0点（近似）
-  const _initRMS = Math.sqrt(zones.reduce((s,z)=>s+z.initialDistortion*z.initialDistortion,0)/zones.length);
-  const shapingScore2 = Math.round(Math.max(0, Math.min(100,
-    _initRMS > 0 ? 100 * (1 - (bladeStateSnap.symmetryError / _initRMS) ** 2) : 0
-  )));
-  const sharpenScore  = Math.round(Math.max(0, Math.min(100, bladeStateSnap.sharpness)));
+  // 確定保存済みスコアをそのまま使用（再計算・RMS・正規化は一切禁止）
+  const forgingScore  = bladeStateSnap._forging;
+  const shapingScore2 = bladeStateSnap._shaping;
+  const sharpenScore  = bladeStateSnap._sharpening;
   const recomputedFinal = Math.max(0, Math.min(100,
     forgingScore  * 0.4 +
     shapingScore2 * 0.3 +
@@ -2111,6 +2107,10 @@ function resetForging() {
   ironMesh.position.set(0, 0.91, -1.1);
   ironMesh.material.color.copy(tempToColor(70));
   updateTempSprite(70);
+  // 全フェーズスコアをリセット（新ゲーム開始時）
+  _phaseScores.forging    = 0;
+  _phaseScores.shaping    = 0;
+  _phaseScores.sharpening = 0;
 }
 // ── BoundingBoxベース接地補正 ─────────────────────────────────
 // 天板上面: workbenchPos.y + (天板厚み/2) = 0.85 + 0.03 = 0.88
@@ -2424,31 +2424,15 @@ A: Next Phase`,
 '③ 研ぎ / Phase 3: Sharpening');
 
   } else if (state === State.RESULT) {
-    // L2ノルムスコア: RMS誤差から逆算（shapingが完了済みならL2スコアが保存済み）
-    const sumSq0r = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
-    const sumSqr  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
-    // L2ノルム: score = 100 × (1 - Σx_i² / Σx_i0²)
-    const shapingScore = Math.max(0, Math.min(100, sumSq0r > 0 ? 100 * (1 - sumSqr / sumSq0r) : 0));
-    const efficiency   = 1.0;  // L2ノルムで正規化済みのため efficiency は不要
-    // 加点方式: 最大 30回×3点=90点 + ボーナス → 100点満点に正規化
-    const maxPossible = CONFIG.SHARPENING.TOTAL_STROKES * 3;
-    bladeState.sharpness = strokeCount > 0
-      ? Math.max(0, Math.min(100, (totalSharpness / maxPossible) * 100 * efficiency))
-      : 0;
-
-    // buildResultCanvasと同じ計算式
-    const forgingScoreFinal  = Math.max(0, Math.min(100, 100 - bladeState.shapeDistortion));
-    const shapingScoreFinal  = shapingScore;
-    const sharpenScoreFinal  = bladeState.sharpness;
+    // 各フェーズ確定スコアをそのまま使用（再計算禁止）
+    const fS = _phaseScores.forging;
+    const sS = _phaseScores.shaping;
+    const hS = _phaseScores.sharpening;
     const finalScore = Math.max(0, Math.min(100,
-      forgingScoreFinal * 0.4 +
-      shapingScoreFinal * 0.3 +
-      sharpenScoreFinal * 0.3
+      fS * 0.4 + sS * 0.3 + hS * 0.3
     ));
-    const scores  = saveScore(finalScore);
-    showResultPanel(finalScore, bladeState, scores);
-    // 刃物マテリアルを品質に応じて更新（depthTest:falseで常にパネルの前面に表示）
-    // 刃物出力なし
+    const scores = saveScore(finalScore);
+    showResultPanel(finalScore, { _forging: fS, _shaping: sS, _sharpening: hS }, scores);
   }
 }
 
@@ -2630,6 +2614,8 @@ function updateForging(delta) {
 
     if (forgingHitCount >= CONFIG.FORGING.TOTAL_HITS) {
       forgingComplete = true;
+      // フェーズ終了時にスコアを確定保存
+      _phaseScores.forging = Math.round(Math.max(0, Math.min(100, 100 - shapeDistortion)));
       updateInfoPanel(`鍛造が完了しました！\n歪み: ${Math.round(shapeDistortion)}\n\nForging complete!\nDistortion: ${Math.round(shapeDistortion)}\n\nAボタン：次のフェーズへ　A: Next Phase`, '① 鍛造完了 / Forging Complete');
       playComplete();
     }
@@ -2778,6 +2764,8 @@ function updateShaping(delta) {
     const _sq0c = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
     const _sqc  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
     const score = Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0));
+    // フェーズ終了時にスコアを確定保存（以降は再計算しない）
+    _phaseScores.shaping = Math.round(score);
     bladeState.symmetryError = Math.sqrt(_sqc / zones.length);
     updateInfoPanel(`成形が完了しました！\nスコア: ${Math.round(score)}pt\n\nShaping complete!\nScore: ${Math.round(score)}pt\n\nAボタン：次のフェーズへ　A: Next Phase`, '② 成形完了 / Shaping Complete');
     playComplete();
@@ -2945,7 +2933,9 @@ function updateSharpening(delta) {
 
   if (strokeCount >= CONFIG.SHARPENING.TOTAL_STROKES && !sharpenComplete) {
     sharpenComplete = true;
-    updateInfoPanel(`研ぎが完了しました！\n合計ポイント: ${Math.round(totalSharpness)}pt\n\nSharpening complete!\nTotal points: ${Math.round(totalSharpness)}pt\n\nAボタン：結果へ　A: See Results`, '③ 研ぎ完了 / Sharpening Complete');
+    // フェーズ終了時にスコアを確定保存（100点クランプのみ、正規化しない）
+    _phaseScores.sharpening = Math.min(100, Math.round(totalSharpness));
+    updateInfoPanel(`研ぎが完了しました！\n合計ポイント: ${_phaseScores.sharpening}pt\n\nSharpening complete!\nTotal points: ${_phaseScores.sharpening}pt\n\nAボタン：結果へ　A: See Results`, '③ 研ぎ完了 / Sharpening Complete');
     playComplete();
   }
 }
