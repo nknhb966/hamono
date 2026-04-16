@@ -452,7 +452,7 @@ let _inputLocked     = false; // フェード中は入力無効
 // intro_0 スケールアニメーション
 // フェードオーバーレイ（Three.js 全画面Planeを使用）
 const _fadeGeo = new THREE.PlaneGeometry(100, 100);
-const _fadeMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, depthTest: false, depthWrite: false });
+const _fadeMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, depthTest: true, depthWrite: false });
 const _fadePlane = new THREE.Mesh(_fadeGeo, _fadeMat);
 _fadePlane.renderOrder = 999;
 _fadePlane.position.set(0, 0, -0.5);
