@@ -560,7 +560,7 @@ function updateCvPanel(delta) {
   if (!_cvPtCanvas._ctx2d) _cvPtCanvas._ctx2d = _cvPtCanvas.getContext('2d');
   const ctx = _cvPtCanvas._ctx2d;
 
-  // 背景は常に描画（テキスト可読性のため）
+  // 背景は常に描画（パーティクルOFF時も背景を描いてCanvasを初期化する）
   _drawPanelBg(ctx, W, H, _cvPanelMode);
 
   // [Toggle 1] useCanvasParticles: パーティクルtick/draw
@@ -568,22 +568,20 @@ function updateCvPanel(delta) {
     _tickParticles(_cvPanelPts, delta);
     _drawParticles(ctx, _cvPanelPts, W, H, _cvPanelBright);
   }
+  // OFF時: パーティクル非描画。背景描画でキャンバスはクリア済み。
 
-  // テキスト等の追加描画は常に実行
+  // テキスト等の追加描画は常に実行（パーティクルOFF時もテキストを必ず表示）
   if (_cvPanelExtraFn) _cvPanelExtraFn(ctx, W, H);
 
-  // [Toggle 1+2] GPU転送制御
-  // useCanvasParticles=false → 転送停止（ただしトグル状態は保持）
-  if (!PerfToggles.useCanvasParticles) return;
-
-  // [Toggle 2] useCanvasTransferThrottle: 体験中のみ間引き
-  if (PerfToggles.useCanvasTransferThrottle) {
+  // [Toggle 2] useCanvasTransferThrottle: 体験中かつパーティクルON時のみ間引き
+  if (PerfToggles.useCanvasParticles && PerfToggles.useCanvasTransferThrottle) {
     const _isGameCv = (_cvPanelMode === 'game');
     if (_isGameCv) {
       _cvTransferFrameCount++;
-      if (_cvTransferFrameCount % 3 !== 0) return; // 3フレームに1回のみ転送
+      if (_cvTransferFrameCount % 3 !== 0) return;
     }
   }
+  // GPU転送: 常に実行（パーティクルOFF時もテキスト更新のために必要）
   if (_cvPtTex) _cvPtTex.needsUpdate = true;
 }
 
@@ -731,7 +729,7 @@ function playFadeSound() {
 }
 
 // INTRO→次のINTROへのフェード遷移
-function fadeToNext(duration = 1.0) {
+function fadeToNext(duration = 0.5) {  // デフォルト: 1.0秒→0.5秒
   playFadeSound();
   // フェードアウト完了 → 次stateに遷移 → フェードイン開始
   startFade(-1, duration, () => {
@@ -1422,7 +1420,8 @@ for (let i = 0; i < ZONE_COUNT; i++) {
 
   // 初期歪み
   const initSign = Math.random() > 0.5 ? 1 : -1;
-  zones.push({ distortion: initSign * (5 + Math.random() * 15), wx });
+  const d0 = initSign * (5 + Math.random() * 15);
+  zones.push({ distortion: d0, initialDistortion: d0, wx });  // initialDistortion = x_i0
   updateZoneSprite(i);
 }
 
@@ -1783,7 +1782,13 @@ function buildResultCanvas(score, bladeStateSnap, scores) {
 
   // フェーズ①②③スコア（onEnterStateと同じ計算式）— まず計算
   const forgingScore  = Math.round(Math.max(0, Math.min(100, 100 - bladeStateSnap.shapeDistortion)));
-  const shapingScore2 = Math.round(Math.max(0, Math.min(100, 100 - bladeStateSnap.symmetryError * 4)));
+  // symmetryError は RMS誤差。L2スコアは onEnterState で再計算済みだが
+  // スナップショットからは直接再計算できないため RMS→スコアへ変換
+  // RMS=0→100点, RMS=初期RMS→0点（近似）
+  const _initRMS = Math.sqrt(zones.reduce((s,z)=>s+z.initialDistortion*z.initialDistortion,0)/zones.length);
+  const shapingScore2 = Math.round(Math.max(0, Math.min(100,
+    _initRMS > 0 ? 100 * (1 - (bladeStateSnap.symmetryError / _initRMS) ** 2) : 0
+  )));
   const sharpenScore  = Math.round(Math.max(0, Math.min(100, bladeStateSnap.sharpness)));
   const recomputedFinal = Math.max(0, Math.min(100,
     forgingScore  * 0.4 +
@@ -2131,13 +2136,13 @@ function _groundBladeByBB() {
 // ワイヤーメッシュを刃物の同じTransformに追従させ、ローカル法線方向にオフセット
 // bladePivotの子なので、bladeMesh/bladeMesh2 のpivotローカル座標で設定
 function _syncWireMeshes(rot, posZ) {
-  // 表(rot<0): ローカル+Z → ワールド上方 → posZ + WIRE_OFFSET（上面に表示）
-  // 裏(rot>0): ローカル+Z → ワールド下方 → posZ - WIRE_OFFSET（上面=裏面に表示）
-  const zDir = rot < 0 ? +WIRE_OFFSET : -WIRE_OFFSET;
+  // ワイヤーは表裏に関わらず、常に刃物の「上」（ワールドY方向）+0.03mに固定
+  // bladePivotのローカルY=0.03 = ワールドY方向に+0.03m（接地面から上）
+  const WIRE_WORLD_OFFSET = 0.03;
   wireMesh1.rotation.x = rot;
-  wireMesh1.position.set(-0.204, +BLADE_HALF, posZ + zDir);
+  wireMesh1.position.set(-0.204, WIRE_WORLD_OFFSET, posZ);
   wireMesh2.rotation.x = rot;
-  wireMesh2.position.set(-0.204, -BLADE_HALF, posZ + zDir);
+  wireMesh2.position.set(-0.204, WIRE_WORLD_OFFSET, posZ);
 }
 
 // 回転・位置を設定してからBB接地補正 → ワイヤー同期
@@ -2163,7 +2168,9 @@ function resetShaping() {
   shapingComplete = false;
   zones.forEach((z, i) => {
     const sign = Math.random() > 0.5 ? 1 : -1;
-    z.distortion = sign * (5 + Math.random() * 15);
+    const d0 = sign * (5 + Math.random() * 15);
+    z.distortion = d0;
+    z.initialDistortion = d0;  // x_i0 を更新
     updateZoneSprite(i);
   });
   bladePivot.position.x = 0;
@@ -2414,9 +2421,12 @@ A: Next Phase`,
 '③ 研ぎ / Phase 3: Sharpening');
 
   } else if (state === State.RESULT) {
-    // symmetryError=0→shapingScore=100, symmetryError=25→shapingScore=0
-    const shapingScore = Math.max(0, Math.min(100, 100 - bladeState.symmetryError * 4));
-    const efficiency   = Math.max(0.5, 1 - bladeState.symmetryError * 0.01);
+    // L2ノルムスコア: RMS誤差から逆算（shapingが完了済みならL2スコアが保存済み）
+    const sumSq0r = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
+    const sumSqr  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
+    // L2ノルム: score = 100 × (1 - Σx_i² / Σx_i0²)
+    const shapingScore = Math.max(0, Math.min(100, sumSq0r > 0 ? 100 * (1 - sumSqr / sumSq0r) : 0));
+    const efficiency   = 1.0;  // L2ノルムで正規化済みのため efficiency は不要
     // 加点方式: 最大 30回×3点=90点 + ボーナス → 100点満点に正規化
     const maxPossible = CONFIG.SHARPENING.TOTAL_STROKES * 3;
     bladeState.sharpness = strokeCount > 0
@@ -2452,7 +2462,7 @@ function handleGlobalInput() {
       if (_fadeDir !== 0) {
         // フェード中は入力無効
       } else {
-        const dur = currentState === State.INTRO_0 ? 1.0 : 1.0;
+        const dur = currentState === State.INTRO_0 ? 0.5 : 0.5;  // 半分に
         fadeToNext(dur);
       }
     } else if (currentState === State.RESULT) {
@@ -2464,7 +2474,7 @@ function handleGlobalInput() {
       });
     } else {
       // ゲーム中フェーズ遷移もフェード(0.6秒)＋音
-      fadeToNext(0.6);
+      fadeToNext(0.15);  // ゲームフェーズ間: さらに半分
     }
   }
   wasAPressed = aPressed;
@@ -2749,23 +2759,25 @@ function updateShaping(delta) {
       rightController.gamepad.hapticActuators[0].pulse(0.4, 60);
     }
 
+    // L2ノルムスコア: score = 100 × (1 - Σx_i² / Σx_i0²)
+    const _sq0h = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
+    const _sqh  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
+    const shapingScore = Math.max(0, Math.min(100, _sq0h > 0 ? 100 * (1 - _sqh / _sq0h) : 0));
     const avgAbs = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
-    // スコア：歪み0→100点、歪み最大→0点
-    // 初期歪み最大25相当を100点基準に正規化
-    const shapingScore = Math.max(0, Math.min(100, 100 - avgAbs * 4));
-    // bladeState.symmetryErrorをリアルタイム更新（RESULT遷移時に使用）
-    bladeState.symmetryError = avgAbs;
-    updateInfoPanel(`フェーズ②：成形\nShaping\n打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS}\n平均歪み: ${Math.round(avgAbs)} / スコア: ${Math.round(shapingScore)}\nX：表裏反転 | A：終了`);
-    updateScorePanel(`② 打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS}\n歪み:${Math.round(avgAbs)} → ${Math.round(shapingScore)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.43, -1.25));
+    // RMS誤差をsymmetryErrorに保存（RESULT遷移時に使用）
+    bladeState.symmetryError = Math.sqrt(_sqh / zones.length);
+    // スコアパネルのみ更新（説明パネルは打撃ごとに更新しない）
+    updateScorePanel(`② 打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS}\n${Math.round(shapingScore)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.43, -1.25));
   }
   prevShapingTrigger = shapingTrig;
 
   if (shapingHitCount >= CONFIG.SHAPING.MAX_HITS && !shapingComplete) {
     shapingComplete = true;
-    const avg = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
-    const score = Math.max(0, Math.min(100, 100 - avg * 4));
-    updateInfoPanel(`成形が完了しました！\n平均歪み: ${Math.round(avg)} → スコア: ${Math.round(score)}pt\n\nShaping complete!\nAvg distortion: ${Math.round(avg)} → Score: ${Math.round(score)}pt\n\nAボタン：次のフェーズへ　A: Next Phase`, '② 成形完了 / Shaping Complete');
-    bladeState.symmetryError = avg;
+    const _sq0c = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
+    const _sqc  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
+    const score = Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0));
+    bladeState.symmetryError = Math.sqrt(_sqc / zones.length);
+    updateInfoPanel(`成形が完了しました！\nスコア: ${Math.round(score)}pt\n\nShaping complete!\nScore: ${Math.round(score)}pt\n\nAボタン：次のフェーズへ　A: Next Phase`, '② 成形完了 / Shaping Complete');
     playComplete();
   }
 }
@@ -3273,7 +3285,7 @@ setVisibility();
 onEnterState(State.INTRO_0, null);
 // 初期フェードイン（2秒）完了後にスケールアニメ開始
 _fadeMat.opacity = 1.0;
-startFade(1, 2.0, null);
+startFade(1, 0.5, null);  // 初期フェードイン: さらに半分
 
 /* ================================================================
    ANIMATION LOOP
