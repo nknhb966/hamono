@@ -192,6 +192,73 @@
     padding: 8px 22px; color: #ffb840; font-size: 13px; letter-spacing: 0.1em;
     pointer-events: none; white-space: nowrap;
   }
+
+  /* ═══ Perf Toggles パネル ═══ */
+  #perfPanel {
+    position: fixed; top: 12px; right: 12px; z-index: 200;
+    background:
+      linear-gradient(160deg, rgba(18,8,4,0.96) 0%, rgba(30,12,4,0.96) 100%);
+    border: 1px solid rgba(255,140,40,0.30);
+    border-radius: 10px;
+    padding: 10px 14px 12px;
+    width: 230px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.55);
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-size: 12px;
+    color: rgba(255,200,130,0.85);
+    user-select: none;
+  }
+  #perfPanel .perf-title {
+    font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
+    color: rgba(255,160,60,0.70);
+    text-transform: uppercase;
+    margin: 0 0 8px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  #perfPanel .perf-title::before {
+    content: '⚙'; font-size: 13px; opacity: 0.8;
+  }
+  .perf-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255,140,40,0.10);
+    transition: opacity 0.2s;
+  }
+  .perf-row:last-child { border-bottom: none; }
+  .perf-row.disabled { opacity: 0.32; pointer-events: none; }
+  .perf-label { line-height: 1.3; }
+  .perf-label .perf-sub {
+    display: block; font-size: 10px;
+    color: rgba(255,160,60,0.45);
+    margin-top: 1px;
+  }
+  /* カスタムトグルスイッチ */
+  .perf-toggle { position: relative; flex-shrink: 0; }
+  .perf-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .perf-toggle .track {
+    display: block; width: 36px; height: 20px;
+    background: rgba(80,30,10,0.6);
+    border: 1px solid rgba(255,120,30,0.30);
+    border-radius: 10px; cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+    position: relative;
+  }
+  .perf-toggle .thumb {
+    position: absolute; top: 2px; left: 2px;
+    width: 14px; height: 14px;
+    background: rgba(200,100,40,0.7);
+    border-radius: 50%;
+    transition: transform 0.2s, background 0.2s;
+    pointer-events: none;
+  }
+  .perf-toggle input:checked + .track {
+    background: rgba(184,69,0,0.75);
+    border-color: rgba(255,160,60,0.55);
+  }
+  .perf-toggle input:checked + .track .thumb {
+    transform: translateX(16px);
+    background: #ffb040;
+  }
 </style>
 </head>
 <body>
@@ -217,6 +284,33 @@
       <button class="action-btn btn-help"    id="helpBtn">📖 操作方法</button>
       <button class="action-btn btn-records" id="recordsBtn">🏆 スコア記録</button>
     </div>
+  </div>
+</div>
+
+
+<!-- ═══ Perf Toggles ═══ -->
+<div id="perfPanel">
+  <p class="perf-title">Perf Toggles</p>
+  <div class="perf-row" id="row-tog-canvas-particles">
+    <label class="perf-label" for="tog-canvas-particles">① Canvas Particles<span class="perf-sub">Canvas2D パーティクル</span></label>
+    <label class="perf-toggle">
+      <input type="checkbox" id="tog-canvas-particles" checked>
+      <span class="track"><span class="thumb"></span></span>
+    </label>
+  </div>
+  <div class="perf-row" id="row-tog-canvas-throttle">
+    <label class="perf-label" for="tog-canvas-throttle">② Canvas転送 間引き<span class="perf-sub">3フレームに1回転送</span></label>
+    <label class="perf-toggle">
+      <input type="checkbox" id="tog-canvas-throttle">
+      <span class="track"><span class="thumb"></span></span>
+    </label>
+  </div>
+  <div class="perf-row" id="row-tog-instance-throttle">
+    <label class="perf-label" for="tog-instance-throttle">③ Instance 間引き<span class="perf-sub">体験中 2フレームに1回</span></label>
+    <label class="perf-toggle">
+      <input type="checkbox" id="tog-instance-throttle">
+      <span class="track"><span class="thumb"></span></span>
+    </label>
   </div>
 </div>
 
@@ -364,6 +458,19 @@ _fadePlane.renderOrder = 999;
 _fadePlane.position.set(0, 0, -0.5);
 // camera.add は camera 定義後に行う（下の THREE.JS CORE セクションで実行）
 
+
+/* ================================================================
+   PERFORMANCE TOGGLE FLAGS
+================================================================ */
+const PerfToggles = {
+  useCanvasParticles:       true,  // Canvas2D パーティクル ON/OFF
+  useCanvasTransferThrottle: false, // GPU転送 間引き（3フレームに1回）
+  useInstanceThrottle:       false, // InstancedMesh 間引き（2フレームに1回）
+};
+// 内部カウンター
+let _cvTransferFrameCount = 0;
+let _instThrottleFrame    = 0;
+
 /* ================================================================
    CANVAS PARTICLE SYSTEM（intro + 体験中共用）
    - 下→上へゆっくり上昇、上端でフェードアウト、下部で再生成
@@ -452,10 +559,31 @@ function updateCvPanel(delta) {
   const W   = _cvPtCanvas.width, H = _cvPtCanvas.height;
   if (!_cvPtCanvas._ctx2d) _cvPtCanvas._ctx2d = _cvPtCanvas.getContext('2d');
   const ctx = _cvPtCanvas._ctx2d;
+
+  // 背景は常に描画（テキスト可読性のため）
   _drawPanelBg(ctx, W, H, _cvPanelMode);
-  _tickParticles(_cvPanelPts, delta);
-  _drawParticles(ctx, _cvPanelPts, W, H, _cvPanelBright);
+
+  // [Toggle 1] useCanvasParticles: パーティクルtick/draw
+  if (PerfToggles.useCanvasParticles) {
+    _tickParticles(_cvPanelPts, delta);
+    _drawParticles(ctx, _cvPanelPts, W, H, _cvPanelBright);
+  }
+
+  // テキスト等の追加描画は常に実行
   if (_cvPanelExtraFn) _cvPanelExtraFn(ctx, W, H);
+
+  // [Toggle 1+2] GPU転送制御
+  // useCanvasParticles=false → 転送停止（ただしトグル状態は保持）
+  if (!PerfToggles.useCanvasParticles) return;
+
+  // [Toggle 2] useCanvasTransferThrottle: 体験中のみ間引き
+  if (PerfToggles.useCanvasTransferThrottle) {
+    const _isGameCv = (_cvPanelMode === 'game');
+    if (_isGameCv) {
+      _cvTransferFrameCount++;
+      if (_cvTransferFrameCount % 3 !== 0) return; // 3フレームに1回のみ転送
+    }
+  }
   if (_cvPtTex) _cvPtTex.needsUpdate = true;
 }
 
@@ -3089,6 +3217,55 @@ function renderScoreModal() {
 setupUI();
 
 /* ================================================================
+   PERF TOGGLE PANEL（ネイティブHTML）
+================================================================ */
+(function initPerfGui() {
+  const panel   = document.getElementById('perfPanel');
+  const chk1    = document.getElementById('tog-canvas-particles');
+  const chk2    = document.getElementById('tog-canvas-throttle');
+  const chk3    = document.getElementById('tog-instance-throttle');
+  const row2    = document.getElementById('row-tog-canvas-throttle');
+  if (!panel || !chk1 || !chk2 || !chk3) return;
+
+  // 初期状態を PerfToggles と同期
+  chk1.checked = PerfToggles.useCanvasParticles;
+  chk2.checked = PerfToggles.useCanvasTransferThrottle;
+  chk3.checked = PerfToggles.useInstanceThrottle;
+
+  function syncRow2Disabled() {
+    row2.classList.toggle('disabled', !PerfToggles.useCanvasParticles);
+  }
+  syncRow2Disabled();
+
+  // Toggle 1: Canvas Particles
+  chk1.addEventListener('change', () => {
+    PerfToggles.useCanvasParticles = chk1.checked;
+    if (chk1.checked) _cvTransferFrameCount = 0;
+    syncRow2Disabled();
+  });
+
+  // Toggle 2: Canvas Transfer Throttle
+  chk2.addEventListener('change', () => {
+    PerfToggles.useCanvasTransferThrottle = chk2.checked;
+    _cvTransferFrameCount = 0;
+  });
+
+  // Toggle 3: Instance Throttle
+  chk3.addEventListener('change', () => {
+    PerfToggles.useInstanceThrottle = chk3.checked;
+    _instThrottleFrame = 0;
+  });
+
+  // XRセッション中はパネル非表示
+  renderer.xr.addEventListener('sessionstart', () => {
+    panel.style.display = 'none';
+  });
+  renderer.xr.addEventListener('sessionend', () => {
+    panel.style.display = '';
+  });
+})();
+
+/* ================================================================
    INITIAL STATE
 ================================================================ */
 currentState = State.INTRO_0;
@@ -3108,26 +3285,33 @@ renderer.setAnimationLoop((t) => {
   const delta = Math.min((t - lastTime) / 1000, 0.033);
   lastTime = t;
 
-  // アンビエント球体パーティクル更新（収束しない準周期的ゆらぎ）
-  for (let i = 0; i < particleCount; i++) {
-    const p = _ptPos[i];
-    p.t += delta * 0.25;  // 時間を進める
-    // 縦方向上昇
-    p.y += delta * (0.08 + Math.sin(p.t * 0.7 + p.pax)*0.02);
-    if (p.y > 3.5) p.y = 0;
-    // 横方向：baseX/baseZを中心に非整数比サインで揺らぐ（収束しない）
-    const wx = p.baseX + perlinLike(p.t, p.fax, p.fbx, p.pax, p.pbx) * p.amp;
-    const wz = p.baseZ + perlinLike(p.t, p.faz, p.fbz, p.paz, p.pbz) * p.amp;
-    // なめらかに追従（lerp）
-    p.x += (wx - p.x) * Math.min(delta * 1.2, 0.08);
-    p.z += (wz - p.z) * Math.min(delta * 1.2, 0.08);
-    _ptDummy.position.set(p.x, p.y, p.z);
-    _ptDummy.updateMatrix();
-    if (i < _ptCountOrange) _ptOrange.setMatrixAt(i, _ptDummy.matrix);
-    else _ptYellow.setMatrixAt(i - _ptCountOrange, _ptDummy.matrix);
+  // アンビエント球体パーティクル更新
+  // [Toggle 3] useInstanceThrottle: 体験中は2フレームに1回
+  const _nowIsGame = (currentState === State.FORGING || currentState === State.SHAPING ||
+                      currentState === State.SHARPENING);
+  let _doInstUpdate = true;
+  if (PerfToggles.useInstanceThrottle && _nowIsGame) {
+    _instThrottleFrame++;
+    _doInstUpdate = (_instThrottleFrame % 2 === 0);
   }
-  _ptOrange.instanceMatrix.needsUpdate = true;
-  _ptYellow.instanceMatrix.needsUpdate = true;
+  if (_doInstUpdate) {
+    for (let i = 0; i < particleCount; i++) {
+      const p = _ptPos[i];
+      p.t += delta * 0.25;
+      p.y += delta * (0.08 + Math.sin(p.t * 0.7 + p.pax)*0.02);
+      if (p.y > 3.5) p.y = 0;
+      const wx = p.baseX + perlinLike(p.t, p.fax, p.fbx, p.pax, p.pbx) * p.amp;
+      const wz = p.baseZ + perlinLike(p.t, p.faz, p.fbz, p.paz, p.pbz) * p.amp;
+      p.x += (wx - p.x) * Math.min(delta * 1.2, 0.08);
+      p.z += (wz - p.z) * Math.min(delta * 1.2, 0.08);
+      _ptDummy.position.set(p.x, p.y, p.z);
+      _ptDummy.updateMatrix();
+      if (i < _ptCountOrange) _ptOrange.setMatrixAt(i, _ptDummy.matrix);
+      else _ptYellow.setMatrixAt(i - _ptCountOrange, _ptDummy.matrix);
+    }
+    _ptOrange.instanceMatrix.needsUpdate = true;
+    _ptYellow.instanceMatrix.needsUpdate = true;
+  }
 
   updateSparks(delta);
   updateFade(delta);   // フェードをすべてのフェーズで更新
