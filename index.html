@@ -2735,28 +2735,12 @@ function updateShaping(delta) {
       playShapingHit(pow);
       // 火花量も pow に比例
       const sparkCount = Math.round(THREE.MathUtils.clamp(pow * 30, 20, 150));
-      // ③ 火花発生位置の修正：ハンマーヘッドのXZ座標を刃物表面のY座標にクランプして接触点を算出
-      // 刃物表面のY座標（BoundingBoxで取得、フリップに対応）
-      const _bladeBBForSpark = _getBladeBB();
-      const bladeTopY = bladeFlipped ? _bladeBBForSpark.min.y : _bladeBBForSpark.max.y;
-      const shapingSparkOrigin = new THREE.Vector3(
-        shapingHammerHeadWorld.x,
-        bladeTopY,           // 刃物表面のY（上面 or 下面）に固定
-        shapingHammerHeadWorld.z
-      );
+      const shapingSparkOrigin = shapingHammerHeadWorld.clone().add(new THREE.Vector3(0, 0.01, 0));
       spawnSparks(shapingSparkOrigin, sparkCount, 'shape', 0.3);
 
     } else {
       playHammerMiss();
-      // ミス時もハンマーヘッドの刃物面高さに合わせる（大きくズレない程度）
-      const _bladeBBMiss = _getBladeBB();
-      const bladeTopYMiss = bladeFlipped ? _bladeBBMiss.min.y : _bladeBBMiss.max.y;
-      const missSparkOrigin = new THREE.Vector3(
-        shapingHammerHeadWorld.x,
-        bladeTopYMiss,
-        shapingHammerHeadWorld.z
-      );
-      spawnSparks(missSparkOrigin, 9, 'shape', 0.3);
+      spawnSparks(shapingHammerHeadWorld.clone(), 9, 'shape', 0.3);
     }
 
     if (rightController?.gamepad?.hapticActuators?.[0]) {
