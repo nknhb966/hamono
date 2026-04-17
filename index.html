@@ -3043,10 +3043,10 @@ function updateIntro(delta) {
 ================================================================ */
 // Ambient particles — 真の球体（SphereGeometry + InstancedMesh）
 const particleCount    = 120;
-const particleSphereGeo = new THREE.SphereGeometry(0.018, 8, 8);
+const particleSphereGeo = new THREE.SphereGeometry(0.018, 10, 10);
 // 橙と黄色を交互に2マテリアルで表現（70%橙 + 30%黄）
 const _ptOrangeMat = new THREE.MeshBasicMaterial({
-  color: 0xff5500, transparent: true, opacity: 1.0,
+  color: 0xff5500, transparent: true, opacity: 0.88,
   blending: THREE.AdditiveBlending, depthWrite: false, depthTest: true,
 });
 const _ptYellowMat = new THREE.MeshBasicMaterial({
