@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -1635,6 +1635,7 @@ function updateInfoPanel_INTRO0() {
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide });
   infoPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 1.4), mat);
   infoPanelMesh.position.set(0, 1.38, -2.2);
+  infoPanelMesh.renderOrder = 10;
   infoPanel.add(infoPanelMesh);
   // 毎フレーム: 背景グラデ → 粒子tick/draw → テキスト上書き
   activateCvPanel(cv, tex, 'intro0', _cvPtsIntro, 1.0, _drawIntro0Text);
@@ -1748,6 +1749,7 @@ function updateInfoPanel(text, titleText, mode) {
     mat
   );
   infoPanelMesh.position.set(0, 1.38, -2.2);
+  infoPanelMesh.renderOrder = 10;
   infoPanel.add(infoPanelMesh);
   // 毎フレーム: 背景 → 粒子tick/draw → テキスト上書き
   activateCvPanel(cv, tex, _mode, pts, bright, _makeTextExtraFn(titleText || null, text, _mode));
@@ -1933,6 +1935,7 @@ function showResultPanel(score, bladeStateSnap, scores) {
   resultPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.1), mat);
   resultPanelMesh.position.set(0, 1.55, -2.5);
   resultPanelMesh.rotation.set(0, 0, 0);
+  resultPanelMesh.renderOrder = 10;
   resultPanel.add(resultPanelMesh);
   resultPanel.visible = true;
   // テキスト内容（buildResultCanvas）をサイドCanvasに描いておく
