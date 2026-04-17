@@ -1088,7 +1088,7 @@ const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a120a, roughness: 0.
 const floor = new THREE.Mesh(floorGeo, floorMat);
 floor.rotation.x = -Math.PI / 2;
 floor.receiveShadow = true;
-// scene.add(floor);
+scene.add(floor);
 let isARMode = false; // AR起動時にtrueになる
 
 // --- WORKBENCH (shared reference point) ---
