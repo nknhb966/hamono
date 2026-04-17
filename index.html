@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2441,9 +2441,6 @@ A: Next Phase`,
 ================================================================ */
 let showingPhaseResult = false;
 
-let _sq0h = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
-let _sqh  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
-
 let _sq0c = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
 let _sqc  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
 
@@ -2487,20 +2484,21 @@ function handleGlobalInput() {
         _phaseScores.forging = Math.round(
           Math.max(0, Math.min(100, 100 - shapeDistortion))
         );
+        // 結果表示
+        updateInfoPanel(
+          `鍛造結果
+  歪み: ${Math.round(shapeDistortion)}
+
+  Aボタン：次へ`,
+          isEarly ? '① 鍛造（途中終了）' : '① 鍛造完了'
+        );
+
+        playComplete();
+
+        showingPhaseResult = true;
       }
 
-      // 結果表示
-      updateInfoPanel(
-        `鍛造結果
-歪み: ${Math.round(shapeDistortion)}
 
-Aボタン：次へ`,
-        isEarly ? '① 鍛造（途中終了）' : '① 鍛造完了'
-      );
-
-      playComplete();
-
-      showingPhaseResult = true;
     }
 
     // ===== 成形 =====
