@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2447,14 +2447,6 @@ function handleGlobalInput() {
 
   if (aPressed && !wasAPressed && !_inputLocked) {
 
-    // ===== ★結果表示中（最優先） =====
-    if (showingPhaseResult) {
-      showingPhaseResult = false;
-      fadeToNext(1.0); // ← RESULTへ
-      wasAPressed = aPressed;
-      return;
-    }
-
     // ===== INTRO =====
     if (isIntroState(currentState)) {
       if (_fadeDir === 0) {
@@ -2476,25 +2468,32 @@ function handleGlobalInput() {
 
       const isEarly = !forgingComplete;
 
-      // スコア確定
+      // ① スコア確定
       if (isEarly) {
         _phaseScores.forging = Math.round(
           Math.max(0, Math.min(100, 100 - shapeDistortion))
         );
       }
 
-      // 結果表示
+      // ② その場で結果表示
       updateInfoPanel(
         `鍛造結果
 歪み: ${Math.round(shapeDistortion)}
 
-Aボタン：次へ`,
+Forging Result
+Distortion: ${Math.round(shapeDistortion)}
+
+Aボタン：結果画面へ`,
         isEarly ? '① 鍛造（途中終了）' : '① 鍛造完了'
       );
 
+      // ③ 音
       playComplete();
 
-      showingPhaseResult = true;
+      // ④ 少し待ってRESULTへ
+      setTimeout(() => {
+        goToResult();
+      }, 600);
     }
 
     // ===== 成形 =====
@@ -2503,20 +2502,27 @@ Aボタン：次へ`,
       const isEarly = !shapingComplete;
 
       if (isEarly) {
-        _phaseScores.shaping = shapingScore;
+        _phaseScores.shaping = Math.round(
+          Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0))
+        );
       }
 
       updateInfoPanel(
         `成形結果
 スコア: ${Math.round(_phaseScores.shaping)}pt
 
-Aボタン：次へ`,
+Shaping Result
+Score: ${Math.round(_phaseScores.shaping)}pt
+
+Aボタン：結果画面へ`,
         isEarly ? '② 成形（途中終了）' : '② 成形完了'
       );
 
       playComplete();
 
-      showingPhaseResult = true;
+      setTimeout(() => {
+        goToResult();
+      }, 600);
     }
 
     // ===== 研ぎ =====
@@ -2532,24 +2538,87 @@ Aボタン：次へ`,
         `研ぎ結果
 ポイント: ${_phaseScores.sharpening}pt
 
-Aボタン：次へ`,
+Sharpening Result
+Points: ${_phaseScores.sharpening}pt
+
+Aボタン：結果画面へ`,
         isEarly ? '③ 研ぎ（途中終了）' : '③ 研ぎ完了'
       );
 
       playComplete();
 
-      showingPhaseResult = true;
+      setTimeout(() => {
+        goToResult();
+      }, 600);
     }
   }
 
-  // 押下状態更新
   wasAPressed = aPressed;
 
   // ===== Bボタン（リトライ） =====
-  if (bPressed && !wasBPressed && !_inputLocked) {
-    retryState();
+  if (bPressed && !wasBPressed && !_inputLocked) retryState();
+  wasBPressed = bPressed;
+}
+
+function handleGlobalInput() {
+  const aPressed = getAButton();
+  const bPressed = getBButton();
+
+  if (aPressed && !wasAPressed && !_inputLocked) {
+
+    // ===== INTRO =====
+    if (isIntroState(currentState)) {
+      if (_fadeDir === 0) {
+        fadeToNext(1.0);
+      }
+    }
+
+    // ===== RESULT → 最初へ =====
+    else if (currentState === State.RESULT) {
+      playFadeSound();
+      startFade(-1, 3.0, () => {
+        nextState(); // INTRO_0へ
+        startFade(1, 3.0, null);
+      });
+    }
+
+    // ===== 鍛造 =====
+    else if (currentState === State.FORGING) {
+
+      if (!forgingComplete) {
+        _phaseScores.forging = Math.round(
+          Math.max(0, Math.min(100, 100 - shapeDistortion))
+        );
+      }
+
+      goToResult();
+    }
+
+    // ===== 成形 =====
+    else if (currentState === State.SHAPING) {
+
+      if (!shapingComplete) {
+        _phaseScores.shaping = shapingScore;
+      }
+
+      goToResult();
+    }
+
+    // ===== 研ぎ =====
+    else if (currentState === State.SHARPENING) {
+
+      if (!sharpeningComplete) {
+        _phaseScores.sharpening = sharpeningScore;
+      }
+
+      goToResult();
+    }
   }
 
+  wasAPressed = aPressed;
+
+  // ===== Bボタン（リトライ）はそのままでOK =====
+  if (bPressed && !wasBPressed && !_inputLocked) retryState();
   wasBPressed = bPressed;
 }
 
