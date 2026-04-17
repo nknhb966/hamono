@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -3043,10 +3043,10 @@ function updateIntro(delta) {
 ================================================================ */
 // Ambient particles — 真の球体（SphereGeometry + InstancedMesh）
 const particleCount    = 120;
-const particleSphereGeo = new THREE.SphereGeometry(0.018, 5, 4);
+const particleSphereGeo = new THREE.SphereGeometry(0.018, 8, 8);
 // 橙と黄色を交互に2マテリアルで表現（70%橙 + 30%黄）
 const _ptOrangeMat = new THREE.MeshBasicMaterial({
-  color: 0xff5500, transparent: true, opacity: 0.88,
+  color: 0xff5500, transparent: true, opacity: 1.0,
   blending: THREE.AdditiveBlending, depthWrite: false, depthTest: true,
 });
 const _ptYellowMat = new THREE.MeshBasicMaterial({
