@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2447,6 +2447,14 @@ function handleGlobalInput() {
 
   if (aPressed && !wasAPressed && !_inputLocked) {
 
+    // ===== ★結果表示中（最優先） =====
+    if (showingPhaseResult) {
+      showingPhaseResult = false;
+      fadeToNext(1.0); // ← RESULTへ
+      wasAPressed = aPressed;
+      return;
+    }
+
     // ===== INTRO =====
     if (isIntroState(currentState)) {
       if (_fadeDir === 0) {
@@ -2468,32 +2476,25 @@ function handleGlobalInput() {
 
       const isEarly = !forgingComplete;
 
-      // ① スコア確定
+      // スコア確定
       if (isEarly) {
         _phaseScores.forging = Math.round(
           Math.max(0, Math.min(100, 100 - shapeDistortion))
         );
       }
 
-      // ② その場で結果表示
+      // 結果表示
       updateInfoPanel(
         `鍛造結果
 歪み: ${Math.round(shapeDistortion)}
 
-Forging Result
-Distortion: ${Math.round(shapeDistortion)}
-
-Aボタン：結果画面へ`,
+Aボタン：次へ`,
         isEarly ? '① 鍛造（途中終了）' : '① 鍛造完了'
       );
 
-      // ③ 音
       playComplete();
 
-      // ④ 少し待ってRESULTへ
-      setTimeout(() => {
-        goToResult();
-      }, 600);
+      showingPhaseResult = true;
     }
 
     // ===== 成形 =====
@@ -2511,18 +2512,13 @@ Aボタン：結果画面へ`,
         `成形結果
 スコア: ${Math.round(_phaseScores.shaping)}pt
 
-Shaping Result
-Score: ${Math.round(_phaseScores.shaping)}pt
-
-Aボタン：結果画面へ`,
+Aボタン：次へ`,
         isEarly ? '② 成形（途中終了）' : '② 成形完了'
       );
 
       playComplete();
 
-      setTimeout(() => {
-        goToResult();
-      }, 600);
+      showingPhaseResult = true;
     }
 
     // ===== 研ぎ =====
@@ -2538,28 +2534,26 @@ Aボタン：結果画面へ`,
         `研ぎ結果
 ポイント: ${_phaseScores.sharpening}pt
 
-Sharpening Result
-Points: ${_phaseScores.sharpening}pt
-
-Aボタン：結果画面へ`,
+Aボタン：次へ`,
         isEarly ? '③ 研ぎ（途中終了）' : '③ 研ぎ完了'
       );
 
       playComplete();
 
-      setTimeout(() => {
-        goToResult();
-      }, 600);
+      showingPhaseResult = true;
     }
   }
 
+  // 押下状態更新
   wasAPressed = aPressed;
 
   // ===== Bボタン（リトライ） =====
-  if (bPressed && !wasBPressed && !_inputLocked) retryState();
+  if (bPressed && !wasBPressed && !_inputLocked) {
+    retryState();
+  }
+
   wasBPressed = bPressed;
 }
-
 /* ================================================================
    UPDATE FORGING
 ================================================================ */
