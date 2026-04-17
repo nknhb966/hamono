@@ -1084,11 +1084,11 @@ scene.add(groupSharpening);
 
 // --- FLOOR ---
 const floorGeo = new THREE.PlaneGeometry(20, 20);
-const floorMat = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.95, metalness: 0.0 });
+const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a120a, roughness: 0.95, metalness: 0.0 });
 const floor = new THREE.Mesh(floorGeo, floorMat);
 floor.rotation.x = -Math.PI / 2;
 floor.receiveShadow = true;
-scene.add(floor);
+// scene.add(floor);
 let isARMode = false; // AR起動時にtrueになる
 
 // --- WORKBENCH (shared reference point) ---
