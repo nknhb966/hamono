@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -1785,11 +1785,11 @@ function buildResultCanvas(score, bladeStateSnap, scores) {
 
   // 確定保存済みスコアをそのまま使用（再計算・RMS・正規化は一切禁止）
   const forgingScore  = bladeStateSnap._forging;
-  const shapingScore2 = bladeStateSnap._shaping;
+  const shapingScore = bladeStateSnap._shaping;
   const sharpenScore  = bladeStateSnap._sharpening;
   const recomputedFinal = Math.max(0, Math.min(100,
     forgingScore  * 0.4 +
-    shapingScore2 * 0.3 +
+    shapingScore * 0.3 +
     sharpenScore  * 0.3
   ));
 
@@ -1819,7 +1819,7 @@ function buildResultCanvas(score, bladeStateSnap, scores) {
   // フェーズゲージ（y=400 から）
   const details = [
     ['① 鍛造 Forging',  forgingScore,  0.4],
-    ['② 成形 Shaping',  shapingScore2, 0.3],
+    ['② 成形 Shaping',  shapingScore, 0.3],
     ['③ 研ぎ Sharpen',  sharpenScore,  0.3],
   ];
   const BAR_X  = 400;
@@ -1854,14 +1854,14 @@ function buildResultCanvas(score, bladeStateSnap, scores) {
   const yBreakdown = 430 + 3 * 105 + 20; // ゲージ3行の直下
   const computed = Math.max(0, Math.min(100,
     forgingScore  * 0.4 +
-    shapingScore2 * 0.3 +
+    shapingScore * 0.3 +
     sharpenScore  * 0.3
   ));
   ctx.font = '30px serif';
   ctx.fillStyle = '#ffcc88';
   ctx.textAlign = 'center';
   ctx.fillText(
-    `${forgingScore}×0.4 + ${shapingScore2}×0.3 + ${sharpenScore}×0.3 = ${Math.round(computed)}点`,
+    `${forgingScore}×0.4 + ${shapingScore}×0.3 + ${sharpenScore}×0.3 = ${Math.round(computed)}点`,
     W/2, yBreakdown
   );
 
@@ -2441,6 +2441,12 @@ A: Next Phase`,
 ================================================================ */
 let showingPhaseResult = false;
 
+let _sq0h = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
+let _sqh  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
+
+let _sq0c = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
+let _sqc  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
+
 function handleGlobalInput() {
   const aPressed = getAButton();
   const bPressed = getBButton();
@@ -2504,7 +2510,7 @@ Aボタン：次へ`,
 
       if (isEarly) {
         _phaseScores.shaping = Math.round(
-          Math.max(0, Math.min(100, zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0) > 0 ? 100 * (1 - zones.reduce((s, z) => s + z.distortion * z.distortion, 0) / zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0)) : 0))
+          Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0))
         );
       }
 
@@ -2832,22 +2838,21 @@ function updateShaping(delta) {
     }
 
     // L2ノルムスコア: score = 100 × (1 - Σx_i² / Σx_i0²)
-    const _sq0h = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
-    const _sqh  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
-    const shapingScore = Math.max(0, Math.min(100, _sq0h > 0 ? 100 * (1 - _sqh / _sq0h) : 0));
-    const avgAbs = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
+
+    // const shapingScore = Math.max(0, Math.min(100, _sq0h > 0 ? 100 * (1 - _sqh / _sq0h) : 0));
+    const score = Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0));
+    // const avgAbs = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
     // RMS誤差をsymmetryErrorに保存（RESULT遷移時に使用）
-    bladeState.symmetryError = Math.sqrt(_sqh / zones.length);
+    // bladeState.symmetryError = Math.sqrt(_sqh / zones.length);
     // スコアパネルのみ更新（説明パネルは打撃ごとに更新しない）
-    updateScorePanel(`② 打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS}\n${Math.round(shapingScore)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.43, -1.25));
+    updateScorePanel(`② 打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS}\n${Math.round(score)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.43, -1.25));
   }
   prevShapingTrigger = shapingTrig;
 
   if (shapingHitCount >= CONFIG.SHAPING.MAX_HITS && !shapingComplete) {
     shapingComplete = true;
-    const _sq0c = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
-    const _sqc  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
-    const score = Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0));
+
+    // const score = Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0));
     // フェーズ終了時にスコアを確定保存（以降は再計算しない）
     _phaseScores.shaping = Math.round(score);
     bladeState.symmetryError = Math.sqrt(_sqc / zones.length);
