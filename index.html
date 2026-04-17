@@ -2444,28 +2444,114 @@ function handleGlobalInput() {
   const bPressed = getBButton();
 
   if (aPressed && !wasAPressed && !_inputLocked) {
+
+    // ===== INTRO =====
     if (isIntroState(currentState)) {
-      // INTRO_0 はスケールアニメ完了後のみ
-      if (_fadeDir !== 0) {
-        // フェード中は入力無効
-      } else {
-        const dur = currentState === State.INTRO_0 ? 1.0 : 1.0;  // 半分に
-        fadeToNext(dur);
+      if (_fadeDir === 0) {
+        fadeToNext(1.0);
       }
-    } else if (currentState === State.RESULT) {
-      // RESULT → INTRO_0: フェード3秒
+    }
+
+    // ===== RESULT → 最初へ =====
+    else if (currentState === State.RESULT) {
       playFadeSound();
       startFade(-1, 3.0, () => {
-        nextState(); // currentState = INTRO_0
+        nextState(); // INTRO_0へ
         startFade(1, 3.0, null);
       });
-    } else {
-      // ゲーム中フェーズ遷移もフェード(1.0秒)＋音
-      fadeToNext(1.0);
+    }
+
+    // ===== 鍛造 =====
+    else if (currentState === State.FORGING) {
+
+      const isEarly = !forgingComplete;
+
+      // ① スコア確定
+      if (isEarly) {
+        _phaseScores.forging = Math.round(
+          Math.max(0, Math.min(100, 100 - shapeDistortion))
+        );
+      }
+
+      // ② その場で結果表示
+      updateInfoPanel(
+        `鍛造結果
+歪み: ${Math.round(shapeDistortion)}
+
+Forging Result
+Distortion: ${Math.round(shapeDistortion)}
+
+Aボタン：結果画面へ`,
+        isEarly ? '① 鍛造（途中終了）' : '① 鍛造完了'
+      );
+
+      // ③ 音
+      playComplete();
+
+      // ④ 少し待ってRESULTへ
+      setTimeout(() => {
+        goToResult();
+      }, 600);
+    }
+
+    // ===== 成形 =====
+    else if (currentState === State.SHAPING) {
+
+      const isEarly = !shapingComplete;
+
+      if (isEarly) {
+        _phaseScores.shaping = shapingScore;
+      }
+
+      updateInfoPanel(
+        `成形結果
+スコア: ${Math.round(_phaseScores.shaping)}pt
+
+Shaping Result
+Score: ${Math.round(_phaseScores.shaping)}pt
+
+Aボタン：結果画面へ`,
+        isEarly ? '② 成形（途中終了）' : '② 成形完了'
+      );
+
+      playComplete();
+
+      setTimeout(() => {
+        goToResult();
+      }, 600);
+    }
+
+    // ===== 研ぎ =====
+    else if (currentState === State.SHARPENING) {
+
+      const isEarly = !sharpeningComplete;
+
+      if (isEarly) {
+        _phaseScores.sharpening = Math.min(100, Math.round(totalSharpness));
+      }
+
+      updateInfoPanel(
+        `研ぎ結果
+ポイント: ${_phaseScores.sharpening}pt
+
+Sharpening Result
+Points: ${_phaseScores.sharpening}pt
+
+Aボタン：結果画面へ`,
+        isEarly ? '③ 研ぎ（途中終了）' : '③ 研ぎ完了'
+      );
+
+      playComplete();
+
+      setTimeout(() => {
+        goToResult();
+      }, 600);
     }
   }
+
   wasAPressed = aPressed;
 
+  // ===== Bボタン（リトライ） =====
   if (bPressed && !wasBPressed && !_inputLocked) retryState();
   wasBPressed = bPressed;
 }
