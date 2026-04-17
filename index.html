@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -984,7 +984,7 @@ const spkMat = new THREE.PointsMaterial({
   sizeAttenuation: true,
   transparent: true,
   blending: THREE.AdditiveBlending,
-  depthWrite: false,  // Zバッファに書き込まない（他オブジェクトを遮らない）
+  depthWrite: true,  // Zバッファに書き込まない（他オブジェクトを遮らない）
   depthTest:  true,   // Zバッファを読む（手前/奥の自然な前後関係を維持）
 });
 const spkMesh = new THREE.Points(spkGeo, spkMat);
@@ -1201,7 +1201,7 @@ tempCanvas.width = 256; tempCanvas.height = 80;
 const tempCtx = tempCanvas.getContext('2d');
 const tempTex = new THREE.CanvasTexture(tempCanvas);
 const tempSprite = new THREE.Sprite(
-  new THREE.SpriteMaterial({ map: tempTex, transparent: true, depthTest: true, depthWrite: false, alphaTest: 0.01 })
+  new THREE.SpriteMaterial({ map: tempTex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01 })
 );
 tempSprite.scale.set(0.35, 0.11, 1);
 tempSprite.position.set(0.37, 0.02, 0);  // 鉄の右横+0.15m
@@ -1412,7 +1412,7 @@ for (let i = 0; i < ZONE_COUNT; i++) {
   const canvas = makeZoneCanvas();
   const tex    = new THREE.CanvasTexture(canvas);
   const sprite = new THREE.Sprite(
-    new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false, alphaTest: 0.01 })
+    new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01 })
   );
   sprite.scale.set(0.12, 0.06, 1);
   sprite.position.set(wx, BLADE_Y + 0.08, BLADE_WORLD_Z);
@@ -1468,7 +1468,7 @@ angleHudCanvas.width = 272; angleHudCanvas.height = 200;  // メッシュ比(0.1
 const angleHudTex = new THREE.CanvasTexture(angleHudCanvas);
 const angleHudMesh = new THREE.Mesh(
   new THREE.PlaneGeometry(0.15, 0.11),
-  new THREE.MeshBasicMaterial({ map: angleHudTex, transparent: true, depthTest: true, depthWrite: false, alphaTest: 0.01, side: THREE.DoubleSide })
+  new THREE.MeshBasicMaterial({ map: angleHudTex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide })
 );
 // 初期位置（右手が取れるまでのデフォルト）
 angleHudMesh.position.set(0.4, workbenchPos.y + 0.20, -1.2);
@@ -1572,7 +1572,7 @@ function updateScorePanel(text, worldPos) {
   });
   const tex = new THREE.CanvasTexture(cv);
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false, alphaTest: 0.01, side: THREE.DoubleSide });
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide });
   const panelH = 0.07 * lines.length + 0.04;
   scorePanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.60, panelH), mat);
   const pos = worldPos || new THREE.Vector3(0, workbenchPos.y + 0.23, -1.25);
@@ -1635,7 +1635,6 @@ function updateInfoPanel_INTRO0() {
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide });
   infoPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 1.4), mat);
   infoPanelMesh.position.set(0, 1.38, -2.2);
-  infoPanelMesh.renderOrder = 10;
   infoPanel.add(infoPanelMesh);
   // 毎フレーム: 背景グラデ → 粒子tick/draw → テキスト上書き
   activateCvPanel(cv, tex, 'intro0', _cvPtsIntro, 1.0, _drawIntro0Text);
@@ -1749,7 +1748,6 @@ function updateInfoPanel(text, titleText, mode) {
     mat
   );
   infoPanelMesh.position.set(0, 1.38, -2.2);
-  infoPanelMesh.renderOrder = 10;
   infoPanel.add(infoPanelMesh);
   // 毎フレーム: 背景 → 粒子tick/draw → テキスト上書き
   activateCvPanel(cv, tex, _mode, pts, bright, _makeTextExtraFn(titleText || null, text, _mode));
@@ -1935,7 +1933,6 @@ function showResultPanel(score, bladeStateSnap, scores) {
   resultPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.1), mat);
   resultPanelMesh.position.set(0, 1.55, -2.5);
   resultPanelMesh.rotation.set(0, 0, 0);
-  resultPanelMesh.renderOrder = 10;
   resultPanel.add(resultPanelMesh);
   resultPanel.visible = true;
   // テキスト内容（buildResultCanvas）をサイドCanvasに描いておく
@@ -3050,11 +3047,11 @@ const particleSphereGeo = new THREE.SphereGeometry(0.018, 10, 10);
 // 橙と黄色を交互に2マテリアルで表現（70%橙 + 30%黄）
 const _ptOrangeMat = new THREE.MeshBasicMaterial({
   color: 0xff5500, transparent: true, opacity: 0.88,
-  blending: THREE.AdditiveBlending, depthWrite: false, depthTest: true,
+  blending: THREE.AdditiveBlending, depthWrite: true, depthTest: true,
 });
 const _ptYellowMat = new THREE.MeshBasicMaterial({
   color: 0xffcc00, transparent: true, opacity: 0.80,
-  blending: THREE.AdditiveBlending, depthWrite: false, depthTest: true,
+  blending: THREE.AdditiveBlending, depthWrite: true, depthTest: true,
 });
 // 2種のInstancedMesh（橙70%、黄30%）
 const _ptCountOrange = Math.round(particleCount * 0.7);
