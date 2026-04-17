@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -1201,7 +1201,7 @@ tempCanvas.width = 256; tempCanvas.height = 80;
 const tempCtx = tempCanvas.getContext('2d');
 const tempTex = new THREE.CanvasTexture(tempCanvas);
 const tempSprite = new THREE.Sprite(
-  new THREE.SpriteMaterial({ map: tempTex, transparent: true, depthTest: true, depthWrite: false, alphaTest: 0.01 })
+  new THREE.SpriteMaterial({ map: tempTex, transparent: true, depthTest: true, depthWrite: false })
 );
 tempSprite.scale.set(0.35, 0.11, 1);
 tempSprite.position.set(0.37, 0.02, 0);  // 鉄の右横+0.15m
@@ -1412,7 +1412,7 @@ for (let i = 0; i < ZONE_COUNT; i++) {
   const canvas = makeZoneCanvas();
   const tex    = new THREE.CanvasTexture(canvas);
   const sprite = new THREE.Sprite(
-    new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false, alphaTest: 0.01 })
+    new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false })
   );
   sprite.scale.set(0.12, 0.06, 1);
   sprite.position.set(wx, BLADE_Y + 0.08, BLADE_WORLD_Z);
@@ -1468,7 +1468,7 @@ angleHudCanvas.width = 272; angleHudCanvas.height = 200;  // メッシュ比(0.1
 const angleHudTex = new THREE.CanvasTexture(angleHudCanvas);
 const angleHudMesh = new THREE.Mesh(
   new THREE.PlaneGeometry(0.15, 0.11),
-  new THREE.MeshBasicMaterial({ map: angleHudTex, transparent: true, depthTest: true, depthWrite: false, alphaTest: 0.01, side: THREE.DoubleSide })
+  new THREE.MeshBasicMaterial({ map: angleHudTex, transparent: true, depthTest: true, depthWrite: false, side: THREE.DoubleSide })
 );
 // 初期位置（右手が取れるまでのデフォルト）
 angleHudMesh.position.set(0.4, workbenchPos.y + 0.20, -1.2);
@@ -1572,7 +1572,7 @@ function updateScorePanel(text, worldPos) {
   });
   const tex = new THREE.CanvasTexture(cv);
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false, alphaTest: 0.01, side: THREE.DoubleSide });
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false, side: THREE.DoubleSide });
   const panelH = 0.07 * lines.length + 0.04;
   scorePanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.60, panelH), mat);
   const pos = worldPos || new THREE.Vector3(0, workbenchPos.y + 0.23, -1.25);
@@ -1632,7 +1632,7 @@ function updateInfoPanel_INTRO0() {
   cv.width = W; cv.height = H;
   const tex = new THREE.CanvasTexture(cv);
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false, alphaTest: 0.01, side: THREE.DoubleSide });
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false, side: THREE.DoubleSide });
   infoPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 1.4), mat);
   infoPanelMesh.position.set(0, 1.38, -2.2);
   infoPanel.add(infoPanelMesh);
@@ -1742,7 +1742,7 @@ function updateInfoPanel(text, titleText, mode) {
   cv.width = W; cv.height = H;
   const tex = new THREE.CanvasTexture(cv);
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false, alphaTest: 0.01, side: THREE.DoubleSide });
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false, side: THREE.DoubleSide });
   infoPanelMesh = new THREE.Mesh(
     isIntro ? new THREE.PlaneGeometry(2.52, 1.26) : new THREE.PlaneGeometry(2.5, 1.40),
     mat
@@ -1929,7 +1929,7 @@ function showResultPanel(score, bladeStateSnap, scores) {
   cv.width = W; cv.height = H;
   const tex = new THREE.CanvasTexture(cv);
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false, alphaTest: 0.01, side: THREE.DoubleSide });
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false, side: THREE.DoubleSide });
   resultPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.1), mat);
   resultPanelMesh.position.set(0, 1.55, -2.5);
   resultPanelMesh.rotation.set(0, 0, 0);
