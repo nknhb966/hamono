@@ -2644,6 +2644,7 @@ function handleGlobalInput() {
 
   // ===== Bボタン（リトライ） =====
   if (bPressed && !wasBPressed && !_inputLocked && !showingPhaseResult) {
+    lockInputFor(1.0);
     retryState();
   }
 
