@@ -2504,9 +2504,13 @@ A: Next Phase`,
     const fS = _phaseScores.forging;
     const sS = _phaseScores.shaping;
     const hS = _phaseScores.sharpening;
-    const finalScore = Math.max(0, Math.min(100,
+    
+    let finalScore = Math.max(0, Math.min(100,
       fS * 0.4 + sS * 0.3 + hS * 0.3
     ));
+
+    finalScore = Math.floor(finalScore);  // ★ 小数点以下切り捨て
+
     const { scores, rank, id } = saveScore(finalScore);
     showResultPanel(finalScore, { _forging: fS, _shaping: sS, _sharpening: hS }, scores, id);
   }
