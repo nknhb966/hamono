@@ -1793,7 +1793,7 @@ scene.add(resultPanel);
 resultPanel.visible = false;
 let resultPanelMesh = null;
 
-function buildResultCanvas(score, bladeStateSnap, scores) {
+function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
   // 2倍解像度
   const W = 1200, H = 1400;
   const c = document.createElement('canvas');
@@ -1913,56 +1913,40 @@ function buildResultCanvas(score, bladeStateSnap, scores) {
   ctx.fillText('─ ランキング / Ranking ─', W/2, yRankTitle);
 
   // 今回スコアの順位
-  const newRank = scores.findIndex(s => Math.abs(s.score - recomputedFinal) < 0.5);
-  // NEW RECORD表示（Score bigの横 W/4）
-  if (newRank >= 0 && newRank < 5) {
-    ctx.font = 'bold 38px serif';
-    ctx.fillStyle = '#ffe066';
-    ctx.textAlign = 'center';
-    const recLabel = newRank === 0 ? '🥇 NEW\nRECORD!' : `TOP${newRank+1}\nNEW!`;
-    recLabel.split('\n').forEach((line, li) => {
-      ctx.fillText(line, W/4, 240 + li * 48);
-    });
-  }
+  const newRank = scores.findIndex(s => s.id === savedId);
+    // NEW RECORD表示
+    if (newRank >= 0 && newRank < 5) {
+      ctx.font = 'bold 38px serif';
+      ctx.fillStyle = '#ffe066';
+      ctx.textAlign = 'center';
+      const recLabel = newRank === 0 ? '🥇 NEW\nRECORD!' : `TOP${newRank+1}\nNEW!`;
+      recLabel.split('\n').forEach((line, li) => {
+        ctx.fillText(line, W/4, 240 + li * 48);
+      });
+    }
 
   // ランキング一覧（各行 80px間隔）
   const yRankStart = yRankTitle + 50;
   ctx.font = '32px monospace';
-const result = saveScore(finalScore);
-const topScores = result.top;
-const newId = result.id;
-
-let newShown = false;
-
-topScores.forEach((s, i) => {
-  const y = yRankStart + i * 82;
-
-  const isThisScore = !newShown && s.id === newId;
-  if (isThisScore) newShown = true;
-
-  ctx.fillStyle = isThisScore
-    ? '#ffe066'
-    : (i === 0 ? '#ffcc88' : 'rgba(255,200,150,0.7)');
-
-  const medal = ['🥇', '🥈', '🥉', '  4', '  5'][i];
-
-  ctx.textAlign = 'center';
-  ctx.fillText(`${medal}  ${Math.round(s.score)}pts`, W/2, y);
-
-  ctx.textAlign = 'right';
-  ctx.fillStyle = 'rgba(255,180,130,0.6)';
-  ctx.font = '24px monospace';
-  ctx.fillText(`${s.date} ${s.clock}`, W - 80, y);
-
-  if (isThisScore) {
-    ctx.fillStyle = '#ffe066';
-    ctx.font = 'bold 28px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText('★NEW', W/3, y);
-  }
-
-  ctx.font = '32px monospace';
-});
+  scores.slice(0, 5).forEach((s, i) => {
+    const y = yRankStart + i * 82;
+    const isThisScore = s.id === savedId;
+    ctx.fillStyle = isThisScore ? '#ffe066' : (i === 0 ? '#ffcc88' : 'rgba(255,200,150,0.7)');
+    const medal = ['🥇', '🥈', '🥉', '  4', '  5'][i] || String(i+1);
+    ctx.textAlign = 'center';
+    ctx.fillText(`${medal}  ${Math.round(s.score)}pts`, W/2, y);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(255,180,130,0.6)';
+    ctx.font = '24px monospace';
+    ctx.fillText(s.date, W - 80, y);
+    if (isThisScore) {
+      ctx.fillStyle = '#ffe066';
+      ctx.font = 'bold 28px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText('★NEW', W/3, y);
+    }
+    ctx.font = '32px monospace';
+  });
 
   // リプレイガイド（下端から余白80px）
   ctx.fillStyle = 'rgba(255,200,150,0.6)';
@@ -1994,51 +1978,34 @@ function showResultPanel(score, bladeStateSnap, scores) {
 }
 
 /* ================================================================
-   SCORE PERSISTENCE
+   SCORE PERSISTENCE（1種類 / TOP5 / NEW判定つき）
 ================================================================ */
+const LS_KEY = 'echizen_scores_v1';
+
+/** 読み込み */
 function loadScores() {
-  try { return JSON.parse(localStorage.getItem('echizen_scores') || '[]'); }
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); }
   catch { return []; }
 }
-// function saveScore(score) {
-//   const scores = loadScores();
-//   const now = new Date();
-//   const date = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-//   scores.push({ score, date });
-//   scores.sort((a, b) => b.score - a.score);
-//   const top = scores.slice(0, 5);
-//   localStorage.setItem('echizen_scores', JSON.stringify(top));
-//   return top;
-// }
-function saveScore(score){
-  const scores = loadScores();
-
+function saveScore(score) {
+  const arr = loadScores();
   const now = new Date();
-  const id = now.getTime(); // ← 一意ID
+  const id = now.getTime();
 
-  const newEntry = {
-    score,
-    date: now.toLocaleDateString("ja-JP"),
-    clock: fmtTime(now),
-    id
-  };
+  const date = now.toLocaleDateString("ja-JP");
+  const clock = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
 
-  scores.push(newEntry);
+  arr.push({ score, date, clock, id });
 
-  // 同点なら新しい方が上
-  scores.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    return b.id - a.id;
-  });
+  // 降順ソート → TOP5
+  arr.sort((a, b) => b.score - a.score);
+  arr.splice(5);
 
-  const top = scores.slice(0, 5);
-  saveScoresBy(LS_KEY, top);
+  localStorage.setItem(LS_KEY, JSON.stringify(arr));
 
-  const rank = top.findIndex(s => s.id === id);
-
-  return { top, rank, id }; // ← ★これが重要
+  const rank = arr.findIndex(s => s.id === id);
+  return { scores: arr, rank, id };
 }
-
 
 /* ================================================================
    UI HTML UPDATES
