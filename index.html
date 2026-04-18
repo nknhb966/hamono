@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -1927,24 +1927,36 @@ function buildResultCanvas(score, bladeStateSnap, scores) {
 
   // ランキング一覧（各行 80px間隔）
   const yRankStart = yRankTitle + 50;
+  const result = saveScore(finalScore);
+  const scores = result.top;
+  const newEntry = result.newEntry;
+
   ctx.font = '32px monospace';
-  scores.slice(0, 5).forEach((s, i) => {
+
+  scores.forEach((s, i) => {
     const y = yRankStart + i * 82;
-    const isThisScore = newRank === i;
+
+    const isThisScore = s.time === newEntry.time; // ← これに変更
+
     ctx.fillStyle = isThisScore ? '#ffe066' : (i === 0 ? '#ffcc88' : 'rgba(255,200,150,0.7)');
+
     const medal = ['🥇', '🥈', '🥉', '  4', '  5'][i] || String(i+1);
+
     ctx.textAlign = 'center';
     ctx.fillText(`${medal}  ${Math.round(s.score)}pts`, W/2, y);
+
     ctx.textAlign = 'right';
     ctx.fillStyle = 'rgba(255,180,130,0.6)';
     ctx.font = '24px monospace';
     ctx.fillText(s.date, W - 80, y);
+
     if (isThisScore) {
       ctx.fillStyle = '#ffe066';
       ctx.font = 'bold 28px monospace';
       ctx.textAlign = 'left';
       ctx.fillText('★NEW', W/3, y);
     }
+
     ctx.font = '32px monospace';
   });
 
@@ -1986,15 +1998,26 @@ function loadScores() {
 }
 function saveScore(score) {
   const scores = loadScores();
+
   const now = new Date();
+  const time = now.getTime(); // ← 数値で保持（重要）
   const date = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-  scores.push({ score, date });
-  scores.sort((a, b) => b.score - a.score);
+
+  const newEntry = { score, date, time };
+
+  scores.push(newEntry);
+
+  // ★ 同点なら新しい方を上に
+  scores.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return b.time - a.time; // ← これがキモ
+  });
+
   const top = scores.slice(0, 5);
   localStorage.setItem('echizen_scores', JSON.stringify(top));
-  return top;
-}
 
+  return { top, newEntry }; // ← NEW判定用に返す
+}
 /* ================================================================
    UI HTML UPDATES
 ================================================================ */
