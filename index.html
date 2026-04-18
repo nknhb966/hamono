@@ -1204,7 +1204,7 @@ const tempSprite = new THREE.Sprite(
   new THREE.SpriteMaterial({ map: tempTex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01 })
 );
 tempSprite.scale.set(0.35, 0.11, 1);
-tempSprite.position.set(0.37, 0.02, -0.15);  // 鉄の右横+0.15m
+tempSprite.position.set(0.37, 0.02, 0.15);
 ironMesh.add(tempSprite);
 
 function getTempZone(temp) {
@@ -2225,6 +2225,14 @@ function nextState() {
   onEnterState(currentState, prev);
 }
 
+function vibrateBothControllers(strength = 1.0, duration = 2000) {
+  const r = rightController?.gamepad?.hapticActuators?.[0];
+  const l = leftController?.gamepad?.hapticActuators?.[0];
+
+  if (r) r.pulse(strength, duration);
+  if (l) l.pulse(strength, duration);
+}
+
 function retryState() {
   playTransition();
   updateScorePanel(null);
@@ -2462,6 +2470,7 @@ function handleGlobalInput() {
     // ===== INTRO =====
     if (isIntroState(currentState)) {
       if (_fadeDir === 0) {
+        vibrateBothControllers(0.8, 2000);
         fadeToNext(1.0);
       }
     }
