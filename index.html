@@ -986,7 +986,7 @@ spkGeo.setAttribute('position', _spkPosBuf);
 spkGeo.setAttribute('color',    _spkColBuf);
 spkGeo.drawRange = { start: 0, count: SPARK_MAX };
 const spkMat = new THREE.PointsMaterial({
-  size: 0.0025,                         // 極小サイズ
+  size: 0.004,                         // 極小サイズ
   vertexColors: true,
   sizeAttenuation: true,
   transparent: true,
@@ -1211,7 +1211,7 @@ const tempSprite = new THREE.Sprite(
   new THREE.SpriteMaterial({ map: tempTex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01 })
 );
 tempSprite.scale.set(0.35, 0.11, 1);
-tempSprite.position.set(0.37, 0.02, 0.15);
+tempSprite.position.set(0.37, 0.02, 0.10);
 ironMesh.add(tempSprite);
 
 function getTempZone(temp) {
