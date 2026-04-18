@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -1928,12 +1928,12 @@ function buildResultCanvas(score, bladeStateSnap, scores) {
   // ランキング一覧（各行 80px間隔）
   const yRankStart = yRankTitle + 50;
   const result = saveScore(finalScore);
-  const scores = result.top;
+  const topScores = result.top;
   const newEntry = result.newEntry;
 
   ctx.font = '32px monospace';
 
-  scores.forEach((s, i) => {
+  topScores.forEach((s, i) => {
     const y = yRankStart + i * 82;
 
     const isThisScore = s.time === newEntry.time; // ← これに変更
