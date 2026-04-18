@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2827,7 +2827,19 @@ function updateShaping(delta) {
       playShapingHit(pow);
       // 火花量も pow に比例
       const sparkCount = Math.round(THREE.MathUtils.clamp(pow * 30, 20, 150));
-      const shapingSparkOrigin = shapingHammerHeadWorld.clone().add(new THREE.Vector3(0, 0.01, 0));
+
+      // const shapingSparkOrigin = shapingHammerHeadWorld.clone().add(new THREE.Vector3(0, 0.01, 0));
+
+      // ③ 火花発生位置の修正：ハンマーヘッドのXZ座標を刃物表面のY座標にクランプして接触点を算出
+      // 刃物表面のY座標（BoundingBoxで取得、フリップに対応）
+      const _bladeBBForSpark = _getBladeBB();
+      const bladeTopY = bladeFlipped ? _bladeBBForSpark.min.y : _bladeBBForSpark.max.y;
+      const shapingSparkOrigin = new THREE.Vector3(
+        shapingHammerHeadWorld.x,
+        bladeTopY,           // 刃物表面のY（上面 or 下面）に固定
+        shapingHammerHeadWorld.z
+      );
+
       spawnSparks(shapingSparkOrigin, sparkCount, 'shape', 0.3);
 
     } else {
