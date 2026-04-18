@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2441,8 +2441,8 @@ A: Next Phase`,
 ================================================================ */
 let showingPhaseResult = false;
 
-let _sq0c = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
-let _sqc  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
+let _sq0c;
+let _sqc;
 
 function handleGlobalInput() {
   const aPressed = getAButton();
@@ -2506,6 +2506,8 @@ function handleGlobalInput() {
       const isEarly = !shapingComplete;
 
       if (isEarly) {
+        _sq0c = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
+        _sqc  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
         _phaseScores.shaping = Math.round(
           Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0))
         );
@@ -2840,6 +2842,8 @@ function updateShaping(delta) {
     // L2ノルムスコア: score = 100 × (1 - Σx_i² / Σx_i0²)
 
     // const shapingScore = Math.max(0, Math.min(100, _sq0h > 0 ? 100 * (1 - _sqh / _sq0h) : 0));
+    _sq0c = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
+    _sqc  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
     const score = Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0));
     // const avgAbs = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
     // RMS誤差をsymmetryErrorに保存（RESULT遷移時に使用）
