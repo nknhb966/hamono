@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2639,7 +2639,7 @@ function updateForging(delta) {
 
   // Temperature update + 炉内左手バイブ
   if (ironInFurnace) {
-    ironTemperature = Math.min(100, ironTemperature + CONFIG.FORGING.FORGE_HEAT_RATE * delta);
+    ironTemperature = Math.min(1000, ironTemperature + CONFIG.FORGING.FORGE_HEAT_RATE * delta);
     forgeLight.intensity = 1.5 + Math.sin(Date.now()*0.01)*0.3;
     emberLight.intensity = 0.8;
     furnaceHoleMat.emissiveIntensity = 0.5 + ironTemperature * 0.001;
