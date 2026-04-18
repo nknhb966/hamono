@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2728,6 +2728,8 @@ function updateShaping(delta) {
   const rhPos    = getRightHandPos();
   const xBtn     = getXButton();
 
+  rightController.gamepad.hapticActuators[0].pulse(1.0, 120)
+
   // 刃物は作業台に固定（左手追従なし）
   // ---- 表裏反転：bladeMesh.rotation.xのみ変更 + Z位置補正 ----
   // 表(rotation.x=-PI/2): mesh.position.z=+0.06 で刃物中心をZ=0に
@@ -2915,9 +2917,9 @@ function updateSharpening(delta) {
     rightTiltDeg = Math.asin(THREE.MathUtils.clamp(rFwd.y, -1, 1)) * (180 / Math.PI);
   }
 
-  // ---- 両手の角度一致チェック（差が20°以内）----
+  // ---- 両手の角度一致チェック（差が30°以内）----
   const angleDiff = Math.abs(leftTiltDeg - rightTiltDeg);
-  const isAligned = angleDiff < 20;
+  const isAligned = angleDiff < 30;
 
   // 刃角 = 両手の平均傾き
   // 奥に倒す（正の値）= 刃が砥石面に対して傾く = 正しい研ぎ角
@@ -2976,17 +2978,18 @@ function updateSharpening(delta) {
           let grade     = '×';
 
           // 角度範囲3割増し（甘め判定）
-          if (bladeAngleDeg >= -22 && bladeAngleDeg <= -8) {
-            // ◎：目標-15°の±7°以内（元±5°の1.3倍）
+          if (bladeAngleDeg >= -25 && bladeAngleDeg <= -5) {
+            // ◎：目標-15°の±10°以内（元±5°の1.3倍）
             addPoints = 3;
             grade     = '◎';
-          } else if ((bladeAngleDeg > -8 && bladeAngleDeg < -3) ||
-                     (bladeAngleDeg >= -35 && bladeAngleDeg < -22)) {
+          } else if ((bladeAngleDeg > -5 && bladeAngleDeg < 5) ||
+                     (bladeAngleDeg >= -35 && bladeAngleDeg < -25)) {
             // ○：やや近い
             addPoints = 2;
             grade     = '○';
-          } else if (bladeAngleDeg >= -3 && bladeAngleDeg <= 4) {
-            // △：水平付近（ぎりぎり得点）
+          } else if ((bladeAngleDeg >= 5 && bladeAngleDeg <= 10) ||
+                     (bladeAngleDeg >= -45 && bladeAngleDeg < -35)) {
+            // △：やや遠い
             addPoints = 1;
             grade     = '△';
           } else {
