@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -1204,7 +1204,7 @@ groupForging.add(ironMesh);
 
 // Temperature display — 解像度アップ＋区分表示
 const tempCanvas = document.createElement('canvas');
-tempCanvas.width = 256; tempCanvas.height = 80;
+tempCanvas.width = 330; tempCanvas.height = 80;
 const tempCtx = tempCanvas.getContext('2d');
 const tempTex = new THREE.CanvasTexture(tempCanvas);
 const tempSprite = new THREE.Sprite(
@@ -1225,11 +1225,11 @@ function updateTempSprite(temp) {
   const zone = getTempZone(temp);
   tempCtx.clearRect(0, 0, 330, 80);
   tempCtx.fillStyle = 'rgba(0,0,0,0.80)';
-  tempCtx.beginPath(); tempCtx.roundRect(3, 3, 324, 74, 12); tempCtx.fill();
+  tempCtx.beginPath(); tempCtx.roundRect(3, 3, 324, 74, 14); tempCtx.fill();
   // 温度数値
   const hue = temp < 60 ? 210 : temp < 80 ? 30 : 12;
   tempCtx.fillStyle = `hsl(${hue},100%,72%)`;
-  tempCtx.font = 'bold 38px monospace';
+  tempCtx.font = 'bold 42px monospace';
   tempCtx.textAlign = 'left';
   tempCtx.textBaseline = 'middle';
   const displayTemp = Math.round(temp * 5 + 500);
@@ -1238,7 +1238,7 @@ function updateTempSprite(temp) {
   tempCtx.fillStyle = zone.color;
   tempCtx.font = 'bold 26px monospace';
   tempCtx.textAlign = 'right';
-  tempCtx.fillText(zone.label, 316, 40);
+  tempCtx.fillText(zone.label, 310, 40);
   tempTex.needsUpdate = true;
 }
 
