@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -743,6 +743,11 @@ function fadeToNext(duration = 1.0) {
     ) {
       vibrate();
     }
+    if (
+      currentState === State.RESULT
+    ) {
+      playFinalScore();
+    }
     startFade(1, duration, null);
   });
 }
@@ -857,6 +862,27 @@ function playComplete() {
   [300, 500, 700, 1000].forEach((f, i) => {
     setTimeout(() => createNoise(0.3, f, 'sine', 0.3), i * 100);
   });
+}
+function playFinalScore() {
+  const now = audioCtx.currentTime;
+
+  // 低めの芯（ドン）
+  createNoise(0.4, 180, 'sine', 0.25);
+
+  // メインの澄んだ音（キーン）
+  setTimeout(() => {
+    createNoise(1.2, 880, 'sine', 0.25);
+  }, 80);
+
+  // 倍音（和っぽさのキモ）
+  setTimeout(() => {
+    createNoise(1.0, 1320, 'sine', 0.18);
+  }, 120);
+
+  // さらに高音の余韻
+  setTimeout(() => {
+    createNoise(0.8, 1760, 'sine', 0.12);
+  }, 160);
 }
 function resumeAudio() {
   if (audioCtx.state === 'suspended') audioCtx.resume();
