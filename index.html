@@ -1836,7 +1836,7 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
   ctx.fillText(Math.round(recomputedFinal), W/2, 260);
   ctx.font = '42px serif';
   ctx.fillStyle = '#ffcc88';
-  ctx.fillText('点 / pts', W*2/3, 225);
+  ctx.fillText('点 / pts', W*2/3, 235);
   ctx.font = '44px serif';
   ctx.fillStyle = '#ffddaa';
   ctx.fillText(`【 ${rankJa} / ${rankEn} 】`, W/2, 330);
@@ -1885,7 +1885,7 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
   });
 
   // Total breakdown（Dividerの上）
-  const yBreakdown = 430 + 3 * 105 + 20; // ゲージ3行の直下
+  const yBreakdown = 430 + 3 * 105 + 10; // ゲージ3行の直下
   const computed = Math.max(0, Math.min(100,
     forgingScore  * 0.4 +
     shapingScore * 0.3 +
@@ -1926,10 +1926,10 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
     }
 
   // ランキング一覧（各行 80px間隔）
-  const yRankStart = yRankTitle + 50;
+  const yRankStart = yRankTitle + 70;
   ctx.font = '32px monospace';
   scores.slice(0, 5).forEach((s, i) => {
-    const y = yRankStart + i * 82;
+    const y = yRankStart + i * 80;
     const isThisScore = s.id === savedId;
     ctx.fillStyle = isThisScore ? '#ffe066' : (i === 0 ? '#ffcc88' : 'rgba(255,200,150,0.7)');
     const medal = ['🥇', '🥈', '🥉', '  4', '  5'][i] || String(i+1);
@@ -2644,7 +2644,6 @@ function handleGlobalInput() {
 
   // ===== Bボタン（リトライ） =====
   if (bPressed && !wasBPressed && !_inputLocked && !showingPhaseResult) {
-    lockInputFor(1.0);
     retryState();
   }
 
