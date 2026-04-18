@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2495,9 +2495,8 @@ function handleGlobalInput() {
 
         playComplete();
 
+        showingPhaseResult = true;
       }
-
-      showingPhaseResult = true;
 
     }
 
@@ -2706,6 +2705,7 @@ function updateForging(delta) {
       _phaseScores.forging = Math.round(Math.max(0, Math.min(100, 100 - shapeDistortion)));
       updateInfoPanel(`鍛造が完了しました！\n歪み: ${Math.round(shapeDistortion)}\n\nForging complete!\nDistortion: ${Math.round(shapeDistortion)}\n\nAボタン：次のフェーズへ　A: Next Phase`, '① 鍛造完了 / Forging Complete');
       playComplete();
+      showingPhaseResult = true;
     }
   }
   prevRightTrigger = rightTrig;
