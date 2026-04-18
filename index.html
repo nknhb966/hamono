@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2225,12 +2225,12 @@ function nextState() {
   onEnterState(currentState, prev);
 }
 
-function vibrateBothControllers(strength = 1.0, duration = 2000) {
+function vibrate() {
   const r = rightController?.gamepad?.hapticActuators?.[0];
   const l = leftController?.gamepad?.hapticActuators?.[0];
 
-  if (r) r.pulse(strength, duration);
-  if (l) l.pulse(strength, duration);
+  if (r) r.pulse(0.7, 80);
+  if (l) l.pulse(0.7, 80);
 }
 
 function retryState() {
@@ -2462,6 +2462,7 @@ function handleGlobalInput() {
     // ===== ★結果表示中（最優先） =====
     if (showingPhaseResult) {
       showingPhaseResult = false;
+      vibrate();
       fadeToNext(1.0); // ← RESULTへ
       wasAPressed = aPressed;
       return;
@@ -2470,7 +2471,7 @@ function handleGlobalInput() {
     // ===== INTRO =====
     if (isIntroState(currentState)) {
       if (_fadeDir === 0) {
-        vibrateBothControllers(0.8, 2000);
+        vibrate();
         fadeToNext(1.0);
       }
     }
