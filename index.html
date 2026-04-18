@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>2越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2226,11 +2226,15 @@ function nextState() {
 }
 
 function vibrate() {
-  const r = rightController?.gamepad?.hapticActuators?.[0];
-  const l = leftController?.gamepad?.hapticActuators?.[0];
+  const lGp = getLeftGamepad();
+  const rGp = getRightGamepad();
 
-  if (r) r.pulse(0.7, 80);
-  if (l) l.pulse(0.7, 80);
+  if (lGp?.hapticActuators?.[0]) {
+    lGp.hapticActuators[0].pulse(0.7, 80);
+  }
+  if (rGp?.hapticActuators?.[0]) {
+    rGp.hapticActuators[0].pulse(0.7, 80);
+  }
 }
 
 function retryState() {
