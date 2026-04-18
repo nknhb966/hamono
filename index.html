@@ -1830,16 +1830,32 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
   // Score big
   const rankJa = recomputedFinal >= 90 ? '名人' : recomputedFinal >= 70 ? '職人' : '見習い';
   const rankEn = recomputedFinal >= 90 ? 'Master' : recomputedFinal >= 70 ? 'Craftsman' : 'Apprentice';
+
   ctx.font = 'bold 130px serif';
   ctx.fillStyle = recomputedFinal >= 90 ? '#ffe866' : recomputedFinal >= 70 ? '#88ccff' : '#ff9966';
   ctx.textAlign = 'center';
   ctx.fillText(Math.round(recomputedFinal), W/2, 260);
+
   ctx.font = '42px serif';
   ctx.fillStyle = '#ffcc88';
-  ctx.fillText('点 / pts', W*2/3, 235);
+  ctx.fillText('点 / pts', W*2/3, 260);
+
   ctx.font = '44px serif';
   ctx.fillStyle = '#ffddaa';
   ctx.fillText(`【 ${rankJa} / ${rankEn} 】`, W/2, 330);
+
+  // 今回スコアの順位
+  const newRank = scores.findIndex(s => s.id === savedId);
+    // NEW RECORD表示
+    if (newRank >= 0 && newRank < 5) {
+      ctx.font = 'bold 38px serif';
+      ctx.fillStyle = '#ffe066';
+      ctx.textAlign = 'center';
+      const recLabel = newRank === 0 ? '🥇 NEW\nRECORD!' : `TOP${newRank+1}\nNEW!`;
+      recLabel.split('\n').forEach((line, li) => {
+        ctx.fillText(line, W/4, 210 + li * 50);
+      });
+    }
 
   // ─────────────────────────────────────────────
   // レイアウト順: Score → フェーズゲージ → Total breakdown → Divider → Ranking
@@ -1885,7 +1901,7 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
   });
 
   // Total breakdown（Dividerの上）
-  const yBreakdown = 430 + 3 * 105 + 10; // ゲージ3行の直下
+  const yBreakdown = 430 + 3 * 105 + 0; // ゲージ3行の直下
   const computed = Math.max(0, Math.min(100,
     forgingScore  * 0.4 +
     shapingScore * 0.3 +
@@ -1900,33 +1916,20 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
   );
 
   // Divider（breakdown直下、40px余白）
-  const yDivider = yBreakdown + 50;
+  const yDivider = yBreakdown + 30;
   ctx.strokeStyle = 'rgba(255,120,80,0.4)';
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(50, yDivider); ctx.lineTo(W-50, yDivider); ctx.stroke();
 
   // Ranking（Divider直下、40px余白）
-  const yRankTitle = yDivider + 56;
+  const yRankTitle = yDivider + 60;
   ctx.font = 'bold 38px serif';
   ctx.fillStyle = '#ffddaa';
   ctx.textAlign = 'center';
   ctx.fillText('─ ランキング / Ranking ─', W/2, yRankTitle);
 
-  // 今回スコアの順位
-  const newRank = scores.findIndex(s => s.id === savedId);
-    // NEW RECORD表示
-    if (newRank >= 0 && newRank < 5) {
-      ctx.font = 'bold 38px serif';
-      ctx.fillStyle = '#ffe066';
-      ctx.textAlign = 'center';
-      const recLabel = newRank === 0 ? '🥇 NEW\nRECORD!' : `TOP${newRank+1}\nNEW!`;
-      recLabel.split('\n').forEach((line, li) => {
-        ctx.fillText(line, W/4, 240 + li * 48);
-      });
-    }
-
   // ランキング一覧（各行 80px間隔）
-  const yRankStart = yRankTitle + 70;
+  const yRankStart = yRankTitle + 80;
   ctx.font = '32px monospace';
   scores.slice(0, 5).forEach((s, i) => {
     const y = yRankStart + i * 80;
