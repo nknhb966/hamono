@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2509,19 +2509,20 @@ function handleGlobalInput() {
         _phaseScores.shaping = Math.round(
           Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0))
         );
+        updateInfoPanel(
+          `成形結果
+  スコア: ${Math.round(_phaseScores.shaping)}pt
+
+  Aボタン：次へ`,
+          isEarly ? '② 成形（途中終了）' : '② 成形完了'
+        );
+
+        playComplete();
+
+        showingPhaseResult = true;
       }
 
-      updateInfoPanel(
-        `成形結果
-スコア: ${Math.round(_phaseScores.shaping)}pt
 
-Aボタン：次へ`,
-        isEarly ? '② 成形（途中終了）' : '② 成形完了'
-      );
-
-      playComplete();
-
-      showingPhaseResult = true;
     }
 
     // ===== 研ぎ =====
@@ -2531,19 +2532,20 @@ Aボタン：次へ`,
 
       if (isEarly) {
         _phaseScores.sharpening = Math.min(100, Math.round(totalSharpness));
+        updateInfoPanel(
+          `研ぎ結果
+  ポイント: ${_phaseScores.sharpening}pt
+
+  Aボタン：次へ`,
+          isEarly ? '③ 研ぎ（途中終了）' : '③ 研ぎ完了'
+        );
+
+        playComplete();
+
+        showingPhaseResult = true;
+
       }
 
-      updateInfoPanel(
-        `研ぎ結果
-ポイント: ${_phaseScores.sharpening}pt
-
-Aボタン：次へ`,
-        isEarly ? '③ 研ぎ（途中終了）' : '③ 研ぎ完了'
-      );
-
-      playComplete();
-
-      showingPhaseResult = true;
     }
   }
 
@@ -2856,6 +2858,7 @@ function updateShaping(delta) {
     bladeState.symmetryError = Math.sqrt(_sqc / zones.length);
     updateInfoPanel(`成形が完了しました！\nスコア: ${Math.round(score)}pt\n\nShaping complete!\nScore: ${Math.round(score)}pt\n\nAボタン：次のフェーズへ　A: Next Phase`, '② 成形完了 / Shaping Complete');
     playComplete();
+    showingPhaseResult = true;
   }
 }
 
@@ -3024,6 +3027,7 @@ function updateSharpening(delta) {
     _phaseScores.sharpening = Math.min(100, Math.round(totalSharpness));
     updateInfoPanel(`研ぎが完了しました！\n合計ポイント: ${_phaseScores.sharpening}pt\n\nSharpening complete!\nTotal points: ${_phaseScores.sharpening}pt\n\nAボタン：結果へ　A: See Results`, '③ 研ぎ完了 / Sharpening Complete');
     playComplete();
+    showingPhaseResult = true;
   }
 }
 
