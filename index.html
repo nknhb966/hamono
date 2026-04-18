@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2005,8 +2005,13 @@ function saveScore(score) {
 
   arr.push({ score, date, clock, id });
 
-  // 降順ソート → TOP5
-  arr.sort((a, b) => b.score - a.score);
+
+  // ★ 同点なら今回のスコア（id が大きい方）を上位にする
+  arr.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return b.id - a.id;  // ← 同点時は id の降順
+  });
+
   arr.splice(5);
 
   localStorage.setItem(LS_KEY, JSON.stringify(arr));
