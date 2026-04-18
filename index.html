@@ -3392,7 +3392,7 @@ async function setupUI() {
 
   document.getElementById('recordsResetAll').addEventListener('click', () => {
     if (confirm('全てのスコアをリセットしますか？')) {
-      localStorage.removeItem('LS_KEY');
+      localStorage.removeItem(LS_KEY);
       renderScoreModal();
     }
   });
