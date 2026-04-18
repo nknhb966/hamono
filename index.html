@@ -1956,21 +1956,29 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
   return c;
 }
 
-function showResultPanel(score, bladeStateSnap, scores) {
+function showResultPanel(score, bladeStateSnap, scores, savedId) {
   if (resultPanelMesh) resultPanel.remove(resultPanelMesh);
+
   const W = 1200, H = 1400;
   const cv  = document.createElement('canvas');
   cv.width = W; cv.height = H;
+
   const tex = new THREE.CanvasTexture(cv);
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide });
+
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide
+  });
+
   resultPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.1), mat);
   resultPanelMesh.position.set(0, 1.55, -2.5);
   resultPanelMesh.rotation.set(0, 0, 0);
   resultPanel.add(resultPanelMesh);
   resultPanel.visible = true;
+
   // テキスト内容（buildResultCanvas）をサイドCanvasに描いておく
-  const textCv = buildResultCanvas(score, bladeStateSnap, scores);
+  const textCv = buildResultCanvas(score, bladeStateSnap, scores, savedId);
+
   // 毎フレーム: 背景+粒子 → テキストオーバーレイ
   activateCvPanel(cv, tex, 'result', _cvPtsResult, 0.85, function(ctx2, W2, H2) {
     ctx2.drawImage(textCv, 0, 0, W2, H2);
@@ -2495,7 +2503,7 @@ A: Next Phase`,
       fS * 0.4 + sS * 0.3 + hS * 0.3
     ));
     const scores = saveScore(finalScore);
-    showResultPanel(finalScore, { _forging: fS, _shaping: sS, _sharpening: hS }, scores);
+    showResultPanel(finalScore, { _forging: fS, _shaping: sS, _sharpening: hS }, scores, id);
   }
 }
 
