@@ -1928,25 +1928,41 @@ function buildResultCanvas(score, bladeStateSnap, scores) {
   // ランキング一覧（各行 80px間隔）
   const yRankStart = yRankTitle + 50;
   ctx.font = '32px monospace';
-  scores.slice(0, 5).forEach((s, i) => {
-    const y = yRankStart + i * 82;
-    const isThisScore = newRank === i;
-    ctx.fillStyle = isThisScore ? '#ffe066' : (i === 0 ? '#ffcc88' : 'rgba(255,200,150,0.7)');
-    const medal = ['🥇', '🥈', '🥉', '  4', '  5'][i] || String(i+1);
-    ctx.textAlign = 'center';
-    ctx.fillText(`${medal}  ${Math.round(s.score)}pts`, W/2, y);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = 'rgba(255,180,130,0.6)';
-    ctx.font = '24px monospace';
-    ctx.fillText(s.date, W - 80, y);
-    if (isThisScore) {
-      ctx.fillStyle = '#ffe066';
-      ctx.font = 'bold 28px monospace';
-      ctx.textAlign = 'left';
-      ctx.fillText('★NEW', W/3, y);
-    }
-    ctx.font = '32px monospace';
-  });
+const result = saveScore(finalScore);
+const topScores = result.top;
+const newId = result.id;
+
+let newShown = false;
+
+topScores.forEach((s, i) => {
+  const y = yRankStart + i * 82;
+
+  const isThisScore = !newShown && s.id === newId;
+  if (isThisScore) newShown = true;
+
+  ctx.fillStyle = isThisScore
+    ? '#ffe066'
+    : (i === 0 ? '#ffcc88' : 'rgba(255,200,150,0.7)');
+
+  const medal = ['🥇', '🥈', '🥉', '  4', '  5'][i];
+
+  ctx.textAlign = 'center';
+  ctx.fillText(`${medal}  ${Math.round(s.score)}pts`, W/2, y);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(255,180,130,0.6)';
+  ctx.font = '24px monospace';
+  ctx.fillText(`${s.date} ${s.clock}`, W - 80, y);
+
+  if (isThisScore) {
+    ctx.fillStyle = '#ffe066';
+    ctx.font = 'bold 28px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('★NEW', W/3, y);
+  }
+
+  ctx.font = '32px monospace';
+});
 
   // リプレイガイド（下端から余白80px）
   ctx.fillStyle = 'rgba(255,200,150,0.6)';
@@ -1984,16 +2000,45 @@ function loadScores() {
   try { return JSON.parse(localStorage.getItem('echizen_scores') || '[]'); }
   catch { return []; }
 }
-function saveScore(score) {
+// function saveScore(score) {
+//   const scores = loadScores();
+//   const now = new Date();
+//   const date = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+//   scores.push({ score, date });
+//   scores.sort((a, b) => b.score - a.score);
+//   const top = scores.slice(0, 5);
+//   localStorage.setItem('echizen_scores', JSON.stringify(top));
+//   return top;
+// }
+function saveScore(score){
   const scores = loadScores();
+
   const now = new Date();
-  const date = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-  scores.push({ score, date });
-  scores.sort((a, b) => b.score - a.score);
+  const id = now.getTime(); // ← 一意ID
+
+  const newEntry = {
+    score,
+    date: now.toLocaleDateString("ja-JP"),
+    clock: fmtTime(now),
+    id
+  };
+
+  scores.push(newEntry);
+
+  // 同点なら新しい方が上
+  scores.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return b.id - a.id;
+  });
+
   const top = scores.slice(0, 5);
-  localStorage.setItem('echizen_scores', JSON.stringify(top));
-  return top;
+  saveScoresBy(LS_KEY, top);
+
+  const rank = top.findIndex(s => s.id === id);
+
+  return { top, rank, id }; // ← ★これが重要
 }
+
 
 /* ================================================================
    UI HTML UPDATES
