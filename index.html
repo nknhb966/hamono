@@ -1204,7 +1204,7 @@ const tempSprite = new THREE.Sprite(
   new THREE.SpriteMaterial({ map: tempTex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01 })
 );
 tempSprite.scale.set(0.35, 0.11, 1);
-tempSprite.position.set(0.37, 0.02, 0);  // 鉄の右横+0.15m
+tempSprite.position.set(0.37, 0.02, -0.15);  // 鉄の右横+0.15m
 ironMesh.add(tempSprite);
 
 function getTempZone(temp) {
@@ -2227,6 +2227,7 @@ function nextState() {
 
 function retryState() {
   playTransition();
+  updateScorePanel(null);
   if (currentState === State.FORGING) {
     shapeDistortion = 100; // リトライ時も最悪値から再スタート
     resetForging();
