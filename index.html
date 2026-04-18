@@ -2230,10 +2230,10 @@ function vibrate() {
   const rGp = getRightGamepad();
 
   if (lGp?.hapticActuators?.[0]) {
-    lGp.hapticActuators[0].pulse(0.7, 80);
+    lGp.hapticActuators[0].pulse(1, 80);
   }
   if (rGp?.hapticActuators?.[0]) {
-    rGp.hapticActuators[0].pulse(0.7, 80);
+    rGp.hapticActuators[0].pulse(1, 80);
   }
 }
 
@@ -2468,7 +2468,7 @@ function handleGlobalInput() {
       showingPhaseResult = false;
 
       fadeToNext(1.0);
-      setTimeout(vibrate, 50);
+      vibrate();
 
       wasAPressed = aPressed;
       return;
@@ -2477,10 +2477,12 @@ function handleGlobalInput() {
     // ===== INTRO =====
     if (isIntroState(currentState)) {
       if (_fadeDir === 0) {
+
         fadeToNext(1.0);
-        setTimeout(() => {
+
+        if (currentState === State.INTRO_4) {
           vibrate();
-        }, 50);
+        }
       }
     }
 
@@ -2488,6 +2490,7 @@ function handleGlobalInput() {
     else if (currentState === State.RESULT) {
       playFadeSound();
       startFade(-1, 3.0, () => {
+        vibrate();
         nextState(); // INTRO_0へ
         startFade(1, 3.0, null);
       });
