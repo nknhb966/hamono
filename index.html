@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>2越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2463,14 +2463,12 @@ function handleGlobalInput() {
 
   if (aPressed && !wasAPressed && !_inputLocked) {
 
-    // ===== ★結果表示中（最優先） =====
+    // ===== ★結果表示中（①→②→③→RESULT） =====
     if (showingPhaseResult) {
       showingPhaseResult = false;
-      fadeToNext(1.0); // ← RESULTへ
 
-      setTimeout(() => {
-        vibrate();
-      }, 50);
+      fadeToNext(1.0);
+      setTimeout(vibrate, 50);
 
       wasAPressed = aPressed;
       return;
