@@ -2524,11 +2524,19 @@ let showingPhaseResult = false;
 let _sq0c;
 let _sqc;
 
+function lockInputFor(seconds) {
+  _inputLocked = true;
+  setTimeout(() => {
+    _inputLocked = false;
+  }, seconds * 1000);
+}
+
 function handleGlobalInput() {
   const aPressed = getAButton();
   const bPressed = getBButton();
 
   if (aPressed && !wasAPressed && !_inputLocked) {
+    lockInputFor(1.0);
 
     // ===== ★結果表示中（①→②→③→RESULT） =====
     if (showingPhaseResult) {
@@ -3290,7 +3298,7 @@ async function setupUI() {
 
     if (vrSupported) {
       btnVR.disabled    = false;
-      btnVR.textContent = '🥽 VR を開始する';
+      btnVR.textContent = '🥽 ENTER VR';
       btnVR.addEventListener('click', async () => {
         resumeAudio();
         if (renderer.xr.isPresenting) return;
@@ -3309,7 +3317,7 @@ async function setupUI() {
 
     if (arSupported) {
       btnAR.disabled    = false;
-      btnAR.textContent = '📱 AR を開始する';
+      btnAR.textContent = '📱 ENTER AR';
       btnAR.addEventListener('click', async () => {
         resumeAudio();
         if (renderer.xr.isPresenting) return;
