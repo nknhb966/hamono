@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -736,6 +736,14 @@ function fadeToNext(duration = 1.0) {
   // フェードアウト完了 → 次stateに遷移 → フェードイン開始
   startFade(-1, duration, () => {
     nextState();
+    if (
+      currentState === State.FORGING ||
+      currentState === State.SHAPING ||
+      currentState === State.SHARPENING ||
+      currentState === State.RESULT
+    ) {
+      vibrate();
+    }
     startFade(1, duration, null);
   });
 }
@@ -2226,18 +2234,14 @@ function nextState() {
 }
 
 function vibrate() {
-  const l = getLeftGamepad();
-  const r = getRightGamepad();
+  const lGp = getLeftGamepad();
+  const rGp = getRightGamepad();
 
-  const interval = 100;   // 0.1秒ごと
-  const duration = 2000;  // 合計2秒
-  const count = duration / interval;
-
-  for (let i = 0; i < count; i++) {
-    setTimeout(() => {
-      l?.hapticActuators?.[0]?.pulse(strength, 80);
-      r?.hapticActuators?.[0]?.pulse(strength, 80);
-    }, i * interval);
+  if (lGp?.hapticActuators?.[0]) {
+    lGp.hapticActuators[0].pulse(1, 80);
+  }
+  if (rGp?.hapticActuators?.[0]) {
+    rGp.hapticActuators[0].pulse(1, 80);
   }
 }
 
@@ -2470,10 +2474,7 @@ function handleGlobalInput() {
     // ===== ★結果表示中（①→②→③→RESULT） =====
     if (showingPhaseResult) {
       showingPhaseResult = false;
-
       fadeToNext(1.0);
-      vibrate();
-
       wasAPressed = aPressed;
       return;
     }
@@ -2481,12 +2482,7 @@ function handleGlobalInput() {
     // ===== INTRO =====
     if (isIntroState(currentState)) {
       if (_fadeDir === 0) {
-
         fadeToNext(1.0);
-
-        if (currentState === State.INTRO_4) {
-          vibrate();
-        }
       }
     }
 
@@ -2494,7 +2490,6 @@ function handleGlobalInput() {
     else if (currentState === State.RESULT) {
       playFadeSound();
       startFade(-1, 3.0, () => {
-        vibrate();
         nextState(); // INTRO_0へ
         startFade(1, 3.0, null);
       });
