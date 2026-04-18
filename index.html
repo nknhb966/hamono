@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2555,7 +2555,7 @@ function handleGlobalInput() {
   wasAPressed = aPressed;
 
   // ===== Bボタン（リトライ） =====
-  if (bPressed && !wasBPressed && !_inputLocked) {
+  if (bPressed && !wasBPressed && !_inputLocked && !showingPhaseResult) {
     retryState();
   }
 
@@ -2782,7 +2782,7 @@ function updateShaping(delta) {
 
   // ---- 打撃判定 ----
   const shapingTrig = getRightTrigger();
-  if (shapingTrig && !prevShapingTrigger && shapingHitCooldown <= 0 && shapingHitCount < CONFIG.SHAPING.MAX_HITS) {
+  if (shapingTrig && !prevShapingTrigger && shapingHitCooldown <= 0 && shapingHitCount < CONFIG.SHAPING.MAX_HITS &&!showingPhaseResult) {
     shapingHitCooldown = 0.18;
     shapingHitCount++;
 
@@ -2931,7 +2931,7 @@ function updateSharpening(delta) {
 
   updateAngleHud(leftTiltDeg, rightTiltDeg, isAligned, bladeAngleDeg);
 
-  if (held) {
+  if (held &&!showingPhaseResult) {
     // コントローラーのトリガー位置（midから少し先端方向）が刃物中心になるよう調整
     // コントローラーグリップの中心より少し奥(-Z)に刃物を配置
     sharpenBladeGroup.position.set(
