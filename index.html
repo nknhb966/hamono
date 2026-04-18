@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>2越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -1211,21 +1211,21 @@ const tempSprite = new THREE.Sprite(
   new THREE.SpriteMaterial({ map: tempTex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01 })
 );
 tempSprite.scale.set(0.35, 0.11, 1);
-tempSprite.position.set(0.37, 0.02, 0.10);
+tempSprite.position.set(0.37, 0.10, 0.10);
 ironMesh.add(tempSprite);
 
 function getTempZone(temp) {
   // 100-80: 熱すぎ△ / 80-60: 適正○ / 60未満: 冷めすぎ×
-  if (temp >= 80) return { label: '△ HOT', color: '#ff6622', judge: 'hot' };
-  if (temp >= 60) return { label: '〇 GOOD', color: '#88ff44', judge: 'good' };
-  return               { label: '× COLD', color: '#4488ff', judge: 'cold' };
+  if (temp >= 80) return { label: '△ 高温/HOT', color: '#ff6622', judge: 'hot' };
+  if (temp >= 60) return { label: '〇 適温/GOOD', color: '#88ff44', judge: 'good' };
+  return               { label: '× 低温/COLD', color: '#4488ff', judge: 'cold' };
 }
 
 function updateTempSprite(temp) {
   const zone = getTempZone(temp);
-  tempCtx.clearRect(0, 0, 320, 80);
+  tempCtx.clearRect(0, 0, 330, 80);
   tempCtx.fillStyle = 'rgba(0,0,0,0.80)';
-  tempCtx.beginPath(); tempCtx.roundRect(3, 3, 314, 74, 12); tempCtx.fill();
+  tempCtx.beginPath(); tempCtx.roundRect(3, 3, 324, 74, 12); tempCtx.fill();
   // 温度数値
   const hue = temp < 60 ? 210 : temp < 80 ? 30 : 12;
   tempCtx.fillStyle = `hsl(${hue},100%,72%)`;
