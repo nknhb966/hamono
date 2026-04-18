@@ -2789,8 +2789,9 @@ function updateForging(delta) {
     else playHammerMiss();
 
     // VR haptics
-    if (rightController?.gamepad?.hapticActuators?.[0]) {
-      rightController.gamepad.hapticActuators[0].pulse(result === 'Perfect' ? 0.8 : 0.3, 80);
+    const rGp = getRightGamepad();
+    if (rGp?.hapticActuators?.[0]) {
+      rGp.hapticActuators[0].pulse(result === 'Perfect' ? 0.8 : 0.3, 80);
     }
 
     updateScorePanel(`① 打撃 ${forgingHitCount}/${CONFIG.FORGING.TOTAL_HITS}\n${result}  歪み:${Math.round(shapeDistortion)}`, new THREE.Vector3(0, workbenchPos.y + 0.43, -1.1));
@@ -2939,8 +2940,9 @@ function updateShaping(delta) {
       spawnSparks(shapingHammerHeadWorld.clone(), 9, 'shape', 0.3);
     }
 
-    if (rightController?.gamepad?.hapticActuators?.[0]) {
-      rightController.gamepad.hapticActuators[0].pulse(0.4, 60);
+    const rGp = getRightGamepad();
+    if (rGp?.hapticActuators?.[0]) {
+      rGp.hapticActuators[0].pulse(0.4, 60);
     }
 
     // L2ノルムスコア: score = 100 × (1 - Σx_i² / Σx_i0²)
@@ -3108,9 +3110,10 @@ function updateSharpening(delta) {
             playSharpenBad();
           }
 
-          if (rightController?.gamepad?.hapticActuators?.[0]) {
+          const rGp = getRightGamepad();
+          if (rGp?.hapticActuators?.[0]) {
             const strength = grade === '◎' ? 0.6 : grade === '○' ? 0.4 : 0.15;
-            rightController.gamepad.hapticActuators[0].pulse(strength, 50);
+            rGp.hapticActuators[0].pulse(strength, 50);
           }
 
           const bonusMsg = consecutivePerfect > 0 && consecutivePerfect % 10 === 0
