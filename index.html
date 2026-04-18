@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>2越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -396,8 +396,8 @@ const CONFIG = {
   FORGING: {
     TOTAL_HITS: 30,
     VELOCITY_THRESHOLD: 0.8,
-    FORGE_HEAT_RATE: 125, 
-    COOL_RATE: 40,
+    FORGE_HEAT_RATE: 12.5,     // per second in furnace（加熱2倍ゆっくり）
+    COOL_RATE: 4,              // per second in air
     HOT_THRESHOLD: 60,
     MISS_THRESHOLD: 30,
     SPARK_COUNT_PERFECT: 80,
@@ -1215,24 +1215,25 @@ tempSprite.position.set(0.37, 0.02, 0.10);
 ironMesh.add(tempSprite);
 
 function getTempZone(temp) {
-  // 1000-900: 熱すぎ△ / 900-800: 適正○ / 800未満: 冷めすぎ×
-  if (temp >= 900) return { label: '△ 高温/HOT', color: '#ff6622', judge: 'hot' };
-  if (temp >= 800) return { label: '〇 適温/GOOD', color: '#88ff44', judge: 'good' };
-  return               { label: '× 低温/COLD', color: '#4488ff', judge: 'cold' };
+  // 100-80: 熱すぎ△ / 80-60: 適正○ / 60未満: 冷めすぎ×
+  if (temp >= 80) return { label: '△ HOT', color: '#ff6622', judge: 'hot' };
+  if (temp >= 60) return { label: '〇 GOOD', color: '#88ff44', judge: 'good' };
+  return               { label: '× COLD', color: '#4488ff', judge: 'cold' };
 }
 
 function updateTempSprite(temp) {
   const zone = getTempZone(temp);
-  tempCtx.clearRect(0, 0, 256, 80);
+  tempCtx.clearRect(0, 0, 320, 80);
   tempCtx.fillStyle = 'rgba(0,0,0,0.80)';
-  tempCtx.beginPath(); tempCtx.roundRect(3, 3, 250, 74, 12); tempCtx.fill();
+  tempCtx.beginPath(); tempCtx.roundRect(3, 3, 314, 74, 12); tempCtx.fill();
   // 温度数値
-  const hue = temp < 800 ? 210 : temp < 900 ? 30 : 12;
+  const hue = temp < 60 ? 210 : temp < 80 ? 30 : 12;
   tempCtx.fillStyle = `hsl(${hue},100%,72%)`;
   tempCtx.font = 'bold 38px monospace';
   tempCtx.textAlign = 'left';
   tempCtx.textBaseline = 'middle';
-  tempCtx.fillText(`${Math.round(temp)}°`, 14, 40);
+  const displayTemp = Math.round(temp * 5 + 500);
+  tempCtx.fillText(`${Math.round(displayTemp)}°`, 14, 40);
   // 区分ラベル
   tempCtx.fillStyle = zone.color;
   tempCtx.font = 'bold 26px monospace';
@@ -2639,10 +2640,10 @@ function updateForging(delta) {
 
   // Temperature update + 炉内左手バイブ
   if (ironInFurnace) {
-    ironTemperature = Math.min(1000, ironTemperature + CONFIG.FORGING.FORGE_HEAT_RATE * delta);
+    ironTemperature = Math.min(100, ironTemperature + CONFIG.FORGING.FORGE_HEAT_RATE * delta);
     forgeLight.intensity = 1.5 + Math.sin(Date.now()*0.01)*0.3;
     emberLight.intensity = 0.8;
-    furnaceHoleMat.emissiveIntensity = 0.5 + ironTemperature * 0.001;
+    furnaceHoleMat.emissiveIntensity = 0.5 + ironTemperature * 0.01;
     // 炉内での左手バイブ（温度区分に応じて）
     const lGp = getLeftGamepad();
     if (lGp?.hapticActuators?.[0]) {
@@ -2662,8 +2663,8 @@ function updateForging(delta) {
 
   // Update iron color
   ironMesh.material.color.copy(tempToColor(ironTemperature));
-  ironMesh.material.emissive = ironTemperature > 500
-    ? new THREE.Color().setHSL(0.04, 1, (ironTemperature - 500) * 0.0006)
+  ironMesh.material.emissive = ironTemperature > 50
+    ? new THREE.Color().setHSL(0.04, 1, (ironTemperature - 50) * 0.006)
     : new THREE.Color(0x000000);
   ironMesh.material.emissiveIntensity = ironTemperature > 50 ? 1 : 0;
 
