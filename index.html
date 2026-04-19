@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2332,11 +2332,11 @@ function onEnterState(state, prev) {
 
 　　　Aボタン ▶ 次へ
 ---
-Echizen Hamono (blades) began in 1337.
-Master swordsmith Chiyotsuru Kuniyasu
-moved here from Kyoto and forged sickles
-for local farmers. The craft has been
-passed down for over 600 years.
+Echizen Uchihamono began in 1337.
+The swordsmith Chiyozuru Kuniyasu moved here from Kyoto
+and started making sickles for local farmers.
+For over 600 years, this craft has been passed down
+from generation to generation.
 
 　　　Press A ▶ Next`,
       },
@@ -2345,7 +2345,7 @@ passed down for over 600 years.
         body: `打刃物は、いくつもの工程を経て作られます。
 大きく分けると、次の3つの流れがあります。
 
-鍛造：鋼と鉄を重ね、熱して叩き、強くしながら形を作る
+鍛造：熱した鋼を叩き、金属を鍛える
 成形：刃の厚みや形を整え、歪みを直す
 研ぎ：刃を磨き上げ、切れ味を生み出す
 
@@ -2357,10 +2357,18 @@ passed down for over 600 years.
 
 　　　Aボタン ▶ 次へ
 ---
-A blade passes through many stages.
-These three are the most essential.
-Each step demands skill, focus,
-and respect for the metal.
+Forged blades are created through many steps.
+They can be broadly divided into three main stages:
+
+Forging: Heating and hammering steel to strengthen it
+Shaping: Adjusting thickness, form, and correcting distortion
+Sharpening: Polishing the edge to create cutting performance
+
+In reality, there are more than 14 steps.
+Heating, hammering, cooling, and hammering again—
+this repetition strengthens and refines the blade.
+Some parts are mechanized today, but the fundamental method
+has remained nearly unchanged for 700 years.
 
 　　　Press A ▶ Next`,
 
@@ -2368,25 +2376,34 @@ and respect for the metal.
       [State.INTRO_3]: {
         title: '② 特徴：二枚広げ / Feature: Nimai-hiroge',
         body: `越前打刃物の特徴は、「二枚広げ」という技法です。
-2枚の刃を重ねたまま、裏と表の両側からハンマーで叩く方法です。
+2枚の刃を重ねたまま、表と裏からハンマーで叩く方法です。
 
-二枚にすることで厚みが増し、
-ハンマーの力が深く伝わって、刃が薄く均一に伸びていきます。
+2枚にすることで厚みが増し、
+力が深く伝わって刃が薄く均一に伸びていきます。
 
-さらに、二枚重ねは熱が残りやすいため、
-温度が下がる前に連続して加工でき、ムラが出にくいのも利点です。
+さらに、2枚重ねは熱が残りやすいため、
+温度が下がる前に加工でき、ムラが出にくくなります。
 
-この技法によって、
-軽くて薄く、切れ味が長く続く越前打刃物が生まれます。
+この技法によって、軽くて薄く、
+切れ味が長く続く越前打刃物が生まれます。
 
 　　　Aボタン ▶ 次へ
 ---
-The hallmark of Echizen blades is
-"Nimai-hiroge" (double-layer forging).
-By hammering two stacked blades together,
-the metal spreads evenly, quickly, and thinly.
-The thickness transmits force, retains heat,
-and prevents uneven results.
+A defining feature of Echizen Uchihamono is the technique
+called “Nimai‑hiroge.”  
+Two blades are stacked together and hammered
+from both the front and back sides.
+
+Stacking them increases the thickness,
+allowing the force of the hammer to penetrate deeply
+and stretch the blade thin and evenly.
+
+Because two layers retain heat longer,
+the metal can be worked continuously before cooling,
+reducing uneven results.
+
+This technique produces blades that are light, thin,
+and maintain sharpness for a long time.
 
 　　　Press A ▶ Next`,
       },
@@ -2395,18 +2412,21 @@ and prevents uneven results.
         body: `この体験では、職人の工程を再現します。
 あなたの技術で、一本の刃物を完成させてください。
 
-　① 鍛造　熱した鉄を叩く
-　　　Forging: Hammer heated iron
-　② 成形　歪みを整える
-　　　Shaping: Correct distortions
-　③ 研ぎ　刃を仕上げる
-　　　Sharpening: Finish the blade edge
+① 鍛造：鉄を熱し、叩いて強くしながら形をつくる
+② 成形：二枚広げの技法で、刃を薄く均一に伸ばす
+③ 研ぎ：刃の角度を保ちながら磨き上げ、仕上げる
 
-In this experience, you recreate the
-craftsman's process. Complete all three
-phases and forge your own blade.
+　　　Aボタン ▶ 次へ
+---
+In this experience, you will recreate the steps
+a craftsman follows to make a blade.
+Use your skill to complete a knife from start to finish.
 
-　　　A / Press A ▶ 体験開始 / Start`,
+① Forging: Heat the iron and hammer it to strengthen and shape it
+② Shaping: Use the Nimai‑hiroge technique to stretch the blade thin and even
+③ Sharpening: Maintain the correct angle and polish the edge to finish it
+
+　　　Press A ▶ Next`,
       },
     };
     const d = introData[state];
