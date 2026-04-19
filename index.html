@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -1763,8 +1763,11 @@ function updateInfoPanel(text, titleText, mode) {
   const isIntro = isIntroState(currentState);
   const isGame = !isIntro;
 
-  // ★ game中 & showingPhaseResult=false のときだけ Mesh を再利用したい
-  const shouldReuseMesh = isGame && showingPhaseResult === false;
+  // ★ mode==="result" のときは必ず Mesh を作り直す
+  const isResult = (mode === "result");
+
+  // ★ game中 & 結果表示ではないときだけ Mesh を再利用
+  const shouldReuseMesh = isGame && !isResult;
 
   const W = 2048, H = 1024;
   const pts    = isIntro ? _cvPtsIntro : _cvPtsGame;
@@ -1773,11 +1776,9 @@ function updateInfoPanel(text, titleText, mode) {
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
 
-  // --- Mesh を作り直すかどうかを決める ---
   const needRecreateMesh = !shouldReuseMesh || !infoPanelMesh;
 
   if (needRecreateMesh) {
-    // 既存 Mesh を削除（再利用しないケース）
     if (infoPanelMesh) infoPanel.remove(infoPanelMesh);
 
     const tex = new THREE.CanvasTexture(cv);
@@ -1809,8 +1810,7 @@ function updateInfoPanel(text, titleText, mode) {
     return;
   }
 
-  // --- ここは game中 & showingPhaseResult=false & infoPanelMesh あり ---
-  // Mesh はそのまま、texture だけ更新
+  // 再利用モード
   const tex = infoPanelMesh.material.map;
 
   activateCvPanel(cv, tex, _mode, pts, bright,
@@ -1819,7 +1819,6 @@ function updateInfoPanel(text, titleText, mode) {
 
   tex.needsUpdate = true;
 }
-
 
 // Result panel
 const resultPanel = new THREE.Group();
@@ -2518,7 +2517,7 @@ Too cold
 
 Aボタン：次のフェーズへ
 A: Next Phase`,
-'① 鍛造 / Phase 1: Forging');
+'① 鍛造 / Phase 1: Forging',"result");
 
   } else if (state === State.SHAPING) {
     resetShaping();
@@ -2550,7 +2549,7 @@ Distortion=0 → 100pt
 
 Aボタン：終了
 A: Finish`,
-'② 成形 / Phase 2: Shaping');
+'② 成形 / Phase 2: Shaping',"result");
 
   } else if (state === State.SHARPENING) {
     resetSharpening();
@@ -2587,7 +2586,7 @@ HUD: NG = 不一致
 
 Aボタン：次のフェーズへ
 A: Next Phase`,
-'③ 研ぎ / Phase 3: Sharpening');
+'③ 研ぎ / Phase 3: Sharpening',"result");
 
   } else if (state === State.RESULT) {
     // 各フェーズ確定スコアをそのまま使用（再計算禁止）
@@ -2668,7 +2667,7 @@ function handleGlobalInput() {
   歪み: ${Math.round(shapeDistortion)}
 
   Aボタン：次へ`,
-          isEarly ? '① 鍛造（途中終了）' : '① 鍛造完了'
+          isEarly ? '① 鍛造（途中終了）' : '① 鍛造完了',"result"
         );
 
         playComplete();
@@ -2694,7 +2693,7 @@ function handleGlobalInput() {
   スコア: ${Math.round(_phaseScores.shaping)}pt
 
   Aボタン：次へ`,
-          isEarly ? '② 成形（途中終了）' : '② 成形完了'
+          isEarly ? '② 成形（途中終了）' : '② 成形完了',"result"
         );
 
         playComplete();
@@ -2717,7 +2716,7 @@ function handleGlobalInput() {
   ポイント: ${_phaseScores.sharpening}pt
 
   Aボタン：次へ`,
-          isEarly ? '③ 研ぎ（途中終了）' : '③ 研ぎ完了'
+          isEarly ? '③ 研ぎ（途中終了）' : '③ 研ぎ完了',"result"
         );
 
         playComplete();
@@ -2887,7 +2886,7 @@ function updateForging(delta) {
       // フェーズ終了時にスコアを確定保存
       _phaseScores.forging = Math.round(Math.max(0, Math.min(100, 100 - shapeDistortion)));
       showingPhaseResult = true;
-      updateInfoPanel(`鍛造が完了しました！\n歪み: ${Math.round(shapeDistortion)}\n\nForging complete!\nDistortion: ${Math.round(shapeDistortion)}\n\nAボタン：次のフェーズへ　A: Next Phase`, '① 鍛造完了 / Forging Complete');
+      updateInfoPanel(`鍛造が完了しました！\n歪み: ${Math.round(shapeDistortion)}\n\nForging complete!\nDistortion: ${Math.round(shapeDistortion)}\n\nAボタン：次のフェーズへ　A: Next Phase`, '① 鍛造完了 / Forging Complete',"result");
       playComplete();
     }
   }
@@ -3053,7 +3052,7 @@ function updateShaping(delta) {
     _phaseScores.shaping = Math.round(score);
     bladeState.symmetryError = Math.sqrt(_sqc / zones.length);
     showingPhaseResult = true;
-    updateInfoPanel(`成形が完了しました！\nスコア: ${Math.round(score)}pt\n\nShaping complete!\nScore: ${Math.round(score)}pt\n\nAボタン：次のフェーズへ　A: Next Phase`, '② 成形完了 / Shaping Complete');
+    updateInfoPanel(`成形が完了しました！\nスコア: ${Math.round(score)}pt\n\nShaping complete!\nScore: ${Math.round(score)}pt\n\nAボタン：次のフェーズへ　A: Next Phase`, '② 成形完了 / Shaping Complete',"result");
     playComplete();
   }
 }
@@ -3228,7 +3227,7 @@ function updateSharpening(delta) {
     // フェーズ終了時にスコアを確定保存（100点クランプのみ、正規化しない）
     _phaseScores.sharpening = Math.min(100, Math.round(totalSharpness));
     showingPhaseResult = true;
-    updateInfoPanel(`研ぎが完了しました！\n合計ポイント: ${_phaseScores.sharpening}pt\n\nSharpening complete!\nTotal points: ${_phaseScores.sharpening}pt\n\nAボタン：結果へ　A: See Results`, '③ 研ぎ完了 / Sharpening Complete');
+    updateInfoPanel(`研ぎが完了しました！\n合計ポイント: ${_phaseScores.sharpening}pt\n\nSharpening complete!\nTotal points: ${_phaseScores.sharpening}pt\n\nAボタン：結果へ　A: See Results`, '③ 研ぎ完了 / Sharpening Complete',"result");
     playComplete();
   }
 }
