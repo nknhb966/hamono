@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -1760,22 +1760,25 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
 
 function updateInfoPanel(text, titleText, mode) {
   const _mode = mode || (isIntroState(currentState) ? 'intro' : 'game');
-  const W = 2048, H = 1024;
   const isIntro = isIntroState(currentState);
+
+  const W = 2048, H = 1024;
   const pts    = isIntro ? _cvPtsIntro : _cvPtsGame;
   const bright = isIntro ? 1.0 : 0.45;
 
-  // Canvas は毎回作り直して OK
+  // Canvas は毎回作る
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
 
-  // 初回だけ Mesh を作成
-  if (!infoPanelMesh) {
-    infoPanelTexture = new THREE.CanvasTexture(cv);
-    infoPanelTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  // --- intro の場合は毎回 Mesh を作り直す ---
+  if (isIntro) {
+    if (infoPanelMesh) infoPanel.remove(infoPanelMesh);
+
+    const tex = new THREE.CanvasTexture(cv);
+    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
     const mat = new THREE.MeshBasicMaterial({
-      map: infoPanelTexture,
+      map: tex,
       transparent: true,
       depthTest: true,
       depthWrite: true,
@@ -1784,8 +1787,38 @@ function updateInfoPanel(text, titleText, mode) {
     });
 
     infoPanelMesh = new THREE.Mesh(
-      isIntro ? new THREE.PlaneGeometry(2.52, 1.26)
-              : new THREE.PlaneGeometry(2.5, 1.40),
+      new THREE.PlaneGeometry(2.52, 1.26),
+      mat
+    );
+
+    infoPanelMesh.position.set(0, 1.38, -2.2);
+    infoPanel.add(infoPanelMesh);
+
+    activateCvPanel(cv, tex, _mode, pts, bright,
+      _makeTextExtraFn(titleText || null, text, _mode)
+    );
+
+    tex.needsUpdate = true;
+    return;
+  }
+
+  // --- game 中は Mesh を再利用する ---
+  if (!infoPanelMesh) {
+    // 初回のみ Mesh を作る
+    const tex = new THREE.CanvasTexture(cv);
+    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      depthTest: true,
+      depthWrite: true,
+      alphaTest: 0.01,
+      side: THREE.DoubleSide
+    });
+
+    infoPanelMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.5, 1.40),
       mat
     );
 
@@ -1793,13 +1826,16 @@ function updateInfoPanel(text, titleText, mode) {
     infoPanel.add(infoPanelMesh);
   }
 
-  // テクスチャの中身だけ更新
-  activateCvPanel(cv, infoPanelTexture, _mode, pts, bright,
+  // 既存の texture を使う
+  const tex = infoPanelMesh.material.map;
+
+  activateCvPanel(cv, tex, _mode, pts, bright,
     _makeTextExtraFn(titleText || null, text, _mode)
   );
 
-  infoPanelTexture.needsUpdate = true;
+  tex.needsUpdate = true;
 }
+
 
 // Result panel
 const resultPanel = new THREE.Group();
