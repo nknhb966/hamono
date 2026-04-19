@@ -2329,6 +2329,8 @@ function onEnterState(state, prev) {
 京都の刀匠・千代鶴国安がこの地に移り、
 農民のために鎌を作ったことが起源です。
 600年以上にわたり、その技は受け継がれています。
+
+　　　Aボタン ▶ 次へ
 ---
 Echizen Hamono (blades) began in 1337.
 Master swordsmith Chiyotsuru Kuniyasu
@@ -2336,14 +2338,48 @@ moved here from Kyoto and forged sickles
 for local farmers. The craft has been
 passed down for over 600 years.
 
-　　　A / Press A ▶ 次へ / Next`,
+　　　Press A ▶ Next`,
       },
       [State.INTRO_2]: {
+        title: '③ 製造工程 / Manufacturing Process',
+        body: `打刃物は、いくつもの工程を経て作られます。
+大きく分けると、次の3つの流れがあります。
+
+鍛造：鋼と鉄を重ね、熱して叩き、強くしながら形を作る
+成形：刃の厚みや形を整え、歪みを直す
+研ぎ：刃を磨き上げ、切れ味を生み出す
+
+実際の製造には14以上の工程があり、
+鋼を熱し、叩き、冷やし、また叩く──
+この繰り返しで刃物は強く、美しく仕上がります。
+一部は機械化されても、基本の作り方は
+700年前からほとんど変わっていません。
+
+　　　Aボタン ▶ 次へ
+---
+A blade passes through many stages.
+These three are the most essential.
+Each step demands skill, focus,
+and respect for the metal.
+
+　　　Press A ▶ Next`,
+
+      },
+      [State.INTRO_3]: {
         title: '② 特徴：二枚広げ / Feature: Nimai-hiroge',
         body: `越前打刃物の特徴は、「二枚広げ」という技法です。
-2枚の刃物を重ねたまま叩いて薄く伸ばします。
-熱が残っている間に表裏をひっくり返しながら叩くことで、
-均一な厚みと高い強度の刃が生まれます。
+2枚の刃を重ねたまま、裏と表の両側からハンマーで叩く方法です。
+
+二枚にすることで厚みが増し、
+ハンマーの力が深く伝わって、刃が薄く均一に伸びていきます。
+
+さらに、二枚重ねは熱が残りやすいため、
+温度が下がる前に連続して加工でき、ムラが出にくいのも利点です。
+
+この技法によって、
+軽くて薄く、切れ味が長く続く越前打刃物が生まれます。
+
+　　　Aボタン ▶ 次へ
 ---
 The hallmark of Echizen blades is
 "Nimai-hiroge" (double-layer forging).
@@ -2352,34 +2388,7 @@ the metal spreads evenly, quickly, and thinly.
 The thickness transmits force, retains heat,
 and prevents uneven results.
 
-　　　A / Press A ▶ 次へ / Next`,
-      },
-      [State.INTRO_3]: {
-        title: '③ 製造工程 / Manufacturing Process',
-        body: `打刃物は、いくつもの工程を経て作られます。
-大きく分けると、次の3つの流れがあります。
-
-鍛造：  
-鋼と鉄を重ね、熱して叩き、強くしながら形を作る工程です。
-
-成形：  
-刃の厚みや形を整え、歪みを直していきます。
-
-研ぎ：  
-刃を磨き上げ、切れ味を生み出す仕上げの工程です。
-
-実際の製造には 14 以上の工程があり、
-鋼を熱し、叩き、冷やし、また叩く──
-この繰り返しで刃物は強く、美しく仕上がります。
-一部は機械化されても、基本の作り方は
-700年前からほとんど変わっていません。
----
-A blade passes through many stages.
-These three are the most essential.
-Each step demands skill, focus,
-and respect for the metal.
-
-　　　A / Press A ▶ 次へ / Next`,
+　　　Press A ▶ Next`,
       },
       [State.INTRO_4]: {
         title: '④ 体験内容 / Your Challenge',
