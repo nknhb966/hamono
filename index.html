@@ -2941,8 +2941,9 @@ function updateShaping(delta) {
     }
 
     const rGp = getRightGamepad();
+    const strong = Math.max(0.1, Math.min(1.0, pow));
     if (rGp?.hapticActuators?.[0]) {
-      rGp.hapticActuators[0].pulse(pow * 0.3, 60);
+      rGp.hapticActuators[0].pulse(strong, 60);
     }
 
     // L2ノルムスコア: score = 100 × (1 - Σx_i² / Σx_i0²)
