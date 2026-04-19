@@ -1815,8 +1815,8 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
   const shapingScore = bladeStateSnap._shaping;
   const sharpenScore  = bladeStateSnap._sharpening;
   const recomputedFinal = Math.max(0, Math.min(100,
-    forgingScore  * 0.4 +
-    shapingScore * 0.3 +
+    forgingScore  * 0.3 +
+    shapingScore * 0.4 +
     sharpenScore  * 0.3
   ));
 
@@ -1861,8 +1861,8 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
 
   // フェーズゲージ（y=400 から）
   const details = [
-    ['① 鍛造 Forging',  forgingScore,  0.4],
-    ['② 成形 Shaping',  shapingScore, 0.3],
+    ['① 鍛造 Forging',  forgingScore,  0.3],
+    ['② 成形 Shaping',  shapingScore, 0.4],
     ['③ 研ぎ Sharpen',  sharpenScore,  0.3],
   ];
   const BAR_X  = 400;
@@ -1896,15 +1896,15 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
   // Total breakdown（Dividerの上）
   const yBreakdown = 430 + 3 * 105 + 0; // ゲージ3行の直下
   const computed = Math.max(0, Math.min(100,
-    forgingScore  * 0.4 +
-    shapingScore * 0.3 +
+    forgingScore  * 0.3 +
+    shapingScore * 0.4 +
     sharpenScore  * 0.3
   ));
   ctx.font = '30px serif';
   ctx.fillStyle = '#ffcc88';
   ctx.textAlign = 'center';
   ctx.fillText(
-    `${forgingScore}×0.4 + ${shapingScore}×0.3 + ${sharpenScore}×0.3 = ${Math.round(computed)}点`,
+    `${forgingScore}×0.3 + ${shapingScore}×0.4 + ${sharpenScore}×0.3 = ${Math.round(computed)}点`,
     W/2, yBreakdown
   );
 
