@@ -1761,17 +1761,23 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
 function updateInfoPanel(text, titleText, mode) {
   const _mode = mode || (isIntroState(currentState) ? 'intro' : 'game');
   const isIntro = isIntroState(currentState);
+  const isGame = !isIntro;
+
+  // ★ game中 & showingPhaseResult=false のときだけ Mesh を再利用したい
+  const shouldReuseMesh = isGame && showingPhaseResult === false;
 
   const W = 2048, H = 1024;
   const pts    = isIntro ? _cvPtsIntro : _cvPtsGame;
   const bright = isIntro ? 1.0 : 0.45;
 
-  // Canvas は毎回作る
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
 
-  // --- intro の場合は毎回 Mesh を作り直す ---
-  if (isIntro) {
+  // --- Mesh を作り直すかどうかを決める ---
+  const needRecreateMesh = !shouldReuseMesh || !infoPanelMesh;
+
+  if (needRecreateMesh) {
+    // 既存 Mesh を削除（再利用しないケース）
     if (infoPanelMesh) infoPanel.remove(infoPanelMesh);
 
     const tex = new THREE.CanvasTexture(cv);
@@ -1787,7 +1793,8 @@ function updateInfoPanel(text, titleText, mode) {
     });
 
     infoPanelMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.52, 1.26),
+      isIntro ? new THREE.PlaneGeometry(2.52, 1.26)
+              : new THREE.PlaneGeometry(2.5, 1.40),
       mat
     );
 
@@ -1802,31 +1809,8 @@ function updateInfoPanel(text, titleText, mode) {
     return;
   }
 
-  // --- game 中は Mesh を再利用する ---
-  if (!infoPanelMesh) {
-    // 初回のみ Mesh を作る
-    const tex = new THREE.CanvasTexture(cv);
-    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-
-    const mat = new THREE.MeshBasicMaterial({
-      map: tex,
-      transparent: true,
-      depthTest: true,
-      depthWrite: true,
-      alphaTest: 0.01,
-      side: THREE.DoubleSide
-    });
-
-    infoPanelMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.5, 1.40),
-      mat
-    );
-
-    infoPanelMesh.position.set(0, 1.38, -2.2);
-    infoPanel.add(infoPanelMesh);
-  }
-
-  // 既存の texture を使う
+  // --- ここは game中 & showingPhaseResult=false & infoPanelMesh あり ---
+  // Mesh はそのまま、texture だけ更新
   const tex = infoPanelMesh.material.map;
 
   activateCvPanel(cv, tex, _mode, pts, bright,
