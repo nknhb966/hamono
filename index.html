@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -1760,9 +1760,9 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
 
 function updateInfoPanel(text, titleText, mode) {
   const _mode = mode || (isIntroState(currentState) ? 'intro' : 'game');
-  const isIntro = isIntroState(currentState);
-  const pts    = isIntro ? _cvPtsIntro : _cvPtsGame;
-  const bright = isIntro ? 1.0 : 0.45;
+    const isIntro = isIntroState(currentState);
+    const pts    = isIntro ? _cvPtsIntro : _cvPtsGame;
+    const bright = isIntro ? 1.0 : 0.45;
   if (showingPhaseResult) {
     if (infoPanelMesh) infoPanel.remove(infoPanelMesh);
     const W = 2048, H = 1024;
@@ -1786,6 +1786,7 @@ function updateInfoPanel(text, titleText, mode) {
     const cv  = tex.image;
     activateCvPanel(cv, tex, _mode, pts, bright, _makeTextExtraFn(titleText || null, text, _mode));
     tex.needsUpdate = true;
+  }
 }
 
 // Result panel
