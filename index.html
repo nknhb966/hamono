@@ -1658,102 +1658,103 @@ function updateInfoPanel_INTRO0() {
   activateCvPanel(cv, tex, 'intro0', _cvPtsIntro, 1.0, _drawIntro0Text);
 }
 
-// テキスト描画関数を生成（intro: 中央揃え / game: 2カラム）
+// テキスト描画関数を生成（intro も game も 2カラムレイアウト）
 function _makeTextExtraFn(titleText, bodyText, mode) {
   const isGame = mode === 'game';
+
   return function(ctx, W, H) {
-    // 枠線（introは赤み）
+
+    // intro のみ枠線
     if (!isGame) {
       ctx.strokeStyle = 'rgba(160,50,20,0.45)';
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.roundRect(5, 5, W-10, H-10, 20); ctx.stroke();
     }
 
-// 2カラム共通描画
-  const COL_PAD = 60;
-  const COL_MID = W / 2 - 20;
-  const COL_R   = W / 2 + 20;
+    // bodyText を左右に分割
+    const sepIdx = bodyText.indexOf('\n---\n');
+    const leftText  = sepIdx >= 0 ? bodyText.slice(0, sepIdx) : bodyText;
+    const rightText = sepIdx >= 0 ? bodyText.slice(sepIdx + 5) : '';
 
-  // bodyText を左右に分割
-  const sepIdx = bodyText.indexOf('\n---\n');
-  const leftText  = sepIdx >= 0 ? bodyText.slice(0, sepIdx) : bodyText;
-  const rightText = sepIdx >= 0 ? bodyText.slice(sepIdx + 5) : '';
+    // カラム位置
+    const COL_PAD = 60;
+    const COL_L   = isGame ? COL_PAD : W * 0.25;
+    const COL_R   = isGame ? (W * 0.5 + 20) : W * 0.75;
 
-  // タイトル描画
-  let y = 38;
-  if (titleText) {
-    ctx.fillStyle = '#f0c070';
-    ctx.font = 'bold 50px serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillText(titleText, W/2, y);
-    y += 66;
+    // タイトル描画
+    let y = 38;
+    if (titleText) {
+      ctx.fillStyle = '#f0c070';
+      ctx.font = 'bold 50px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(titleText, W/2, y);
+      y += 66;
 
-    ctx.strokeStyle = 'rgba(160,55,20,0.45)';
-    ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(160,55,20,0.45)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(60, y);
+      ctx.lineTo(W - 60, y);
+      ctx.stroke();
+      y += 20;
+    }
+
+    // 行高さ計算
+    function calcHeight(text) {
+      let h = 0;
+      for (const line of text.split('\n')) {
+        if (line.trim() === '') { h += 20; continue; }
+        const isEn = (line.match(/[a-zA-Z]/g)||[]).length / Math.max(1, line.length) > 0.4;
+        const fs = isEn ? 34 : 38;
+        h += Math.round(fs * 1.6);
+      }
+      return h;
+    }
+
+    const leftH  = calcHeight(leftText);
+    const rightH = calcHeight(rightText);
+    const contentH = Math.max(leftH, rightH);
+
+    // 縦中央寄せ
+    const remaining = H - y - 30;
+    const offset = Math.max(0, (remaining - contentH) / 2);
+    const baseY = y + offset;
+
+    // 中央区切り線（intro も game も共通）
+    ctx.strokeStyle = 'rgba(160,55,20,0.25)';
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(60, y);
-    ctx.lineTo(W - 60, y);
+    ctx.moveTo(W/2, y);
+    ctx.lineTo(W/2, H - 30);
     ctx.stroke();
-    y += 20;
-  }
 
-  // 各カラムの行高さを事前計算
-  function calcHeight(text) {
-    let h = 0;
-    for (const line of text.split('\n')) {
-      if (line.trim() === '') { h += 20; continue; }
-      const isEn = (line.match(/[a-zA-Z]/g)||[]).length / Math.max(1, line.length) > 0.4;
-      const fs = isEn ? 34 : 38;
-      h += Math.round(fs * 1.6);
+    // カラム描画
+    function drawCol(text, x, align, startY) {
+      ctx.textBaseline = 'top';
+      ctx.textAlign = align;
+
+      let y = startY;
+      for (const line of text.split('\n')) {
+        if (line.trim() === '') { y += 20; continue; }
+
+        const isEn = (line.match(/[a-zA-Z]/g)||[]).length / Math.max(1, line.length) > 0.4;
+        const fs = isEn ? 34 : 38;
+        ctx.font = isEn ? `${fs}px sans-serif` : `${fs}px serif`;
+        ctx.fillStyle = isEn ? '#a0c4e4' : '#d8ccb4';
+
+        ctx.fillText(line.trim(), x, y);
+        y += Math.round(fs * 1.6);
+      }
     }
-    return h;
-  }
 
-  const leftH  = calcHeight(leftText);
-  const rightH = calcHeight(rightText);
-  const contentH = Math.max(leftH, rightH);
+    // intro → 中央揃え
+    // game → 左揃え
+    const alignLeft  = isGame ? 'left' : 'center';
+    const alignRight = isGame ? 'left' : 'center';
 
-  // 縦中央寄せ
-  const remaining = H - y - 30;
-  const offset = Math.max(0, (remaining - contentH) / 2);
-  const baseY = y + offset;
-
-  // 中央区切り線
-  ctx.strokeStyle = 'rgba(160,55,20,0.25)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(W/2, y);
-  ctx.lineTo(W/2, H - 30);
-  ctx.stroke();
-
-  // カラム描画
-  function drawCol(text, startX, align, startY) {
-    ctx.textBaseline = 'top';
-    ctx.textAlign = align;
-
-    let y = startY;
-    for (const line of text.split('\n')) {
-      if (line.trim() === '') { y += 20; continue; }
-
-      const isEn = (line.match(/[a-zA-Z]/g)||[]).length / Math.max(1, line.length) > 0.4;
-      const fs = isEn ? 34 : 38;
-      ctx.font = isEn ? `${fs}px sans-serif` : `${fs}px serif`;
-      ctx.fillStyle = isEn ? '#a0c4e4' : '#d8ccb4';
-
-      ctx.fillText(line.trim(), startX, y);
-      y += Math.round(fs * 1.6);
-    }
-  }
-
-  // intro → 中央揃え
-  // game → 左揃え
-  const alignLeft  = isIntro ? 'center' : 'left';
-  const alignRight = isIntro ? 'center' : 'left';
-
-  drawCol(leftText,  isIntro ? W/4 : COL_PAD, alignLeft,  baseY);
-  drawCol(rightText, isIntro ? W*3/4 : COL_R, alignRight, baseY);
-
+    drawCol(leftText,  COL_L, alignLeft,  baseY);
+    drawCol(rightText, COL_R, alignRight, baseY);
   };
 }
 
@@ -2343,7 +2344,7 @@ passed down for over 600 years.
 2枚の刃物を重ねたまま叩いて薄く伸ばします。
 熱が残っている間に表裏をひっくり返しながら叩くことで、
 均一な厚みと高い強度の刃が生まれます。
-
+---
 The hallmark of Echizen blades is
 "Nimai-hiroge" (double-layer forging).
 By hammering two stacked blades together,
@@ -2373,7 +2374,6 @@ and prevents uneven results.
 一部は機械化されても、基本の作り方は
 700年前からほとんど変わっていません。
 ---
-
 A blade passes through many stages.
 These three are the most essential.
 Each step demands skill, focus,
