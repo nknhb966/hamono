@@ -2862,9 +2862,6 @@ function updateShaping(delta) {
     zoneIndicators[i].material.opacity = 0.25 + norm * 0.5;
   }
 
-  // ---- ハンマー速度 ----
-  const rhPos = getRightHandPos();
-
   // 右手位置が無効な場合は速度0として扱う
   if (!rhPos || !isFinite(rhPos.x) || !isFinite(rhPos.y) || !isFinite(rhPos.z)) {
     rightVelocity = 0;
