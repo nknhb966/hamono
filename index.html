@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>3越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2620,6 +2620,7 @@ function handleGlobalInput() {
         _phaseScores.forging = Math.round(
           Math.max(0, Math.min(100, 100 - shapeDistortion))
         );
+        showingPhaseResult = true;
         // 結果表示
         updateInfoPanel(
           `鍛造結果
@@ -2630,7 +2631,6 @@ function handleGlobalInput() {
         );
 
         playComplete();
-        showingPhaseResult = true;
         lockInputFor(1);
       }
 
@@ -2647,6 +2647,7 @@ function handleGlobalInput() {
         _phaseScores.shaping = Math.round(
           Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0))
         );
+        showingPhaseResult = true;
         updateInfoPanel(
           `成形結果
   スコア: ${Math.round(_phaseScores.shaping)}pt
@@ -2656,7 +2657,6 @@ function handleGlobalInput() {
         );
 
         playComplete();
-        showingPhaseResult = true;
         lockInputFor(1);
       }
 
@@ -2670,6 +2670,7 @@ function handleGlobalInput() {
 
       if (isEarly) {
         _phaseScores.sharpening = Math.min(100, Math.round(totalSharpness));
+        showingPhaseResult = true;
         updateInfoPanel(
           `研ぎ結果
   ポイント: ${_phaseScores.sharpening}pt
@@ -2679,7 +2680,6 @@ function handleGlobalInput() {
         );
 
         playComplete();
-        showingPhaseResult = true;
         lockInputFor(1);
       }
 
