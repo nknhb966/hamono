@@ -2299,6 +2299,7 @@ function vibrate() {
 function retryState() {
   playTransition();
   updateScorePanel(null);
+  const prev = currentState;
   if (currentState === State.FORGING) {
     shapeDistortion = 100; // リトライ時も最悪値から再スタート
     resetForging();
@@ -2307,6 +2308,7 @@ function retryState() {
   } else if (currentState === State.SHARPENING) {
     resetSharpening();
   }
+  onEnterState(currentState, prev);
 }
 
 function onEnterState(state, prev) {
