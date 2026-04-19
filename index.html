@@ -2941,7 +2941,7 @@ function updateShaping(delta) {
     }
 
     const rGp = getRightGamepad();
-    const strong = Math.max(0.1, Math.min(1.0, pow));
+    const strong = THREE.MathUtils.clamp(pow * 0.3, 0.1, 1);
     if (rGp?.hapticActuators?.[0]) {
       rGp.hapticActuators[0].pulse(strong, 60);
     }
