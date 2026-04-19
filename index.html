@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ori越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -1759,25 +1759,33 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
 }
 
 function updateInfoPanel(text, titleText, mode) {
-  if (infoPanelMesh) infoPanel.remove(infoPanelMesh);
   const _mode = mode || (isIntroState(currentState) ? 'intro' : 'game');
-  const W = 2048, H = 1024;
   const isIntro = isIntroState(currentState);
   const pts    = isIntro ? _cvPtsIntro : _cvPtsGame;
   const bright = isIntro ? 1.0 : 0.45;
-  const cv  = document.createElement('canvas');
-  cv.width = W; cv.height = H;
-  const tex = new THREE.CanvasTexture(cv);
-  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide });
-  infoPanelMesh = new THREE.Mesh(
-    isIntro ? new THREE.PlaneGeometry(2.52, 1.26) : new THREE.PlaneGeometry(2.5, 1.40),
-    mat
-  );
-  infoPanelMesh.position.set(0, 1.38, -2.2);
-  infoPanel.add(infoPanelMesh);
-  // 毎フレーム: 背景 → 粒子tick/draw → テキスト上書き
-  activateCvPanel(cv, tex, _mode, pts, bright, _makeTextExtraFn(titleText || null, text, _mode));
+  if (showingPhaseResult) {
+    if (infoPanelMesh) infoPanel.remove(infoPanelMesh);
+    const W = 2048, H = 1024;
+    const cv  = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const tex = new THREE.CanvasTexture(cv);
+    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide });
+    infoPanelMesh = new THREE.Mesh(
+      isIntro ? new THREE.PlaneGeometry(2.52, 1.26) : new THREE.PlaneGeometry(2.5, 1.40),
+      mat
+    );
+    infoPanelMesh.position.set(0, 1.38, -2.2);
+    infoPanel.add(infoPanelMesh);
+    // 毎フレーム: 背景 → 粒子tick/draw → テキスト上書き
+    activateCvPanel(cv, tex, _mode, pts, bright, _makeTextExtraFn(titleText || null, text, _mode));
+  } else {
+    if (!infoPanelMesh) return;
+
+    const tex = infoPanelMesh.material.map;
+    const cv  = tex.image;
+    activateCvPanel(cv, tex, _mode, pts, bright, _makeTextExtraFn(titleText || null, text, _mode));
+    tex.needsUpdate = true;
 }
 
 // Result panel
@@ -2568,7 +2576,7 @@ A: Next Phase`,
 /* ================================================================
    GLOBAL INPUT HANDLER
 ================================================================ */
-let showingPhaseResult = false;
+let showingPhaseResult = true;
 
 let _sq0c;
 let _sqc;
