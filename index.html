@@ -275,7 +275,7 @@
 
     <div class="btn-row">
       <button class="action-btn btn-help"    id="helpBtn">操作方法 / How to Play</button>
-      <button class="action-btn btn-records" id="recordsBtn">スコア記録 / Score Records</button>
+      <button class="action-btn btn-records" id="recordsBtn">スコア記録 / Score Record</button>
     </div>
   </div>
 </div>
@@ -307,23 +307,14 @@
   </div>
 </div>
 
-<!-- XR 中ステータス表示 -->
-<!-- <div id="xr-status">
-  <span id="state-label">INTRO</span>
-  <span style="color:rgba(255,160,60,0.4)"> | </span>
-  <span id="phase-info"></span>
-  <span style="color:rgba(255,160,60,0.4)"> | </span>
-  <span id="score-display">Score: -</span>
-</div> -->
-
 <!-- ═══ スコア記録モーダル ═══ -->
 <div id="recordsModal">
   <div class="rmodal-box">
     <button class="rmodal-close" id="recordsModalClose">×</button>
-    <div class="rmodal-title">🏆 スコア記録</div>
+    <div class="rmodal-title">スコア記録 / Score Record</div>
     <div class="rmodal-entries" id="rec-entries"></div>
     <div class="rmodal-footer">
-      <button class="rmodal-reset-all-btn" id="recordsResetAll">🗑 全ての記録をリセット</button>
+      <button class="rmodal-reset-all-btn" id="recordsResetAll">記録をリセット / Reset the record</button>
     </div>
   </div>
 </div>
@@ -332,17 +323,17 @@
 <div id="modal">
   <div class="modal-box">
     <button class="modal-close" id="modalClose">×</button>
-    <div class="modal-title-h">📖 操作方法 / How to Play</div>
+    <div class="modal-title-h">操作方法 / How to Play</div>
     <div class="modal-content">
       <h3>🔥 フェーズ① 鍛造 / Forging</h3>
       <ul>
         <li><span class="tag">左グリップ</span> 鉄を掴む／離す / Hold iron</li>
         <li>炉に入れると加熱 / Heat iron in furnace</li>
-        <li>80〜60° <span class="tag">〇</span> 適正 / Optimal — Perfect/Good/Miss</li>
-        <li>100〜80° <span class="tag">△</span> 熱すぎ / Too hot — Good/Miss only</li>
-        <li>60°未満 <span class="tag">×</span> 冷めすぎ / Too cold — Miss only</li>
-        <li>作業台に置いて <span class="tag">右トリガー</span> で打撃 / Hammer on bench</li>
-        <li>30回打撃でフェーズ終了 / 30 hits to complete</li>
+        <li>800〜900° <span class="tag">〇</span> 適正 / Optimal</li>
+        <li>900〜1000° <span class="tag">△</span> 熱すぎ / Too hot</li>
+        <li>800°未満 <span class="tag">×</span> 冷めすぎ / Too cold</li>
+        <li>作業台に置いて <span class="tag">右トリガー</span> で叩く / Hammer on bench</li>
+        <li>30回でフェーズ終了 / 30 hits to complete</li>
       </ul>
       <h3>🔨 フェーズ② 成形 / Shaping</h3>
       <ul>
@@ -1678,83 +1669,91 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
       ctx.beginPath(); ctx.roundRect(5, 5, W-10, H-10, 20); ctx.stroke();
     }
 
-    if (isGame) {
-      // 体験中: 2カラムレイアウト（左:説明 / 右:操作）
-      // bodyText に '---' セパレータで左右を区切る
-      const sepIdx = bodyText.indexOf('\n---\n');
-      const leftText  = sepIdx >= 0 ? bodyText.slice(0, sepIdx) : bodyText;
-      const rightText = sepIdx >= 0 ? bodyText.slice(sepIdx + 5) : '';
-      const COL_PAD = 60, COL_MID = W / 2 - 20;
-      const COL_R   = W / 2 + 20;
+// 2カラム共通描画
+  const COL_PAD = 60;
+  const COL_MID = W / 2 - 20;
+  const COL_R   = W / 2 + 20;
 
-      // タイトル（中央）
-      let ty = 38;
-      if (titleText) {
-        ctx.fillStyle = '#f0c070'; ctx.font = 'bold 50px serif';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-        ctx.fillText(titleText, W/2, ty); ty += 66;
-        ctx.strokeStyle = 'rgba(160,55,20,0.45)'; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.moveTo(60, ty); ctx.lineTo(W-60, ty); ctx.stroke();
-        ty += 18;
-      }
-      // 中央区切り線
-      ctx.strokeStyle = 'rgba(160,55,20,0.25)'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(W/2, ty); ctx.lineTo(W/2, H-30); ctx.stroke();
+  // bodyText を左右に分割
+  const sepIdx = bodyText.indexOf('\n---\n');
+  const leftText  = sepIdx >= 0 ? bodyText.slice(0, sepIdx) : bodyText;
+  const rightText = sepIdx >= 0 ? bodyText.slice(sepIdx + 5) : '';
 
-      // 左カラム
-      function drawCol(text, startX, endX, startY) {
-        const lines = text.split('\n');
-        ctx.textBaseline = 'top';
-        ctx.textAlign = 'left';
-        let y = startY;
-        for (const line of lines) {
-          if (line.trim() === '') { y += 14; continue; }
-          const isEn = (line.match(/[a-zA-Z]/g)||[]).length / Math.max(1, line.length) > 0.4;
-          const fs = isEn ? 34 : 38;
-          ctx.font = isEn ? `${fs}px sans-serif` : `${fs}px serif`;
-          ctx.fillStyle = isEn ? '#a0c4e4' : '#d8ccb4';
-          ctx.fillText(line.trim(), startX, y);
-          y += Math.round(fs * 1.6);
-        }
-      }
-      drawCol(leftText,  COL_PAD, COL_MID, ty);
-      drawCol(rightText, COL_R,   W - 40,  ty);
+  // タイトル描画
+  let y = 38;
+  if (titleText) {
+    ctx.fillStyle = '#f0c070';
+    ctx.font = 'bold 50px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(titleText, W/2, y);
+    y += 66;
 
-    } else {
-      // intro_1〜4: 中央揃え、縦中央寄せ
-      let y = 38;
-      if (titleText) {
-        ctx.fillStyle = '#f0c070'; ctx.font = 'bold 50px serif';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-        ctx.fillText(titleText, W/2, y); y += 66;
-        ctx.strokeStyle = 'rgba(160,55,20,0.45)'; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.moveTo(90, y); ctx.lineTo(W-90, y); ctx.stroke();
-        y += 20;
-      }
-      // 行高さを事前計算して縦中央寄せ
-      const lines = bodyText.split('\n');
-      let totalH = 0;
-      for (const line of lines) {
-        if (line.trim() === '') { totalH += 20; continue; }
-        const isEn = (line.match(/[a-zA-Z]/g)||[]).length / Math.max(1, line.length) > 0.4;
-        totalH += Math.round((isEn ? 40 : 44) * 1.58);
-      }
-      // 残り高さに対して縦中央寄せ
-      const remaining = H - y - 30;
-      const offset = Math.max(0, (remaining - totalH) / 2);
-      y += offset;
+    ctx.strokeStyle = 'rgba(160,55,20,0.45)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(60, y);
+    ctx.lineTo(W - 60, y);
+    ctx.stroke();
+    y += 20;
+  }
 
-      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      for (const line of lines) {
-        if (line.trim() === '') { y += 20; continue; }
-        const isEn = (line.match(/[a-zA-Z]/g)||[]).length / Math.max(1, line.length) > 0.4;
-        const fs = isEn ? 40 : 44;
-        ctx.font = isEn ? `${fs}px sans-serif` : `${fs}px serif`;
-        ctx.fillStyle = isEn ? '#b0d0f0' : '#f0e8d0';
-        ctx.fillText(line.trim(), W/2, y);
-        y += Math.round(fs * 1.58);
-      }
+  // 各カラムの行高さを事前計算
+  function calcHeight(text) {
+    let h = 0;
+    for (const line of text.split('\n')) {
+      if (line.trim() === '') { h += 20; continue; }
+      const isEn = (line.match(/[a-zA-Z]/g)||[]).length / Math.max(1, line.length) > 0.4;
+      const fs = isEn ? 34 : 38;
+      h += Math.round(fs * 1.6);
     }
+    return h;
+  }
+
+  const leftH  = calcHeight(leftText);
+  const rightH = calcHeight(rightText);
+  const contentH = Math.max(leftH, rightH);
+
+  // 縦中央寄せ
+  const remaining = H - y - 30;
+  const offset = Math.max(0, (remaining - contentH) / 2);
+  const baseY = y + offset;
+
+  // 中央区切り線
+  ctx.strokeStyle = 'rgba(160,55,20,0.25)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(W/2, y);
+  ctx.lineTo(W/2, H - 30);
+  ctx.stroke();
+
+  // カラム描画
+  function drawCol(text, startX, align, startY) {
+    ctx.textBaseline = 'top';
+    ctx.textAlign = align;
+
+    let y = startY;
+    for (const line of text.split('\n')) {
+      if (line.trim() === '') { y += 20; continue; }
+
+      const isEn = (line.match(/[a-zA-Z]/g)||[]).length / Math.max(1, line.length) > 0.4;
+      const fs = isEn ? 34 : 38;
+      ctx.font = isEn ? `${fs}px sans-serif` : `${fs}px serif`;
+      ctx.fillStyle = isEn ? '#a0c4e4' : '#d8ccb4';
+
+      ctx.fillText(line.trim(), startX, y);
+      y += Math.round(fs * 1.6);
+    }
+  }
+
+  // intro → 中央揃え
+  // game → 左揃え
+  const alignLeft  = isIntro ? 'center' : 'left';
+  const alignRight = isIntro ? 'center' : 'left';
+
+  drawCol(leftText,  isIntro ? W/4 : COL_PAD, alignLeft,  baseY);
+  drawCol(rightText, isIntro ? W*3/4 : COL_R, alignRight, baseY);
+
   };
 }
 
@@ -2329,7 +2328,7 @@ function onEnterState(state, prev) {
 京都の刀匠・千代鶴国安がこの地に移り、
 農民のために鎌を作ったことが起源です。
 600年以上にわたり、その技は受け継がれています。
-
+---
 Echizen Hamono (blades) began in 1337.
 Master swordsmith Chiyotsuru Kuniyasu
 moved here from Kyoto and forged sickles
@@ -2341,10 +2340,9 @@ passed down for over 600 years.
       [State.INTRO_2]: {
         title: '② 特徴：二枚広げ / Feature: Nimai-hiroge',
         body: `越前打刃物の特徴は、「二枚広げ」という技法です。
-2枚の刃を重ねたまま叩くことで、
-均一に、速く、薄く伸ばすことができます。
-厚みがあることで力が伝わり、
-温度も保たれ、ムラが生まれにくくなります。
+2枚の刃物を重ねたまま叩いて薄く伸ばします。
+熱が残っている間に表裏をひっくり返しながら叩くことで、
+均一な厚みと高い強度の刃が生まれます。
 
 The hallmark of Echizen blades is
 "Nimai-hiroge" (double-layer forging).
@@ -3299,7 +3297,7 @@ async function setupUI() {
 
     if (vrSupported) {
       btnVR.disabled    = false;
-      btnVR.textContent = '🥽 ENTER VR';
+      btnVR.textContent = 'VR スタート / START VR';
       btnVR.addEventListener('click', async () => {
         resumeAudio();
         if (renderer.xr.isPresenting) return;
@@ -3313,12 +3311,12 @@ async function setupUI() {
         } catch(e) { console.error(e); }
       });
     } else {
-      btnVR.textContent = 'VR NOT SUPPORTED';
+      btnVR.textContent = 'VR 非対応 / VR NOT SUPPORTED';
     }
 
     if (arSupported) {
       btnAR.disabled    = false;
-      btnAR.textContent = '📱 ENTER AR';
+      btnAR.textContent = 'AR スタート / START AR';
       btnAR.addEventListener('click', async () => {
         resumeAudio();
         if (renderer.xr.isPresenting) return;
@@ -3332,11 +3330,11 @@ async function setupUI() {
         } catch(e) { console.error(e); }
       });
     } else {
-      btnAR.textContent = 'AR NOT SUPPORTED';
+      btnAR.textContent = 'AR 非対応 / AR NOT SUPPORTED';
     }
   } else {
-    btnVR.textContent = 'WebXR NOT SUPPORTED';
-    btnAR.textContent = 'WebXR NOT SUPPORTED';
+    btnVR.textContent = 'WebXR 非対応 / WebXR NOT SUPPORTED';
+    btnAR.textContent = 'WebXR 非対応 / WebXR NOT SUPPORTED';
   }
 
   renderer.xr.addEventListener('sessionstart', () => {
