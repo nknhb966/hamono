@@ -2845,9 +2845,9 @@ function updateForging(delta) {
       forgingComplete = true;
       // フェーズ終了時にスコアを確定保存
       _phaseScores.forging = Math.round(Math.max(0, Math.min(100, 100 - shapeDistortion)));
+      showingPhaseResult = true;
       updateInfoPanel(`鍛造が完了しました！\n歪み: ${Math.round(shapeDistortion)}\n\nForging complete!\nDistortion: ${Math.round(shapeDistortion)}\n\nAボタン：次のフェーズへ　A: Next Phase`, '① 鍛造完了 / Forging Complete');
       playComplete();
-      showingPhaseResult = true;
     }
   }
   prevRightTrigger = rightTrig;
@@ -3011,9 +3011,9 @@ function updateShaping(delta) {
     // フェーズ終了時にスコアを確定保存（以降は再計算しない）
     _phaseScores.shaping = Math.round(score);
     bladeState.symmetryError = Math.sqrt(_sqc / zones.length);
+    showingPhaseResult = true;
     updateInfoPanel(`成形が完了しました！\nスコア: ${Math.round(score)}pt\n\nShaping complete!\nScore: ${Math.round(score)}pt\n\nAボタン：次のフェーズへ　A: Next Phase`, '② 成形完了 / Shaping Complete');
     playComplete();
-    showingPhaseResult = true;
   }
 }
 
@@ -3186,9 +3186,9 @@ function updateSharpening(delta) {
     sharpenComplete = true;
     // フェーズ終了時にスコアを確定保存（100点クランプのみ、正規化しない）
     _phaseScores.sharpening = Math.min(100, Math.round(totalSharpness));
+    showingPhaseResult = true;
     updateInfoPanel(`研ぎが完了しました！\n合計ポイント: ${_phaseScores.sharpening}pt\n\nSharpening complete!\nTotal points: ${_phaseScores.sharpening}pt\n\nAボタン：結果へ　A: See Results`, '③ 研ぎ完了 / Sharpening Complete');
     playComplete();
-    showingPhaseResult = true;
   }
 }
 
