@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>2越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -184,7 +184,7 @@
   .modal-content li { margin: 3px 0; }
 
   /* ═══ XR中オーバーレイ（ステータス） ═══ */
-  #xr-status {
+/*  #xr-status {
     display: none;
     position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
     z-index: 15; background: rgba(0,0,0,0.65);
@@ -192,7 +192,7 @@
     padding: 8px 22px; color: #ffb840; font-size: 13px; letter-spacing: 0.1em;
     pointer-events: none; white-space: nowrap;
   }
-
+*/
   /* ═══ Perf Toggles パネル ═══ */
   #perfPanel {
     position: fixed; top: 12px; right: 12px; z-index: 200;
@@ -315,13 +315,13 @@
 </div>
 
 <!-- XR 中ステータス表示 -->
-<div id="xr-status">
+<!-- <div id="xr-status">
   <span id="state-label">INTRO</span>
   <span style="color:rgba(255,160,60,0.4)"> | </span>
   <span id="phase-info"></span>
   <span style="color:rgba(255,160,60,0.4)"> | </span>
   <span id="score-display">Score: -</span>
-</div>
+</div> -->
 
 <!-- ═══ スコア記録モーダル ═══ -->
 <div id="recordsModal">
@@ -3298,7 +3298,7 @@ async function setupUI() {
   const btnVR    = document.getElementById('btn-vr');
   const btnAR    = document.getElementById('btn-ar');
   const uiPanel  = document.getElementById('uiPanel');
-  const xrStatus = document.getElementById('xr-status');
+  // const xrStatus = document.getElementById('xr-status');
 
   if (navigator.xr) {
     const vrSupported = await navigator.xr.isSessionSupported('immersive-vr').catch(() => false);
