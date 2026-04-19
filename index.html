@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2589,10 +2589,11 @@ function lockInputFor(seconds) {
   }, seconds * 1000);
 }
 
-function handleGlobalInput(mode) {
+function handleGlobalInput() {
   const aPressed = getAButton();
   const bPressed = getBButton();
-  const isGame = mode === 'game';
+
+  const _nowIsGame = (currentState === State.FORGING || currentState === State.SHAPING || currentState === State.SHARPENING);
 
   if (aPressed && !wasAPressed && !_inputLocked) {
 
@@ -2700,7 +2701,7 @@ function handleGlobalInput(mode) {
   wasAPressed = aPressed;
 
   // ===== Bボタン（リトライ） =====
-  if (bPressed && !wasBPressed && !_inputLocked && isGame) {
+  if (bPressed && !wasBPressed && !_inputLocked && _nowIsGame) {
     showingPhaseResult = false;
     retryState();
   }
