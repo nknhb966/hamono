@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2863,9 +2863,25 @@ function updateShaping(delta) {
   }
 
   // ---- ハンマー速度 ----
-  prevRightPos.copy(currRightPos);
-  currRightPos.copy(rhPos);
-  rightVelocity = prevRightPos.distanceTo(currRightPos) / Math.max(delta, 0.001);
+  const rhPos = getRightHandPos();
+
+  // 右手位置が無効な場合は速度0として扱う
+  if (!rhPos || !isFinite(rhPos.x) || !isFinite(rhPos.y) || !isFinite(rhPos.z)) {
+    rightVelocity = 0;
+  } else {
+    prevRightPos.copy(currRightPos);
+    currRightPos.copy(rhPos);
+
+    let dist = prevRightPos.distanceTo(currRightPos);
+    if (!isFinite(dist)) dist = 0;
+
+    let safeDelta = Math.max(delta, 0.001);
+    if (!isFinite(safeDelta)) safeDelta = 0.016;
+
+    rightVelocity = dist / safeDelta;
+    if (!isFinite(rightVelocity)) rightVelocity = 0;
+  }
+
   shapingHitCooldown = Math.max(0, shapingHitCooldown - delta);
 
   // ハンマーヘッドのワールド座標取得（当たり判定と火花の発生位置）
@@ -2891,10 +2907,10 @@ function updateShaping(delta) {
       // 表向き(bladeFlipped=false): +歪みを叩くと減少（+方向の歪みを修正）
       // 裏向き(bladeFlipped=true) : -歪みを叩くと増加（-方向の歪みを修正）
       const d   = zones[nearestIdx].distortion;
-      const pow = THREE.MathUtils.clamp(
-        (rightVelocity || 1.5) * CONFIG.SHAPING.HIT_POWER_SCALE * 10,
-        0.5, 8
-      );
+
+      let pow = (rightVelocity || 1.5) * CONFIG.SHAPING.HIT_POWER_SCALE * 10;
+      if (!isFinite(pow)) pow = 1.5;
+      pow = THREE.MathUtils.clamp(pow, 0.5, 8);
 
       if (!bladeFlipped) {
         // 表から叩く → + 歪みを削る（正の値を0に近づける）
@@ -2940,10 +2956,13 @@ function updateShaping(delta) {
       spawnSparks(shapingHammerHeadWorld.clone(), 9, 'shape', 0.3);
     }
 
+    let strong = pow * 0.3;
+    if (!isFinite(strong)) strong = 0.5;
+    strong = THREE.MathUtils.clamp(strong, 0.1, 1);
+
     const rGp = getRightGamepad();
-    // const strong = THREE.MathUtils.clamp(pow * 0.3, 0.1, 1);
     if (rGp?.hapticActuators?.[0]) {
-      rGp.hapticActuators[0].pulse(0.5, 60);
+      rGp.hapticActuators[0].pulse(strong, 60);
     }
 
     // L2ノルムスコア: score = 100 × (1 - Σx_i² / Σx_i0²)
