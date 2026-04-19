@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -1763,8 +1763,8 @@ function updateInfoPanel(text, titleText, mode) {
   const isIntro = isIntroState(currentState);
   const isGame = !isIntro;
 
-  // ★ mode==="result" のときは必ず Mesh を作り直す
-  const isResult = (mode === "result");
+  // ★ showingPhaseResult を直接参照する
+  const isResult = showingPhaseResult;
 
   // ★ game中 & 結果表示ではないときだけ Mesh を再利用
   const shouldReuseMesh = isGame && !isResult;
@@ -1819,6 +1819,7 @@ function updateInfoPanel(text, titleText, mode) {
 
   tex.needsUpdate = true;
 }
+
 
 // Result panel
 const resultPanel = new THREE.Group();
