@@ -737,38 +737,6 @@ function fadeToNext(duration = 1.0) {
 }
 
 /* ================================================================
-   initInfoPanel
-================================================================ */
-let infoPanelMesh;
-let infoPanelTexture;
-let infoPanelCanvas;
-
-function initInfoPanel() {
-  const W = 2048, H = 1024;
-
-  infoPanelCanvas = document.createElement('canvas');
-  infoPanelCanvas.width = W;
-  infoPanelCanvas.height = H;
-
-  infoPanelTexture = new THREE.CanvasTexture(infoPanelCanvas);
-
-  const mat = new THREE.MeshBasicMaterial({
-    map: infoPanelTexture,
-    transparent: true,
-    side: THREE.DoubleSide
-  });
-
-  infoPanelMesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(2.5, 1.4),
-    mat
-  );
-
-  infoPanelMesh.position.set(0, 1.38, -2.2);
-  infoPanel.add(infoPanelMesh);
-}
-
-
-/* ================================================================
    THREE.JS CORE
 ================================================================ */
 const scene = new THREE.Scene();
@@ -799,8 +767,6 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
-
-initInfoPanel();
 
 /* ================================================================
    AUDIO ENGINE
@@ -1636,6 +1602,42 @@ function updateScorePanel(text, worldPos) {
 const infoPanel = new THREE.Group();
 scene.add(infoPanel);
 let infoPanelMesh = null;
+
+
+/* ================================================================
+   initInfoPanel
+================================================================ */
+// let infoPanelMesh;
+let infoPanelTexture;
+let infoPanelCanvas;
+
+function initInfoPanel() {
+  const W = 2048, H = 1024;
+
+  infoPanelCanvas = document.createElement('canvas');
+  infoPanelCanvas.width = W;
+  infoPanelCanvas.height = H;
+
+  infoPanelTexture = new THREE.CanvasTexture(infoPanelCanvas);
+
+  const mat = new THREE.MeshBasicMaterial({
+    map: infoPanelTexture,
+    transparent: true,
+    side: THREE.DoubleSide
+  });
+
+  infoPanelMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.5, 1.4),
+    mat
+  );
+
+  infoPanelMesh.position.set(0, 1.38, -2.2);
+  infoPanel.add(infoPanelMesh);
+}
+
+initInfoPanel();
+
+
 /* ================================================================
    INTRO_0 タイトル専用パネル
 ================================================================ */
