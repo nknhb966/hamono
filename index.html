@@ -374,9 +374,13 @@ import * as THREE from 'three';
 import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
 
 /* ================================================================
-   CONSTANTS & CONFIG
+ゲーム設定（バランス調整用）
+  - フェーズごとの難易度・判定基準・報酬量を定義
+  - 数値を変えるだけでゲーム性を調整できる
 ================================================================ */
 const CONFIG = {
+  /* 鍛造フェーズ設定
+     - 叩く回数・速度判定・温度変化・スパーク量を管理 */
   FORGING: {
     TOTAL_HITS: 30,
     VELOCITY_THRESHOLD: 0.8,
@@ -388,6 +392,8 @@ const CONFIG = {
     SPARK_COUNT_GOOD: 40,
     SPARK_COUNT_MISS: 5,
   },
+  /* 成形フェーズ設定
+     - 歪み補正・ヒット強度・ゾーン数を管理 */
   SHAPING: {
     MAX_HITS: 50,
     ZONE_COUNT: 5,
@@ -395,6 +401,8 @@ const CONFIG = {
     SMALL_PENALTY: 0.3,
     VELOCITY_THRESHOLD: 0.25,
   },
+  /* 研磨フェーズ設定
+     - ストローク数・角度判定・精度を管理 */
   SHARPENING: {
     TOTAL_STROKES: 30,
     STROKE_THRESHOLD: 0.04,
@@ -403,9 +411,9 @@ const CONFIG = {
   },
 };
 
-/* ================================================================
-   STATE MACHINE
-================================================================ */
+/* 状態管理
+   - 現在のフェーズを文字列で管理
+   - INTRO → 鍛造 → 成形 → 研磨 → 結果 の流れ */
 const State = {
   INTRO_0: 'INTRO_0',
   INTRO_1: 'INTRO_1',
@@ -418,14 +426,22 @@ const State = {
   RESULT: 'RESULT',
 };
 const INTRO_STATES = ['INTRO_0','INTRO_1','INTRO_2','INTRO_3','INTRO_4'];
+/* Intro判定
+   - 現在がイントロ中かどうかを簡単に判定 */
 function isIntroState(s) { return INTRO_STATES.includes(s); }
+/* 現在状態
+   - ゲーム進行の中心となる変数 */
 let currentState = State.INTRO_0;
-
+/* 刃の状態
+   - 歪み・左右差・鋭さを保持 */
 let bladeState = { shapeDistortion: 0, symmetryError: 0, sharpness: 0 };
+/* フェーズ別スコア */
 const _phaseScores = { forging: 0, shaping: 0, sharpening: 0 };
 
 /* ================================================================
-   FADE & TRANSITION SYSTEM
+フェード制御
+  - 画面の暗転・明転を管理
+  - 入力ロックとコールバックで安全に遷移
 ================================================================ */
 let _fadeOpacity     = 1.0;
 let _fadeDir         = 0;
@@ -434,7 +450,9 @@ let _fadeElapsed     = 0.0;
 let _fadeCallback    = null;
 let _inputLocked     = false; 
 
-// フェードオーバーレイ
+/* フェード用黒板
+   - カメラ前に配置して画面全体を覆う
+   - renderOrderで最前面に固定 */
 const _fadeGeo = new THREE.PlaneGeometry(100, 100);
 const _fadeMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, depthTest: false, depthWrite: false });
 const _fadePlane = new THREE.Mesh(_fadeGeo, _fadeMat);
@@ -442,14 +460,17 @@ _fadePlane.renderOrder = 999;
 _fadePlane.position.set(0, 0, -0.5);
 
 /* ================================================================
-   PERFORMANCE TOGGLE FLAGS
+パフォーマンス設定
+  - 描画負荷を調整するためのスイッチ
 ================================================================ */
 const PerfToggles = {
   useCanvasParticles:        true,
   useCanvasTransferThrottle: false,
   useInstanceThrottle:       false,
 };
-// 内部カウンター
+
+/* フレームカウンター
+   - 間引き制御に使用 */
 let _cvTransferFrameCount = 0;
 let _instThrottleFrame    = 0;
 
@@ -1120,33 +1141,57 @@ addLaser(ctrl0);
 addLaser(ctrl1);
 
 /* ================================================================
-   SPARK SYSTEM — Points 固定プール方式
-   AdditiveBlending で確実に発光表示
+   スパーク（火花）システム
+   - 固定数の粒子プールを使って高速に火花を表現
+   - 加算合成で「光っている」ように見せる
+   - 鍛造・成形・水などモード別に動きと色を変える
+   - 役割
+     - spawnSparks：発生
+     - updateSparks：動き＆寿命管理
+     - spkMesh：描画
+     - _spk：状態管理
 ================================================================ */
 const SPARK_MAX = 400;
+
+/* パーティクルバッファ
+   - 位置・色をGPUに送る配列
+   - 毎フレーム更新して描画 */
 const _spkPositions = new Float32Array(SPARK_MAX * 3);
 const _spkColors    = new Float32Array(SPARK_MAX * 3);
+
 const spkGeo = new THREE.BufferGeometry();
+
 const _spkPosBuf = new THREE.BufferAttribute(_spkPositions, 3);
 const _spkColBuf = new THREE.BufferAttribute(_spkColors, 3);
+
 _spkPosBuf.setUsage(THREE.DynamicDrawUsage);
 _spkColBuf.setUsage(THREE.DynamicDrawUsage);
+
 spkGeo.setAttribute('position', _spkPosBuf);
 spkGeo.setAttribute('color',    _spkColBuf);
+
 spkGeo.drawRange = { start: 0, count: SPARK_MAX };
+
 const spkMat = new THREE.PointsMaterial({
-  size: 0.004,                         // 極小サイズ
+  size: 0.004,
   vertexColors: true,
   sizeAttenuation: true,
   transparent: true,
   blending: THREE.AdditiveBlending,
-  depthWrite: true,  // Zバッファに書き込まない（他オブジェクトを遮らない）
-  depthTest:  true,   // Zバッファを読む（手前/奥の自然な前後関係を維持）
+  depthWrite: true,
+  depthTest:  true,
 });
+
+/* Pointsメッシュ
+   - 小さい点で火花を描画
+   - AdditiveBlendingで発光表現 */
 const spkMesh = new THREE.Points(spkGeo, spkMat);
-spkMesh.frustumCulled = false; // バウンディング球の計算をスキップ（確実に描画）
+spkMesh.frustumCulled = false;
 scene.add(spkMesh);
 
+/* 火花データ（CPU側）
+   - 位置・速度・寿命・モードを管理
+   - activeで使用中か判定 */
 const _spk = Array.from({ length: SPARK_MAX }, () => ({
   active: false,
   px: 0, py: -200, pz: 0,
@@ -1158,8 +1203,11 @@ let _spkHead = 0;
 
 for (let i = 0; i < SPARK_MAX; i++) _spkPositions[i*3+1] = -200;
 _spkPosBuf.needsUpdate = true;
-spkGeo.computeBoundingSphere(); // バウンディング球を明示的に計算
+spkGeo.computeBoundingSphere();
 
+/* 火花発生
+   - origin位置からランダムに飛ばす
+   - modeで挙動を変更（forge / water など） */
 function spawnSparks(origin, count, mode = 'forge', spread = 1.0) {
   for (let n = 0; n < count; n++) {
     const idx = _spkHead % SPARK_MAX;
@@ -1185,6 +1233,11 @@ function spawnSparks(origin, count, mode = 'forge', spread = 1.0) {
   }
 }
 
+/* 火花更新（毎フレーム）
+   - 重力で落ちる
+   - 位置更新
+   - 寿命で消える
+   - 色を時間で変化させる */
 function updateSparks(delta) {
   for (let i = 0; i < SPARK_MAX; i++) {
     const s = _spk[i];
@@ -1200,12 +1253,15 @@ function updateSparks(delta) {
     _spkPositions[b+1] = s.py;
     _spkPositions[b+2] = s.pz;
     const t = Math.max(0, s.life / s.maxLife);
+    /* 色変化ロジック
+   - forge：赤→黄色（火花）
+   - shape：青白（加工）
+   - water：水色（冷却） */
     if (s.mode === 'shape') {
       _spkColors[b]   = 0.4 + t*0.6;
       _spkColors[b+1] = 0.6 + t*0.4;
       _spkColors[b+2] = 1.0;
     } else if (s.mode === 'water') {
-      // 水滴：明るい水色〜透明
       _spkColors[b]   = 0.2 + t*0.3;
       _spkColors[b+1] = 0.5 + t*0.5;
       _spkColors[b+2] = 1.0;
@@ -1227,10 +1283,14 @@ function updateSparks(delta) {
 }
 
 /* ================================================================
-   SCENE OBJECTS
+   シーンオブジェクト生成（実体の配置）
+   - フェーズごとのグループ管理
+   - 床と作業台を生成
+   - 共通の基準位置で配置を統一
 ================================================================ */
-
-// Groups per phase
+/* フェーズ別グループ
+   - 鍛造・成形・研磨でオブジェクトを分離
+   - 表示/非表示の切り替えを簡単にする */
 const groupForging   = new THREE.Group();
 const groupShaping   = new THREE.Group();
 const groupSharpening = new THREE.Group();
@@ -1238,32 +1298,40 @@ scene.add(groupForging);
 scene.add(groupShaping);
 scene.add(groupSharpening);
 
-// --- FLOOR ---
+/* 床
+   - シーン全体の土台
+   - 影を受けることで立体感を出す */
 const floorGeo = new THREE.PlaneGeometry(20, 20);
 const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a120a, roughness: 0.95, metalness: 0.0 });
 const floor = new THREE.Mesh(floorGeo, floorMat);
 floor.rotation.x = -Math.PI / 2;
 floor.receiveShadow = true;
 scene.add(floor);
-let isARMode = false; // AR起動時にtrueになる
+let isARMode = false;
 
-// --- WORKBENCH (shared reference point) ---
+/* 作業台の基準位置
+   - すべての配置の中心となる座標 */
 const workbenchPos = new THREE.Vector3(0, 0.85, -1.1);
 
+/* 作業台生成
+   - 天板＋レンガ＋土台で構成
+   - 見た目と高さを物理的に組み上げる */
 function makeWorkbench(parent) {
   const group = new THREE.Group();
   const mortarMat = new THREE.MeshStandardMaterial({ color: 0x2a1e14, roughness: 0.95 });
   const topMat    = new THREE.MeshStandardMaterial({ color: 0x5c3020, roughness: 0.85, metalness: 0.05 });
 
-  // 天板（Y=workbenchPos.y に直接配置）
+  /* 天板
+     - 作業する場所
+     - 基準高さに直接配置 */
   const top = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.06, 0.5), topMat);
   top.position.y = workbenchPos.y;
   top.castShadow = true; top.receiveShadow = true;
   group.add(top);
 
-  // レンガ積み：天板下面(workbenchPos.y - 0.03)から床(y=0)まで積む
-  // 天板下面 = workbenchPos.y(0.85) - 0.03 = 0.82
-  // nRows = ceil(0.82 / 0.12) = 7段
+  /* レンガ構造
+     - 天板の下から床まで積み上げる
+     - 段ごとにずらしてリアルな積み方に */
   const brickColors = [0x7a3a22, 0x6a2e1a, 0x7e3e28, 0x5a2a14, 0x6e3420, 0x7a3a22, 0x6a2e1a];
   const brickH = 0.12; const nRows = 7;
   const brickW = 0.215; const brickD = 0.22; const gap = 0.012;
@@ -1280,6 +1348,8 @@ function makeWorkbench(parent) {
       bk.receiveShadow = true;
       group.add(bk);
     }
+    /* 側面補強レンガ
+       - 前後にもブロックを配置して立体感を出す */
     for (const side of [-1, 1]) {
       const bk2 = new THREE.Mesh(new THREE.BoxGeometry(0.88, brickH - gap, brickD * 0.5 - gap), bmat);
       bk2.position.set(0, rowY, side * 0.19);
@@ -1288,62 +1358,80 @@ function makeWorkbench(parent) {
     }
   }
 
-  // モルタルベース（床に接地）
+  /* 土台
+     - 一番下にあるベース */
   const base = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.04, 0.52), mortarMat);
   base.position.set(0, 0.02, 0);
   base.castShadow = true; base.receiveShadow = true;
   group.add(base);
 
-  // グループを床(y=0)に配置
+  /* 作業台の配置
+     - グループ全体をまとめて配置 */
   group.position.set(workbenchPos.x, 0, workbenchPos.z);
   parent.add(group);
   return group;
 }
 
-// ============ FORGING OBJECTS ============
+/* ================================================================
+   鍛造フェーズ用オブジェクト
+   - 作業台・炉・鉄素材・温度UIを配置
+   - ハンマー／トング（VR手持ち）もここで定義
+   - 見た目＋インタラクションの基盤を作る
+================================================================ */
+/* 作業台
+   - 鍛造フェーズの基準オブジェクト
+   - 鉄素材やUIの配置基準になる */
 const forgingBench = makeWorkbench(groupForging);
 
-// 炉 — 床からレンガ積みで立ち上がる構造
-// 炉の開口部の高さ: y=0.9 を維持
+/* 炉
+   - 床から積み上げる構造（リアルな重量感）
+   - グループ化して位置・判定をまとめる */
 const furnaceGroup = new THREE.Group();
 furnaceGroup.position.set(-1.1, 0, -1.2); // XZのみ指定、Y=0(床)から構築
 groupForging.add(furnaceGroup);
-// 参照用（BB判定に使うfurnace変数と互換性を持たせる）
 const furnace = furnaceGroup;
 
 // 炉台（床から積み上がるレンガ状の台）
 const fbMat1 = new THREE.MeshStandardMaterial({ color: 0x5a2e18, roughness: 0.92 });
 const fbMat2 = new THREE.MeshStandardMaterial({ color: 0x4a2410, roughness: 0.95 });
+
+/* 炉の構造
+   - 下→中→上の3段で構成
+   - 少しずつ絞って安定感を出す */
 // 下段ベース
 const fBase = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.3, 0.62), fbMat2);
 fBase.position.set(0, 0.15, 0);
-fBase.receiveShadow = true; // fBase.castShadow省略（VR負荷削減）
+fBase.receiveShadow = true;
 furnaceGroup.add(fBase);
 // 中段（少し絞る）
 const fMid = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.35, 0.56), fbMat1);
 fMid.position.set(0, 0.475, 0);
-// fMid.castShadow省略
 furnaceGroup.add(fMid);
 // 上段（炉本体）
 const furnaceMat = new THREE.MeshStandardMaterial({ color: 0x2a1505, roughness: 0.9, metalness: 0.2 });
 const furnaceBody = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.42, 0.50), furnaceMat);
-furnaceBody.position.set(0, 0.86, 0); // 高さ 0.65+0.35/2+0.4/2=0.85相当
+furnaceBody.position.set(0, 0.86, 0); // 炉本体の中心は y=0.86（積み上げ結果に合わせて配置）
 furnaceBody.castShadow = true;
 furnaceGroup.add(furnaceBody);
-// 炉の開口部（熱光） — 高さ 0.9 付近に維持
+
+/* 炉の開口部
+   - emissiveで発光
+   - 加熱状態を視覚的に表現 */
 const furnaceHoleMat = new THREE.MeshStandardMaterial({
   color: 0xff2200, emissive: 0xff2200, emissiveIntensity: 0.3, roughness: 1
 });
 const furnaceHole = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.12), furnaceHoleMat);
-furnaceHole.position.set(0, 0.86, 0.27); // furnaceBody基準 → worldY≈0.86
+furnaceHole.position.set(0, 0.86, 0.27);
 furnaceGroup.add(furnaceHole);
-// 煙突
+
+/* 煙突 */
 const chimneyMat = new THREE.MeshStandardMaterial({ color: 0x3a1e08, roughness: 0.95 });
 const chimney    = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.10, 0.40, 8), chimneyMat);
 chimney.position.set(0, 1.27, 0);
 furnaceGroup.add(chimney);
 
-// Iron piece — 最初から作業台の上に配置
+/* 鉄素材
+   - 最初から作業台の上に配置 */
 const ironMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8, metalness: 0.7 });
 const ironMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.06, 0.06), ironMat);
 ironMesh.castShadow = true;
@@ -1351,7 +1439,9 @@ ironMesh.castShadow = true;
 ironMesh.position.set(0, 0.91, -1.1);
 groupForging.add(ironMesh);
 
-// Temperature display — 解像度アップ＋区分表示
+/* 温度表示UI
+   - Canvasで描画 → テクスチャ化 → スプライト表示
+   - 鉄に追従して表示される */
 const tempCanvas = document.createElement('canvas');
 tempCanvas.width = 330; tempCanvas.height = 80;
 const tempCtx = tempCanvas.getContext('2d');
@@ -1363,13 +1453,20 @@ tempSprite.scale.set(0.35, 0.11, 1);
 tempSprite.position.set(0.37, 0.10, 0.10);
 ironMesh.add(tempSprite);
 
+/* 温度ゾーン判定
+   - 0〜100の内部値で評価
+   - HOT / GOOD / COLD に分類 */
 function getTempZone(temp) {
-  // 100-80: 熱すぎ△ / 80-60: 適正○ / 60未満: 冷めすぎ×
-  if (temp >= 80) return { label: '△ 高温/HOT', color: '#ff6622', judge: 'hot' };
+  // 内部温度スケール（0〜100想定）
+  // 80以上: 高温 / 60〜79: 適温 / 60未満: 低温
+  if (temp >= 80) return { label: '△ 高温/HOT',  color: '#ff6622', judge: 'hot' };
   if (temp >= 60) return { label: '〇 適温/GOOD', color: '#88ff44', judge: 'good' };
-  return               { label: '× 低温/COLD', color: '#4488ff', judge: 'cold' };
+  return                 { label: '× 低温/COLD',  color: '#4488ff', judge: 'cold' };
 }
 
+/* 温度UI更新
+   - 数値＋色＋ラベルを描画
+   - テクスチャ更新で反映 */
 function updateTempSprite(temp) {
   const zone = getTempZone(temp);
   tempCtx.clearRect(0, 0, 330, 80);
@@ -1391,33 +1488,26 @@ function updateTempSprite(temp) {
   tempTex.needsUpdate = true;
 }
 
-// Hammer (right hand visual)
-// VRコントローラー座標系：
-//   +Y = グリップ上方向、-Z = コントローラー先端方向
-// ハンマーは「柄を握る」イメージ：
-//   柄をY軸方向、ヘッドを-Y（下）に配置
-// groupは scene に置き、VR時は rightController の子にする
+/* ハンマー（右手）
+   - コントローラー原点＝柄の中心
+   - 下方向にヘッドを配置 */
 const hammerGroup = new THREE.Group();
 const hammerHandle = new THREE.Mesh(
   new THREE.CylinderGeometry(0.013, 0.016, 0.30, 8),
   new THREE.MeshStandardMaterial({ color: 0x5a3515, roughness: 0.85 })
 );
-// 柄をY軸方向（コントローラーのグリップ軸）に沿わせる
-// ハンドルの中心をコントローラー原点に合わせる
 hammerHandle.position.set(0, 0, 0);
 const hammerHead = new THREE.Mesh(
   new THREE.BoxGeometry(0.09, 0.065, 0.065),
   new THREE.MeshStandardMaterial({ color: 0x606060, roughness: 0.5, metalness: 0.85 })
 );
-// ヘッドを柄の下端（-Y）に付ける
 hammerHead.position.set(0, -0.18, 0);
 hammerGroup.add(hammerHandle);
 hammerGroup.add(hammerHead);
-// コントローラーに子として追加したとき、手の平の中心から下にヘッドが来るよう微調整
-// localPositionはVR追加時にリセットするので初期値は0
 hammerGroup.position.set(0, 0, 0);
 
-// Left hand tong visual
+/* トング（左手）
+   - 鉄をつかむための簡易モデル */
 const tongGroup = new THREE.Group();
 const tongMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.7, metalness: 0.6 });
 const tongArm = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.015, 0.3), tongMat);
@@ -1425,13 +1515,23 @@ tongArm.position.set(0, 0, -0.15);
 tongGroup.add(tongArm);
 tongGroup.position.set(0, -0.03, -0.1);
 
-// ============ SHAPING OBJECTS ============
+/* ================================================================
+   成形フェーズ用オブジェクト
+   - 刃物モデル（本体＋なかご）を生成
+   - 表裏2枚構造で「叩いて整える」表現
+   - 歪み（ゾーン）を分割して可視化
+   - 各ゾーンの状態を数値＋色で表示
+================================================================ */
+/* 作業台
+   - 成形フェーズの基準位置 */
 const shapingBench = makeWorkbench(groupShaping);
 
-// Blade model — リアルな和包丁/刃物形状
-// 日本の包丁型ジオメトリ（1.2倍スケール）
-// メイン部分: X:0〜0.408, Y:0〜0.07
-// なかご部分: X:-0.102〜0（1.2倍）
+/* 刃物ジオメトリ
+   - Shapeから押し出して包丁形状を作成
+   - 本体＋なかご（柄の中に入る部分）で構成 */
+/* 刃本体
+   - 切先〜峰までの形状
+   - bevelでエッジに厚み */
 function createBladeGeometry() {
   const shape = new THREE.Shape();
   shape.moveTo(0,      0);        // 刃先・柄元
@@ -1445,6 +1545,9 @@ function createBladeGeometry() {
     bevelThickness: 0.001, bevelSize: 0.0015, bevelSegments: 2,
   });
 }
+/* なかご
+   - 柄に差し込まれる部分
+   - bevelなしでシンプル形状 */
 function createNakagoGeometry() {
   const shape = new THREE.Shape();
   shape.moveTo(-0.102, 0.049);
@@ -1461,25 +1564,30 @@ const nakagoMat = new THREE.MeshStandardMaterial({ color: 0x5a6268, roughness: 0
 const bladeMesh  = new THREE.Mesh(bladeGeo, bladeMat);
 const nakagoMesh = new THREE.Mesh(nakagoGeo, nakagoMat);
 nakagoMesh.castShadow = true;
-bladeMesh.add(nakagoMesh); // メイン部分の子 → 常に一緒に動く
+/* 刃モデル構成
+   - bladeMesh（本体）にnakagoMeshを子として追加
+   - 一体として動く */
+bladeMesh.add(nakagoMesh);
 bladeMesh.castShadow = true;
-// bladeGeo: X:0〜0.5, Y:0〜0.12 (新ジオメトリ)
-// rotation.x=-PI/2: 元Y軸 → ワールド-Z軸 (Y:0.06中心 → Z:-0.06)
-// rotation.x=+PI/2: 元Y軸 → ワールド+Z軸 (Y:0.06中心 → Z:+0.06)
-// bladeMesh.position.z で補正し、表裏どちらでもZワールド中心をbladePivot.zに合わせる
-// 表(rotation.x=-PI/2): mesh.position.z = +0.06 → 中心Z=0に補正
-// 裏(rotation.x=+PI/2): mesh.position.z = -0.06 → 中心Z=0に補正
+
+/* 向き調整
+   - rotation.xでXZ平面に寝かせる
+   - positionで中心を補正 */
 const bladePivot = new THREE.Group();
 bladeMesh.position.set(-0.204, 0, 0.035); // X中心補正(0.408/2) + Z補正
 bladeMesh.rotation.x = -Math.PI / 2;      // 表: 表面が上
 
-// ── 二枚広げ演出 ────────────────────────────────────────────
+/* 二枚構造（表裏）
+   - 刃を2枚に分けて上下に配置
+   - 叩くことで歪みを表現するため */
+/* 表：+方向にオフセット
+   裏：-方向にオフセット
+   → 厚みを持った板として扱う */
 const BLADE_HALF   = 0.003 * 1.3;   // 片側オフセット = 0.0039（元0.003の1.3倍）
 const BLADE_DEPTH  = 0.006;          // bladeGeoのdepth（Z方向厚み）
 
-// 接地補正ヘルパー
-// rotation.x=-PI/2(表): ローカルZ=0が底面 → 補正0
-// rotation.x=+PI/2(裏): ローカルZ=depth が底面 → 補正+depth
+/* 接地補正
+   - 表裏で接地面が変わるため高さ補正 */
 function _bladeGroundOffset(flipped) {
   return flipped ? BLADE_DEPTH : 0;
 }
@@ -1493,26 +1601,34 @@ const bladeMesh2 = bladeMesh.clone();
 bladeMesh2.position.set(-0.204, -BLADE_HALF, 0.035);
 bladeMesh2.rotation.x = -Math.PI / 2;
 
+/* 刃全体（pivot）
+   - 作業台の高さに配置
+   - 表裏まとめて移動 */
 bladePivot.add(bladeMesh);
 bladePivot.add(bladeMesh2);
-
 
 // bladePivot を作業台に接地（表: 補正0）
 bladePivot.position.set(0, workbenchPos.y + _bladeGroundOffset(false), workbenchPos.z);
 groupShaping.add(bladePivot);
 
-// Zone indicators — 表(+)裏(-)歪みをスプライトで表示
+/* ゾーン分割
+   - 刃を複数エリアに分割
+   - 各エリアごとに歪みを管理 */
 const ZONE_COUNT = CONFIG.SHAPING.ZONE_COUNT;
-const zoneIndicators = []; // 色ボックス
-const zoneSprites    = []; // 数値スプライト
+const zoneIndicators = [];
+const zoneSprites    = [];
 const zones = [];
 
-// ゾーンごとのCanvasスプライトを生成
+/* スプライト生成 */
 function makeZoneCanvas() {
   const c = document.createElement('canvas');
   c.width = 96; c.height = 48;
   return c;
 }
+
+/* スプライト更新
+   - 歪みに応じて色と数値を変更
+   - +（赤）/ 0（緑）/ -（青） */
 function updateZoneSprite(idx) {
   const z = zones[idx];
   const c = zoneSprites[idx]._canvas;
@@ -1533,19 +1649,15 @@ function updateZoneSprite(idx) {
   zoneSprites[idx]._tex.needsUpdate = true;
 }
 
-// 刃物のXZ平面上の配置に合わせたゾーン設定
-// bladeGeo は X: 0〜0.5, Y: 0〜0.09 の形状 → rotation.x=-PI/2後は X: 0〜0.5, Z: 0〜0.09
-// bladeMesh.position.x = -0.25 なので ワールドX: -0.25 〜 +0.25
+/* 刃物のXZ平面上の配置に合わせたゾーン設定 */
 const BLADE_WORLD_X0 = -0.204;  // 柄側 (bladeGeo X:0, pos.x=-0.204 → worldX=-0.204)
 const BLADE_WORLD_X1 =  0.204;  // 切先側 (bladeGeo X:0.408, pos.x=-0.204 → worldX=+0.204)
 const BLADE_WORLD_Z  = workbenchPos.z;  // bladePivot.position.z = workbenchPos.z
 const BLADE_Y        = workbenchPos.y + 0.03 + 0.03; // ゾーン: 接地面+0.03m上(裏表不変)
 
-// ゾーン配置: なかご1か所 + 刃4か所（均等割り）
-// bladeMesh X:0〜0.34, position.x=-0.17 → worldX:-0.17〜+0.17
-// なかごX:-0.085〜0 → worldX:-0.255〜-0.17 → 中心-0.21
-// 刃部分worldX:-0.17〜+0.17を4等分: -0.13, -0.05, +0.03, +0.11
-// ゾーン位置：なかご中心(-0.255) + 刃4か所均等割り(-0.153, -0.051, +0.051, +0.153)
+/* ゾーン位置
+   - なかご1＋刃4で計5分割
+   - X方向に均等配置 */
 const ZONE_POSITIONS = [
   -0.255, // なかご中心
   -0.153, // 刃①（均等割り）
@@ -1553,6 +1665,7 @@ const ZONE_POSITIONS = [
   +0.051, // 刃③
   +0.153, // 刃④
 ];
+
 for (let i = 0; i < ZONE_COUNT; i++) {
   const wx = ZONE_POSITIONS[i];
 
@@ -1585,41 +1698,36 @@ for (let i = 0; i < ZONE_COUNT; i++) {
   updateZoneSprite(i);
 }
 
-// ============ SHARPENING OBJECTS ============
+/* ================================================================
+   研磨フェーズ用オブジェクト
+   - 砥石と刃物を配置し、研ぎ動作を再現
+   - 角度をリアルタイム表示して操作をガイド
+   - VR手元にUIを追従させて直感的に調整できる
+================================================================ */
+/* 作業台
+   - 研磨フェーズの基準位置 */
 const sharpenBench = makeWorkbench(groupSharpening);
 
-// Whetstone — Z軸方向が長辺（前後に動かして研ぐ）
+/* 砥石
+   - Z方向（前後）に動かして研ぐ前提の形状
+   - 上面に別メッシュで研磨面を表現 */
 const stoneMat  = new THREE.MeshStandardMaterial({ color: 0x9a9080, roughness: 0.9 });
 const stoneMesh = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.05, 0.36), stoneMat);
 stoneMesh.position.set(0, workbenchPos.y + 0.055, -1.1);
 stoneMesh.receiveShadow = true;
 stoneMesh.castShadow    = true;
 groupSharpening.add(stoneMesh);
+
+/* 砥石の表面
+   - 少し明るくして“削れる面”を強調 */
 const stoneSurfMat = new THREE.MeshStandardMaterial({ color: 0xb0a898, roughness: 0.7 });
 const stoneSurf    = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.005, 0.34), stoneSurfMat);
 stoneSurf.position.set(0, 0.028, 0);
 stoneMesh.add(stoneSurf);
 
-// 砥石上に方向矢印スプライト（前後方向のガイド）
-const arrowCanvas = document.createElement('canvas');
-arrowCanvas.width = 128; arrowCanvas.height = 128;
-{
-  const ac = arrowCanvas.getContext('2d');
-  ac.fillStyle = 'rgba(0,0,0,0)';
-  ac.fillRect(0, 0, 128, 128);
-  ac.strokeStyle = 'rgba(255,220,80,0.8)';
-  ac.lineWidth = 6;
-  ac.beginPath(); ac.moveTo(64, 20); ac.lineTo(64, 108); ac.stroke();
-  ac.beginPath(); ac.moveTo(64, 20); ac.lineTo(44, 44); ac.stroke();
-  ac.beginPath(); ac.moveTo(64, 20); ac.lineTo(84, 44); ac.stroke();
-  ac.beginPath(); ac.moveTo(64, 108); ac.lineTo(44, 84); ac.stroke();
-  ac.beginPath(); ac.moveTo(64, 108); ac.lineTo(84, 84); ac.stroke();
-}
-const arrowTex    = new THREE.CanvasTexture(arrowCanvas);
-// 矢印スプライトは不要のため追加しない
-// groupSharpening.add(arrowSprite);
-
-// 角度表示 HUD パネル（右手トリガー右側に動的配置）
+/* 角度表示HUD
+   - 刃の角度をリアルタイム表示
+   - 右手コントローラーの横に追従 */
 const angleHudCanvas = document.createElement('canvas');
 angleHudCanvas.width = 272; angleHudCanvas.height = 200;  // メッシュ比(0.15:0.11=1.36:1)に合わせた解像度
 const angleHudTex = new THREE.CanvasTexture(angleHudCanvas);
@@ -1631,34 +1739,44 @@ const angleHudMesh = new THREE.Mesh(
 angleHudMesh.position.set(0.4, workbenchPos.y + 0.20, -1.2);
 scene.add(angleHudMesh);  // groupSharpeningではなくsceneに追加（手に追従させるため）
 
+/* 角度表示更新
+   - OK/NG判定
+   - 角度数値＋評価記号（◎○△×）
+   - 色で精度をフィードバック */
 function updateAngleHud(leftDeg, rightDeg, isAligned, bladeAngleDeg) {
-  // Canvasは 256x80 だがメッシュは(0.15,0.11)なので縦長に圧縮される
-  // → テキストを上下に分けてコンパクトに
   const ctx = angleHudCanvas.getContext('2d');
   ctx.clearRect(0, 0, 272, 200);
   ctx.fillStyle = 'rgba(0,0,0,0.85)';
   ctx.beginPath(); ctx.roundRect(3, 3, 266, 194, 10); ctx.fill();
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  /* 表示ロジック
+     - isAligned=false → NG表示
+     - isAligned=true  → 角度＋評価 */
   if (!isAligned) {
     ctx.fillStyle = '#ff4411';
     ctx.font = 'bold 80px monospace';
     ctx.fillText('NG', 136, 100);
   } else {
-    // 角度 + グレード記号
+    /* 色フィードバック
+       - 緑：理想に近い
+       - 黄：ややズレ
+       - 赤：ズレ大 */
     const err = bladeAngleDeg - CONFIG.SHARPENING.IDEAL_ANGLE;
-    const col = Math.abs(err) < 7 ? '#66ff88' : Math.abs(err) < 14 ? '#ffee44' : '#ff6644';
+    const col = Math.abs(err) < 10 ? '#66ff88' : Math.abs(err) < 20 ? '#ffee44' : '#ff6644';
     // グレード判定（updateSharpeningと同じ範囲）
     let gradeSymbol = '×';
-    if      (bladeAngleDeg >= -22 && bladeAngleDeg <= -8)  gradeSymbol = '◎';
-    else if ((bladeAngleDeg > -8 && bladeAngleDeg < -3) || (bladeAngleDeg >= -35 && bladeAngleDeg < -22)) gradeSymbol = '○';
-    else if (bladeAngleDeg >= -3 && bladeAngleDeg <= 4)    gradeSymbol = '△';
+    if      (bladeAngleDeg >= -25 && bladeAngleDeg <= -5)  gradeSymbol = '◎';
+    else if ((bladeAngleDeg > -5 && bladeAngleDeg < 5) || (bladeAngleDeg >= -35 && bladeAngleDeg < -25)) gradeSymbol = '○';
+    else if ((bladeAngleDeg >= 5 && bladeAngleDeg <= 15) || (bladeAngleDeg >= -45 && bladeAngleDeg < -35))  gradeSymbol = '△';
     ctx.fillStyle = col;
     ctx.font = 'bold 54px monospace';
     const sign = bladeAngleDeg >= 0 ? '+' : '';
     ctx.fillText(`${sign}${Math.round(bladeAngleDeg)}° ${gradeSymbol}`, 136, 100);
   }
   angleHudTex.needsUpdate = true;
-  // 右手コントローラー右側+0.15mに動的配置
+  /* HUD追従
+     - 右手位置＋右方向にオフセット
+     - 回転もコントローラーに同期 */
   if (rightController) {
     const rhWorld = new THREE.Vector3();
     rightController.getWorldPosition(rhWorld);
@@ -1668,14 +1786,17 @@ function updateAngleHud(leftDeg, rightDeg, isAligned, bladeAngleDeg) {
   }
 }
 
-// 研ぎフェーズ用刃物（SHAPINGと同じ形状）
+/* 研磨用刃モデル
+   - 成形フェーズと同じ形状を使用
+   - 向きを研ぎ動作用に調整 */
 const sharpenBladeGroup = new THREE.Group();
-const sharpenBladeMesh  = bladeMesh.clone(); // nakagoも子としてclone済み
-// X中心補正: pos.x=-0.17, Y中心=0.035→回転後Z=0
+const sharpenBladeMesh  = bladeMesh.clone();
 sharpenBladeMesh.position.set(-0.204, 0, 0); // X中心補正(0.408/2)
 sharpenBladeMesh.rotation.set(Math.PI / 2, 0, 0); // 刃先を奥(+Z)へ
-// edgeMarker（刃先線）は不要のため省略
 sharpenBladeGroup.add(sharpenBladeMesh);
+
+/* 刃の配置
+   - 砥石の上に少し浮かせて配置 */
 sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.2);
 groupSharpening.add(sharpenBladeGroup);
 
@@ -1701,7 +1822,6 @@ function makeTextCanvas(text, w, h, bg, fg, fontSize) {
   });
   return c;
 }
-
 
 // フェーズ得点表示パネル（刃物近く）
 const scorePanelGroup = new THREE.Group();
@@ -1741,6 +1861,7 @@ function updateScorePanel(text, worldPos) {
 const infoPanel = new THREE.Group();
 scene.add(infoPanel);
 let infoPanelMesh = null;
+
 /* ================================================================
    INTRO_0 タイトル専用パネル
 ================================================================ */
@@ -3274,7 +3395,7 @@ function updateSharpening(delta) {
             // ○：やや近い
             addPoints = 2;
             grade     = '○';
-          } else if ((bladeAngleDeg >= 5 && bladeAngleDeg <= 10) ||
+          } else if ((bladeAngleDeg >= 5 && bladeAngleDeg <= 15) ||
                      (bladeAngleDeg >= -45 && bladeAngleDeg < -35)) {
             // △：やや遠い
             addPoints = 1;
