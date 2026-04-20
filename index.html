@@ -380,8 +380,8 @@ const CONFIG = {
   FORGING: {
     TOTAL_HITS: 30,
     VELOCITY_THRESHOLD: 0.8,
-    FORGE_HEAT_RATE: 12.5,     // per second in furnace（加熱2倍ゆっくり）
-    COOL_RATE: 4,              // per second in air
+    FORGE_HEAT_RATE: 10.0,
+    COOL_RATE: 4.0,
     HOT_THRESHOLD: 60,
     MISS_THRESHOLD: 30,
     SPARK_COUNT_PERFECT: 80,
@@ -393,7 +393,7 @@ const CONFIG = {
     ZONE_COUNT: 5,
     HIT_POWER_SCALE: 0.08,
     SMALL_PENALTY: 0.3,
-    VELOCITY_THRESHOLD: 0.25,  // 半分の遅さでも判定
+    VELOCITY_THRESHOLD: 0.25,
   },
   SHARPENING: {
     TOTAL_STROKES: 30,
@@ -407,11 +407,11 @@ const CONFIG = {
    STATE MACHINE
 ================================================================ */
 const State = {
-  INTRO_0: 'INTRO_0',   // タイトル演出（越前打刃物）
-  INTRO_1: 'INTRO_1',   // 歴史
-  INTRO_2: 'INTRO_2',   // 特徴（二枚広げ）
-  INTRO_3: 'INTRO_3',   // 製造工程
-  INTRO_4: 'INTRO_4',   // 体験内容
+  INTRO_0: 'INTRO_0',
+  INTRO_1: 'INTRO_1',
+  INTRO_2: 'INTRO_2',
+  INTRO_3: 'INTRO_3',
+  INTRO_4: 'INTRO_4',
   FORGING: 'FORGING',
   SHAPING: 'SHAPING',
   SHARPENING: 'SHARPENING',
@@ -422,69 +422,74 @@ function isIntroState(s) { return INTRO_STATES.includes(s); }
 let currentState = State.INTRO_0;
 
 let bladeState = { shapeDistortion: 0, symmetryError: 0, sharpness: 0 };
-// フェーズ確定スコア（終了時に保存、最終結果でそのまま使用）
 const _phaseScores = { forging: 0, shaping: 0, sharpening: 0 };
 
 /* ================================================================
    FADE & TRANSITION SYSTEM
 ================================================================ */
-let _fadeOpacity     = 1.0;   // 現在の透明度（0=透明, 1=不透明）
-let _fadeDir         = 0;     // +1=フェードイン, -1=フェードアウト, 0=静止
-let _fadeDuration    = 1.0;   // 秒
+let _fadeOpacity     = 1.0;
+let _fadeDir         = 0;
+let _fadeDuration    = 1.0;
 let _fadeElapsed     = 0.0;
-let _fadeCallback    = null;  // フェードアウト完了時コールバック
-let _inputLocked     = false; // フェード中は入力無効
+let _fadeCallback    = null;
+let _inputLocked     = false; 
 
-// intro_0 スケールアニメーション
-// フェードオーバーレイ（Three.js 全画面Planeを使用）
+// フェードオーバーレイ
 const _fadeGeo = new THREE.PlaneGeometry(100, 100);
 const _fadeMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, depthTest: false, depthWrite: false });
 const _fadePlane = new THREE.Mesh(_fadeGeo, _fadeMat);
 _fadePlane.renderOrder = 999;
 _fadePlane.position.set(0, 0, -0.5);
-// camera.add は camera 定義後に行う（下の THREE.JS CORE セクションで実行）
-
 
 /* ================================================================
    PERFORMANCE TOGGLE FLAGS
 ================================================================ */
 const PerfToggles = {
-  useCanvasParticles:       true,  // Canvas2D パーティクル ON/OFF
-  useCanvasTransferThrottle: false, // GPU転送 間引き（3フレームに1回）
-  useInstanceThrottle:       false, // InstancedMesh 間引き（2フレームに1回）
+  useCanvasParticles:        true,
+  useCanvasTransferThrottle: false,
+  useInstanceThrottle:       false,
 };
 // 内部カウンター
 let _cvTransferFrameCount = 0;
 let _instThrottleFrame    = 0;
 
 /* ================================================================
-   CANVAS PARTICLE SYSTEM（intro + 体験中共用）
-   - 下→上へゆっくり上昇、上端でフェードアウト、下部で再生成
-   - パーリン風ごく小さい左右揺れ（"漂う"程度）
-   - VR / AR 共通
-================================================================ */
+   CANVASパーティクルシステム（背景演出）
+   - 粒子が下→上へゆっくり流れる（火の粉・煙のような動き）
+   - 上端または寿命で消え、下から再生成される
+   - intro / game / result で見た目と粒子数を切り替え
+   - Canvasに描画 → テクスチャとして反映
+   - 関数の役割
+     - activateCvPanel：開始
+     - updateCvPanel：毎フレーム処理（本体）
+     - _tickParticles：動き計算
+     - _drawParticles：見た目描画
+     - _spawnPt：粒子生成
 
-// パーリン風スムーズノイズ（収束しない非整数比）
+================================================================ */
+/* スムーズノイズ生成
+   - sinを組み合わせて「自然なゆらぎ」を作る
+   - 粒子の左右のふわふわ動きに使用 */
 function _ptSmooth(t, f, ph) {
   return Math.sin(t * f + ph) * 0.6 + Math.sin(t * f * 1.618 + ph * 1.37) * 0.4;
 }
 
-// パーティクル生成ヘルパー（新規 or 再生成時に呼ぶ）
+/* 粒子を1つ生成
+   - 位置・速度・大きさ・色・寿命をランダム設定
+   - 画面下側から自然に湧くように調整 */
 function _spawnPt(existingY) {
-  // X分布: 中央寄り＋端に溜まらない工夫
-  // 中央(0.5)からgauss分布で生成し、端(0〜0.08 / 0.92〜1)は確率を大幅に下げる
   let x;
   for (let attempt = 0; attempt < 8; attempt++) {
     const gx = (Math.random()+Math.random()+Math.random()+Math.random()-2) * 0.32;
     x = 0.5 + gx;
-    if (x >= -0.2 && x <= 1.2) break; // 端回避 (条件さらに緩和)
+    if (x >= -0.2 && x <= 1.2) break;
   }
   x = Math.max(0.04, Math.min(0.96, x));
 
   return {
     x,
     y:   (existingY !== undefined) ? existingY : Math.random(),
-    vy:  0.00025 + Math.random() * 0.00045,  // 速度2倍（元: 0.00012〜0.00034）
+    vy:  0.00025 + Math.random() * 0.00045,
     r:   0.8 + Math.random() * 1.8,
     f1:  0.18 + Math.random() * 0.10,
     f2:  0.11 + Math.random() * 0.07,
@@ -492,29 +497,35 @@ function _spawnPt(existingY) {
     ph2: Math.random() * 6.28,
     t:   Math.random() * 40,
     age:    0,
-    maxAge: 14.0 + Math.random() * 20.0,     // さらに2倍（14〜34秒）
+    maxAge: 14.0 + Math.random() * 20.0,
     col:  Math.random() < 0.07 ? 'w' : (Math.random() < 0.45 ? 'o' : 'r'),
   };
 }
 
-// ── 粒子配列（用途ごとに独立・サイズ明確化）────────────────────
+/* 粒子配列（シーン別）
+   - intro: 多めで演出強め
+   - game: 軽め（パフォーマンス重視）
+   - result: 控えめ */
 const PARTICLE_BASE        = 160;
-const PARTICLE_COUNT_INTRO = PARTICLE_BASE * 3;   // intro系: 480個
-const PARTICLE_COUNT_GAME  = Math.round(PARTICLE_BASE * 1.1); // 体験中: ~176個（VR負荷削減）
-const PARTICLE_COUNT_RESULT = 100;                // 結果パネル
+const PARTICLE_COUNT_INTRO = PARTICLE_BASE * 3;
+const PARTICLE_COUNT_GAME  = Math.round(PARTICLE_BASE * 1.1);
+const PARTICLE_COUNT_RESULT = 100;
 const _cvPtsIntro  = Array.from({ length: PARTICLE_COUNT_INTRO  }, () => _spawnPt());
 const _cvPtsGame   = Array.from({ length: PARTICLE_COUNT_GAME   }, () => _spawnPt());
 const _cvPtsResult = Array.from({ length: PARTICLE_COUNT_RESULT }, () => _spawnPt());
 
-// ── 現在アクティブなパネルのCanvas/Tex（毎フレーム再描画） ──────
-let _cvPtCanvas      = null;  // 共用オフスクリーンCanvas
-let _cvPtTex         = null;  // 共用CanvasTexture
-let _cvPanelMode     = null;  // 'intro0' | 'intro' | 'game' | 'result'
-let _cvPanelPts      = null;  // 現在使う粒子配列
-let _cvPanelBright   = 1.0;   // 明るさ係数
-let _cvPanelExtraFn  = null;  // 背景グラデ後に呼ぶ追加描画関数（テキスト等）
+/* 現在のCanvasパネル状態
+   - 描画対象・モード・粒子・明るさなどを保持 */
+let _cvPtCanvas      = null;
+let _cvPtTex         = null;
+let _cvPanelMode     = null;
+let _cvPanelPts      = null;
+let _cvPanelBright   = 1.0;
+let _cvPanelExtraFn  = null;
 
-// ── 背景描画：モード別 ──────────────────────────────────────────
+/* 背景描画（モード別）
+   - game: ほぼ黒（集中）
+   - intro/result: 赤黒グラデーション（雰囲気重視） */
 function _drawPanelBg(ctx, W, H, mode) {
   if (mode === 'game') {
     // 体験中：ほぼ完全な黒
@@ -529,7 +540,7 @@ function _drawPanelBg(ctx, W, H, mode) {
     bg.addColorStop(1.0, '#0c0202');
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
-    // 放射状グラデーション（下中央から赤みのにじみ）
+    // 放射状グラデーション
     const rg = ctx.createRadialGradient(W*0.5, H*0.9, 0, W*0.5, H*0.5, W*0.5);
     rg.addColorStop(0,   'rgba(100,8,4,0.30)');
     rg.addColorStop(0.5, 'rgba(60,4,2,0.12)');
@@ -539,14 +550,18 @@ function _drawPanelBg(ctx, W, H, mode) {
   }
 }
 
-// ── メイン更新関数：animationLoopから毎フレーム呼ぶ ────────────
+/* パネル更新（毎フレーム）
+   - 背景描画
+   - 粒子の更新＆描画
+   - テキストなど追加描画
+   - 必要に応じてGPUへ転送 */
 function updateCvPanel(delta) {
   if (!_cvPtCanvas || !_cvPanelPts) return;
   const W   = _cvPtCanvas.width, H = _cvPtCanvas.height;
   if (!_cvPtCanvas._ctx2d) _cvPtCanvas._ctx2d = _cvPtCanvas.getContext('2d');
   const ctx = _cvPtCanvas._ctx2d;
 
-  // 背景は常に描画（パーティクルOFF時も背景を描いてCanvasを初期化する）
+  // 背景は常に描画
   _drawPanelBg(ctx, W, H, _cvPanelMode);
 
   // [Toggle 1] useCanvasParticles: パーティクルtick/draw
@@ -554,7 +569,7 @@ function updateCvPanel(delta) {
     _tickParticles(_cvPanelPts, delta);
     _drawParticles(ctx, _cvPanelPts, W, H, _cvPanelBright);
   }
-  // OFF時: パーティクル非描画。背景描画でキャンバスはクリア済み。
+  // OFF時: パーティクル非描画。背景描画でキャンバスはクリア。
 
   // テキスト等の追加描画は常に実行（パーティクルOFF時もテキストを必ず表示）
   if (_cvPanelExtraFn) _cvPanelExtraFn(ctx, W, H);
@@ -571,7 +586,8 @@ function updateCvPanel(delta) {
   if (_cvPtTex) _cvPtTex.needsUpdate = true;
 }
 
-// ── パネル起動：モードと描画関数を設定 ────────────────────────
+/* パネル開始
+   - Canvas・粒子・モードなどをセット */
 function activateCvPanel(canvas, tex, mode, pts, bright, extraFn) {
   _cvPtCanvas    = canvas;
   _cvPtTex       = tex;
@@ -580,30 +596,36 @@ function activateCvPanel(canvas, tex, mode, pts, bright, extraFn) {
   _cvPanelBright = bright;
   _cvPanelExtraFn = extraFn || null;
 }
+
+/* パネル停止
+   - 参照をリセットして描画停止 */
 function deactivateCvPanel() {
   _cvPtCanvas = null; _cvPtTex = null;
   _cvPanelMode = null; _cvPanelPts = null;
 }
 
-// ── tick: 毎フレームdelta駆動で粒子状態を更新 ──────────────────
-// 方針: 可視領域 0.0〜1.0、更新領域 -0.1〜1.1（外側で張り付かせて見せない）
+/* 粒子の状態更新（毎フレーム）
+   - ゆらゆら横移動（ノイズ）
+   - ゆっくり上昇
+   - 端で減速＆中央へ戻る
+   - 上端 or 寿命で再生成 */
 function _tickParticles(particles, delta) {
   for (const p of particles) {
     p.t += delta * 0.22;
-    // パーリン風ごく小さい左右揺れ（黄金比で非周期、漂う程度）
+    // パーリン風ごく小さい左右揺れ
     let vx = (_ptSmooth(p.t, p.f1, p.ph1) * 0.4
             + _ptSmooth(p.t, p.f2, p.ph2) * 0.6) * 0.005 * delta * 60;
-    // 中央へ戻す力（弱く自然に）
+    // 中央へ戻す力
     const centerForce = (0.5 - p.x) * 0.0015;
     vx += centerForce;
-    // 端に近づくほど速度減衰（端でのロック防止）
+    // 端に近づくほど速度減衰
     const edgeDist   = Math.abs(p.x - 0.5);
     const edgeFactor = 1.0 - Math.min(edgeDist * 2.0, 1.0);
     vx *= edgeFactor;
     // 横速度上限
     const maxVX = 0.002;
     vx = Math.max(-maxVX, Math.min(maxVX, vx));
-    // 更新領域は -0.1〜1.1（画面外まで許可、端に張り付かない）
+    // 更新領域は -0.1〜1.1
     p.x = Math.max(-0.1, Math.min(1.1, p.x + vx));
     // 上昇（y=1.0=下端 → y=0.0=上端）
     p.y  -= p.vy * delta * 60;
@@ -617,13 +639,16 @@ function _tickParticles(particles, delta) {
   }
 }
 
-// ── draw: 粒子をCanvasに描画（tick後に呼ぶ）────────────────────
+/* 粒子描画
+   - 寿命と高さでフェードアウト
+   - 小さな円として描画
+   - 色（白・オレンジ・赤）で火の粉っぽさを表現 */
 function _drawParticles(ctx, particles, W, H, brightScale) {
   for (const p of particles) {
-    // 画面外の粒子は描画しない（ロジック上は存在、見えないだけ）
+    // 画面外の粒子は描画しない
     if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0) continue;
     const lifeFrac = p.age / p.maxAge;
-    // 寿命の95%以降でフェードアウト（それ以前は完全不透明）
+    // 寿命の95%以降でフェードアウト
     const fadeStart = 0.95;
     const fadeFrac  = lifeFrac < fadeStart
       ? 1.0
@@ -647,16 +672,32 @@ function _drawParticles(ctx, particles, W, H, brightScale) {
   }
 }
 
-// updateCvParticles / _tickGameParticles → updateCvPanel に統合
-
+/* ================================================================
+   フェード制御システム（画面遷移＋演出）
+   - フェードアウト（暗転）→ 状態遷移 → フェードイン（復帰）
+   - 入力ロックで遷移中の誤操作防止
+   - コールバックで遷移後の処理を差し込み可能
+   - 関数の役割
+     - startFade → フェードを開始する（準備）
+     -  updateFade → フェードを進める（実行）
+     -  fadeToNext → シーン遷移をまとめて実行（演出＋制御）
+================================================================ */
+/* イージング関数
+   - t: 0〜1の進行度
+   - 見た目を滑らかにするための補間関数 */
 function easeInOutQuad(t) { return t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t+2,2)/2; }
 function easeOutCubic(t)  { return 1 - Math.pow(1-t, 3); }
 
+/* フェード開始（初期設定）
+   - dir: -1=フェードアウト / 1=フェードイン
+   - duration: フェード時間
+   - callback: フェード完了時の処理 */
 function startFade(dir, duration, callback) {
   _fadeDir      = dir;
   _fadeDuration = duration;
   _fadeElapsed  = 0;
   _inputLocked  = true;
+
   if (dir === -1) {
     // フェードアウト: 暗くなる
     _fadeOpacity  = 0.0;
@@ -664,18 +705,22 @@ function startFade(dir, duration, callback) {
   } else {
     // フェードイン: 明るくなる
     _fadeOpacity  = 1.0;
-    _fadeCallback = callback; // フェードイン完了時にも呼ぶ
+    _fadeCallback = callback;
   }
   _fadeMat.opacity = _fadeOpacity;
 }
 
+/* フェード更新（アニメーション本体）
+   - delta: 経過時間 */
 function updateFade(delta) {
   if (_fadeDir === 0) return;
+
   _fadeElapsed += delta;
   const t = Math.min(_fadeElapsed / _fadeDuration, 1.0);
   const e = easeInOutQuad(t);
+
   if (_fadeDir === -1) {
-    // フェードアウト：画面が暗くなる（opacity 0→1）
+    // フェードアウト：画面が暗くなる
     _fadeMat.opacity = e;
     if (t >= 1.0) {
       _fadeMat.opacity = 1.0;
@@ -683,20 +728,22 @@ function updateFade(delta) {
       _inputLocked = false;
       if (_fadeCallback) { const cb = _fadeCallback; _fadeCallback = null; cb(); }
     }
+
   } else {
-    // フェードイン：画面が明るくなる（opacity 1→0）
+    // フェードイン：画面が明るくなる
     _fadeMat.opacity = 1.0 - e;
     if (t >= 1.0) {
       _fadeMat.opacity = 0.0;
       _fadeDir = 0;
       _inputLocked = false;
-      // フェードイン完了コールバック（スケールアニメ等）
+      // フェードイン完了コールバック
       if (_fadeCallback) { const cb = _fadeCallback; _fadeCallback = null; cb(); }
     }
   }
 }
 
-// フェード音：低い金属音
+/* フェード音再生
+   - 低い金属音で「場面転換」を演出 */
 function playFadeSound() {
   try {
     resumeAudio();
@@ -714,12 +761,18 @@ function playFadeSound() {
   } catch(e) {}
 }
 
-// INTRO→次のINTROへのフェード遷移
+/* 次の状態へフェード遷移
+   - フェードアウト → 状態変更 → フェードイン */
 function fadeToNext(duration = 1.0) {
+  // 演出① 音
   playFadeSound();
-  // フェードアウト完了 → 次stateに遷移 → フェードイン開始
+
+  // フェードアウト開始
   startFade(-1, duration, () => {
+    // 暗転後に状態遷移
     nextState();
+
+    // ゲーム中は振動
     if (
       currentState === State.FORGING ||
       currentState === State.SHAPING ||
@@ -727,41 +780,71 @@ function fadeToNext(duration = 1.0) {
     ) {
       vibrate();
     }
+
+    // 結果画面ではスコア演出
     if (
       currentState === State.RESULT
     ) {
       playFinalScore();
     }
+
+    // フェードイン開始
     startFade(1, duration, null);
   });
 }
 
 /* ================================================================
-   THREE.JS CORE
+   THREE.js 基本セットアップ（描画の土台）
+   - シーン・カメラ・レンダラーを初期化
+   - 背景色・霧で雰囲気を作る
+   - フェード用オーバーレイをカメラに追加
+   - リサイズ時に表示を自動調整
 ================================================================ */
+/* シーン（空間の定義）
+   - 背景色と霧で全体の雰囲気を作る
+   - Colorは再利用してGC負荷を減らす */
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0705);
 scene.fog = new THREE.FogExp2(0x0a0705, 0.04);
-// 毎フレームのColor生成を避けるため事前定義（ループ内で再利用）
+
+// 事前生成カラー（毎フレーム使い回し）
 const _bgColorIntro = new THREE.Color(0x0d0404);
 const _bgColorGame  = new THREE.Color(0x080808);
 
+/* カメラ（視点）
+   - プレイヤーの目の位置
+   - フェード用の黒い板を子要素として追加 */
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
 camera.position.set(0, 1.6, 0);
-// フェードオーバーレイをカメラに追加（camera定義直後）
+
+// フェードオーバーレイ（常に画面手前に表示）
 camera.add(_fadePlane);
 scene.add(camera);
 
+/* レンダラー（描画エンジン）
+   - 画面サイズ・解像度設定
+   - VR対応
+   - 影・トーンマッピングで見た目調整 */
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // VR向け：過剰なsupersampling防止
-renderer.xr.enabled = true;
+
+// 解像度制限（パフォーマンス対策）
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.xr.enabled = true; // VR対応
+
+// 影設定
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+// 明るさと色味の調整
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.9;
+
+// DOMに追加
 document.getElementById('canvas-container').prepend(renderer.domElement);
 
+/* 画面サイズ変更対応
+   - ウィンドウサイズに合わせてカメラと描画を更新 */
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -769,10 +852,16 @@ window.addEventListener('resize', () => {
 });
 
 /* ================================================================
-   AUDIO ENGINE
+   AUDIOエンジン（効果音生成）
+   - WebAudioでリアルタイムに効果音を生成
+   - ノイズ＋波形＋フィルタで金属音や摩擦音を表現
+   - 各アクションに対応した音を関数で分離
 ================================================================ */
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
+/* 音の生成ユーティリティ
+   - Oscillator（波形）＋Filter（音色）＋Gain（音量）で音を作る
+   - 短時間で減衰させて「効果音」にする */
 function createNoise(duration = 0.1, freq = 200, type = 'sawtooth', gain = 0.3) {
   const osc = audioCtx.createOscillator();
   const gainNode = audioCtx.createGain();
@@ -791,6 +880,10 @@ function createNoise(duration = 0.1, freq = 200, type = 'sawtooth', gain = 0.3) 
   osc.stop(audioCtx.currentTime + duration);
 }
 
+/* ハンマー音（精度別）
+   - Perfect：高音＋低音で気持ちいい金属音
+   - Good：やや控えめ
+   - Miss：弱く鈍い音 */
 function playHammerPerfect() {
   createNoise(0.3, 800, 'square', 0.4);
   createNoise(0.15, 200, 'sawtooth', 0.5);
@@ -802,7 +895,11 @@ function playHammerGood() {
 function playHammerMiss() {
   createNoise(0.1, 100, 'sine', 0.2);
 }
-// SHAPING専用: pow値（歪み変化量）に応じた段階音フィードバック
+
+
+/* 成形ヒット音（強さ依存）
+   - pow（力の強さ）に応じて音を変化
+   - 弱→低音、強→高音で直感的フィードバック */
 function playShapingHit(pow) {
   if      (pow < 0.5) { createNoise(0.1,  100, 'sine',     0.20); }  // コツ未満 → ズン
   else if (pow < 1.2) { createNoise(0.15, 300, 'sine',     0.22);    // コツ（低め・軽い）
@@ -814,13 +911,26 @@ function playShapingHit(pow) {
   else                { createNoise(0.30, 1100,'square',   0.40);    // キン（高い・鋭い）
                         createNoise(0.08, 350, 'sawtooth', 0.20); }
 }
+
+/* シーン遷移音
+   - 音を順番に鳴らして変化を演出 */
 function playTransition() {
   [200, 300, 400, 600].forEach((f, i) => {
     setTimeout(() => createNoise(0.2, f, 'sine', 0.25), i * 60);
   });
 }
+
+/* 完了音
+   - 上昇音で達成感を演出 */
+function playComplete() {
+  [300, 500, 700, 1000].forEach((f, i) => {
+    setTimeout(() => createNoise(0.3, f, 'sine', 0.3), i * 100);
+  });
+}
+
+/* 研磨成功音
+   - ホワイトノイズ＋フィルタで「シャーッ」という摩擦音 */
 function playSharpenGood() {
-  // シャーッという摩擦音：ホワイトノイズをバンドパスフィルタで整形
   const bufSize  = audioCtx.sampleRate * 0.12;
   const buf      = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
   const data     = buf.getChannelData(0);
@@ -839,35 +949,31 @@ function playSharpenGood() {
   gain.connect(audioCtx.destination);
   src.start(audioCtx.currentTime);
 }
+
+/* 研磨失敗音
+   - 弱くザラついた音 */
 function playSharpenBad() {
   createNoise(0.08, 150, 'sawtooth', 0.12);
 }
-function playComplete() {
-  [300, 500, 700, 1000].forEach((f, i) => {
-    setTimeout(() => createNoise(0.3, f, 'sine', 0.3), i * 100);
-  });
-}
+
+/* 最終スコア音
+   - 低音＋高音＋倍音で「和風の余韻」を表現
+   - 徐々に重ねて広がる音 */
 function playFinalScore() {
   const now = audioCtx.currentTime;
-
-  // 低めの芯（ドン）
   createNoise(0.4, 180, 'sine', 0.25);
-
-  // メインの澄んだ音（キーン）
   setTimeout(() => {
     createNoise(1.2, 880, 'sine', 0.25);
   }, 80);
-
-  // 倍音（和っぽさのキモ）
   setTimeout(() => {
     createNoise(1.0, 1320, 'sine', 0.18);
   }, 120);
-
-  // さらに高音の余韻
   setTimeout(() => {
     createNoise(0.8, 1760, 'sine', 0.12);
   }, 160);
 }
+
+/* 再生許可の初期化 */
 function resumeAudio() {
   if (audioCtx.state === 'suspended') audioCtx.resume();
 }
@@ -875,27 +981,42 @@ document.addEventListener('click', resumeAudio, { once: true });
 document.addEventListener('keydown', resumeAudio, { once: true });
 
 /* ================================================================
-   LIGHTING
+   ライティング（シーンの見た目づくり）
+   - 全体の明るさ＋方向光で立体感を出す
+   - 刃物専用ライトで金属の輝きを強調
+   - 炉の光で雰囲気を演出（炎・赤み）
 ================================================================ */
-// 環境光：明るめに
+/* 環境光（全体を明るく）
+   - 影の暗さを和らげるベースライト */
 scene.add(new THREE.AmbientLight(0x304050, 2.5));
-// メイン光源（右上前方）：影付き
+
+/* メインライト（太陽的な光）
+   - 右上から照らす
+   - 影を作って立体感を出す
+   - 範囲と解像度を制限して軽量化 */
 const sunLight = new THREE.DirectionalLight(0xfff8f0, 2.2);
 sunLight.position.set(2, 6, 2);
 sunLight.castShadow = true;
-sunLight.shadow.mapSize.set(512, 512);  // VR向け：解像度を下げて影コスト削減
+sunLight.shadow.mapSize.set(512, 512);
 sunLight.shadow.camera.near = 0.1;
-sunLight.shadow.camera.far = 8;   // 体験範囲に限定
+sunLight.shadow.camera.far = 8;
 scene.add(sunLight);
-// 刃物専用：作業台真上からの強いライト（金属の輝きを強調）
+
+/* 刃物専用ライト
+   - 真上から当ててハイライトを強調 */
 const bladeTopLight = new THREE.DirectionalLight(0xe8f0ff, 1.8);
 bladeTopLight.position.set(0, 4, -1);
 scene.add(bladeTopLight);
-// フィルライト（左側から補助）
+
+/* フィルライト（補助）
+   - 逆側から弱く当てて影を潰す */
 const fillLight = new THREE.DirectionalLight(0xb0c8e0, 1.0);
 fillLight.position.set(-3, 2, -1);
 scene.add(fillLight);
 
+/* 炉の光（炎）
+   - オレンジの点光源で雰囲気演出
+   - 明るさは後で変化させる前提 */
 const forgeLight = new THREE.PointLight(0xff4400, 0, 3);
 forgeLight.position.set(-1.2, 1.0, -1.5);
 scene.add(forgeLight);
@@ -904,20 +1025,31 @@ emberLight.position.set(-1.2, 0.9, -1.5);
 scene.add(emberLight);
 
 /* ================================================================
-   XR RIG & CONTROLLERS
+   XRリグ＆コントローラ
+   - VRコントローラの取得・管理
+   - 左右の手を識別
+   - トリガー入力でゲーム操作
+   - レーザーポインタ表示
 ================================================================ */
+/* XRリグ（プレイヤーの基準）
+   - カメラやコントローラをまとめる親オブジェクト */
 const xrRig = new THREE.Group();
 scene.add(xrRig);
 
+/* コントローラ見た目
+   - 実際のコントローラの3Dモデルを表示 */
 const ctrlModelFactory = new XRControllerModelFactory();
 const grip0 = renderer.xr.getControllerGrip(0);
 const grip1 = renderer.xr.getControllerGrip(1);
 grip0.add(ctrlModelFactory.createControllerModel(grip0));
 grip1.add(ctrlModelFactory.createControllerModel(grip1));
 
+/* コントローラ入力
+   - ボタンやトリガーの入力取得用 */
 const ctrl0 = renderer.xr.getController(0);
 const ctrl1 = renderer.xr.getController(1);
 
+/* VR開始時処理 */
 renderer.xr.addEventListener('sessionstart', () => {
   [ctrl0, ctrl1, grip0, grip1].forEach(obj => {
     if (obj.parent !== xrRig) {
@@ -930,6 +1062,8 @@ renderer.xr.addEventListener('sessionstart', () => {
 let rightController = null;
 let leftController  = null;
 
+/* 左右コントローラ管理
+   - 接続時に右手/左手を判定 */
 function onControllerConnected(event) {
   const ctrl = event.target;
   const hand = event.data.handedness;
@@ -946,8 +1080,10 @@ ctrl0.addEventListener('disconnected', onControllerDisconnected);
 ctrl1.addEventListener('connected', onControllerConnected);
 ctrl1.addEventListener('disconnected', onControllerDisconnected);
 
-// selectstart = トリガー押下イベント（gamepad polling の補完）
-// VRではgamepadのpollingが遅れる場合があるため、イベントベースでも補足
+/* トリガー操作
+   - selectstart：押した瞬間
+   - selectend：離した瞬間
+   - 状態に応じて次フェーズへ */
 ctrl0.addEventListener('selectstart', () => {
   // INTRO/RESULTでトリガーを引いたら次フェーズへ（A代わり）
   if (isIntroState(currentState) || currentState === State.RESULT) {
@@ -962,12 +1098,15 @@ ctrl1.addEventListener('selectstart', () => {
 ctrl0.addEventListener('selectend', () => { wasAPressed = false; });
 ctrl1.addEventListener('selectend', () => { wasAPressed = false; });
 
-// Controller velocity tracking
+/* コントローラ速度
+   - 前フレームとの差から速度を計算
+   - 打撃の強さ判定に使用 */
 const prevRightPos = new THREE.Vector3();
 const currRightPos = new THREE.Vector3();
 let rightVelocity = 0;
 
-// Laser pointers
+/* レーザーポインタ
+   - 前方に線を出してUI操作や位置確認 */
 function addLaser(ctrl) {
   const geo = new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-1)
@@ -2634,7 +2773,7 @@ function handleGlobalInput() {
         // 結果表示
         updateInfoPanel(
           `鍛造結果
-  歪み: ${Math.round(shapeDistortion)}
+  強化度（鍛造）: ${Math.round(shapeDistortion)}
 
   Aボタン：次へ`,
           isEarly ? '① 鍛造（途中終了）' : '① 鍛造完了'
@@ -2660,7 +2799,7 @@ function handleGlobalInput() {
         );
         updateInfoPanel(
           `成形結果
-  スコア: ${Math.round(_phaseScores.shaping)}pt
+  均一度（成形）: ${Math.round(_phaseScores.shaping)}pt
 
   Aボタン：次へ`,
           isEarly ? '② 成形（途中終了）' : '② 成形完了'
@@ -2683,7 +2822,7 @@ function handleGlobalInput() {
         _phaseScores.sharpening = Math.min(100, Math.round(totalSharpness));
         updateInfoPanel(
           `研ぎ結果
-  ポイント: ${_phaseScores.sharpening}pt
+  鋭利度（研ぎ）: ${_phaseScores.sharpening}pt
 
   Aボタン：次へ`,
           isEarly ? '③ 研ぎ（途中終了）' : '③ 研ぎ完了'
