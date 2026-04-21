@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -3089,6 +3089,139 @@ function vibrate() {
 }
 
 /* ================================================================
+   GLOBAL INPUT HANDLER（全体入力管理）
+================================================================ */
+/* 状態管理用の変数
+  - 結果表示中かどうか
+  - スコア計算用（成形） */
+let showingPhaseResult = true;
+let _sq0c;
+let _sqc;
+
+/* 入力ロック処理
+  - 一定時間ボタン操作を無効化 */
+function lockInputFor(seconds) {
+  _inputLocked = true;
+  setTimeout(() => {
+    _inputLocked = false;
+  }, seconds * 1000);
+}
+
+/* メイン入力処理
+  - Aボタン：進行・結果表示
+  - Bボタン：リトライ */
+function handleGlobalInput() {
+  const aPressed = getAButton();
+  const bPressed = getBButton();
+
+  const _nowIsGame = (currentState === State.FORGING || currentState === State.SHAPING || currentState === State.SHARPENING);
+
+  /* Aボタン処理
+    - 状態に応じて分岐 */
+  if (aPressed && !wasAPressed && !_inputLocked) {
+
+    /* 結果表示中
+      - 次のフェーズへ進む */
+    if (showingPhaseResult) {
+      showingPhaseResult = false;
+      fadeToNext(1.0);
+      wasAPressed = aPressed;
+      return;
+    }
+
+    /* INTRO
+      - スライドを次へ */
+    if (isIntroState(currentState)) {
+      if (_fadeDir === 0) {
+        fadeToNext(1.0);
+      }
+    }
+
+    /* RESULT
+      - 最初に戻る（リセット） */
+    else if (currentState === State.RESULT) {
+      playFadeSound();
+      startFade(-1, 3.0, () => {
+        nextState(); // INTRO_0へ
+        startFade(1, 3.0, null);
+      });
+    }
+
+    /* 鍛造フェーズ
+      - 途中でも終了可能
+      - スコア確定→結果表示 */
+    else if (currentState === State.FORGING) {
+      const isEarly = !forgingComplete;
+      // スコア確定
+      if (isEarly) {
+        _phaseScores.forging = Math.round(
+          Math.max(0, Math.min(100, 100 - shapeDistortion))
+        );
+        // 結果表示
+        updateInfoPanel(
+          `鍛造結果
+  強化度（鍛造）: ${Math.round(shapeDistortion)}
+
+  Aボタン：次へ`,
+          isEarly ? '① 鍛造（途中終了）' : '① 鍛造完了'
+        );
+
+        playComplete();
+        showingPhaseResult = true;
+        lockInputFor(1);
+      }
+
+    }
+
+    /* 成形フェーズ
+      - 歪みからスコア計算
+      - 途中終了でも確定 */
+    else if (currentState === State.SHAPING) {
+      const isEarly = !shapingComplete;
+      if (isEarly) {
+        _sq0c = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
+        _sqc  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
+        _phaseScores.shaping = Math.round(
+          Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0))
+        );
+        updateInfoPanel(
+          `成形結果
+  均一度（成形）: ${Math.round(_phaseScores.shaping)}pt
+
+  Aボタン：次へ`,
+          isEarly ? '② 成形（途中終了）' : '② 成形完了'
+        );
+
+        playComplete();
+        showingPhaseResult = true;
+        lockInputFor(1);
+      }
+
+
+    }
+
+    /* 研ぎフェーズ
+      - 現在のポイントをそのまま確定 */
+    else if (currentState === State.SHARPENING) {
+      if (!sharpenComplete) {
+        finishSharpening(false); // 途中終了
+        lockInputFor(1);
+      }
+    }
+  }
+  wasAPressed = aPressed;
+
+  /* Bボタン処理
+    - 現在フェーズをリトライ */
+  if (bPressed && !wasBPressed && !_inputLocked && _nowIsGame) {
+    showingPhaseResult = false;
+    retryState();
+  }
+
+  wasBPressed = bPressed;
+}
+
+/* ================================================================
    UPDATE FORGING（鍛造の更新処理）
    - 鉄の操作・加熱・打撃判定を毎フレーム更新
 ================================================================ */
@@ -3633,141 +3766,6 @@ Aボタン：次へ`,
   playComplete();
   showingPhaseResult = true;
 }
-
-
-/* ================================================================
-   GLOBAL INPUT HANDLER（全体入力管理）
-================================================================ */
-/* 状態管理用の変数
-  - 結果表示中かどうか
-  - スコア計算用（成形） */
-let showingPhaseResult = true;
-let _sq0c;
-let _sqc;
-
-/* 入力ロック処理
-  - 一定時間ボタン操作を無効化 */
-function lockInputFor(seconds) {
-  _inputLocked = true;
-  setTimeout(() => {
-    _inputLocked = false;
-  }, seconds * 1000);
-}
-
-/* メイン入力処理
-  - Aボタン：進行・結果表示
-  - Bボタン：リトライ */
-function handleGlobalInput() {
-  const aPressed = getAButton();
-  const bPressed = getBButton();
-
-  const _nowIsGame = (currentState === State.FORGING || currentState === State.SHAPING || currentState === State.SHARPENING);
-
-  /* Aボタン処理
-    - 状態に応じて分岐 */
-  if (aPressed && !wasAPressed && !_inputLocked) {
-
-    /* 結果表示中
-      - 次のフェーズへ進む */
-    if (showingPhaseResult) {
-      showingPhaseResult = false;
-      fadeToNext(1.0);
-      wasAPressed = aPressed;
-      return;
-    }
-
-    /* INTRO
-      - スライドを次へ */
-    if (isIntroState(currentState)) {
-      if (_fadeDir === 0) {
-        fadeToNext(1.0);
-      }
-    }
-
-    /* RESULT
-      - 最初に戻る（リセット） */
-    else if (currentState === State.RESULT) {
-      playFadeSound();
-      startFade(-1, 3.0, () => {
-        nextState(); // INTRO_0へ
-        startFade(1, 3.0, null);
-      });
-    }
-
-    /* 鍛造フェーズ
-      - 途中でも終了可能
-      - スコア確定→結果表示 */
-    else if (currentState === State.FORGING) {
-      const isEarly = !forgingComplete;
-      // スコア確定
-      if (isEarly) {
-        _phaseScores.forging = Math.round(
-          Math.max(0, Math.min(100, 100 - shapeDistortion))
-        );
-        // 結果表示
-        updateInfoPanel(
-          `鍛造結果
-  強化度（鍛造）: ${Math.round(shapeDistortion)}
-
-  Aボタン：次へ`,
-          isEarly ? '① 鍛造（途中終了）' : '① 鍛造完了'
-        );
-
-        playComplete();
-        showingPhaseResult = true;
-        lockInputFor(1);
-      }
-
-    }
-
-    /* 成形フェーズ
-      - 歪みからスコア計算
-      - 途中終了でも確定 */
-    else if (currentState === State.SHAPING) {
-      const isEarly = !shapingComplete;
-      if (isEarly) {
-        _sq0c = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
-        _sqc  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
-        _phaseScores.shaping = Math.round(
-          Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0))
-        );
-        updateInfoPanel(
-          `成形結果
-  均一度（成形）: ${Math.round(_phaseScores.shaping)}pt
-
-  Aボタン：次へ`,
-          isEarly ? '② 成形（途中終了）' : '② 成形完了'
-        );
-
-        playComplete();
-        showingPhaseResult = true;
-        lockInputFor(1);
-      }
-
-
-    }
-
-    /* 研ぎフェーズ
-      - 現在のポイントをそのまま確定 */
-    else if (currentState === State.SHARPENING) {
-      if (!sharpenComplete) {
-        finishSharpening(false); // 途中終了
-        lockInputFor(1);
-      }
-    }
-  }
-  wasAPressed = aPressed;
-
-  /* Bボタン処理
-    - 現在フェーズをリトライ */
-  if (bPressed && !wasBPressed && !_inputLocked && _nowIsGame) {
-    showingPhaseResult = false;
-    retryState();
-  }
-
-  wasBPressed = bPressed;
-}
-
 
 /* ================================================================
    INTRO VISUALS
