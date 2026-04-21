@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -3035,6 +3035,9 @@ A: Next Phase`
 
 };
 
+/* setVisibility
+   - 現在のフェーズに応じて表示/非表示を切り替える
+   - 不要なUIを隠し、必要なものだけ表示する */
 function setVisibility() {
   const isIntro = isIntroState(currentState);
   groupForging.visible    = currentState === State.FORGING;
@@ -3046,9 +3049,11 @@ function setVisibility() {
   angleHudMesh.visible    = currentState === State.SHARPENING;
   // フェーズ移行時にスコアパネルをクリア
   updateScorePanel(null);
-  // パネルはonEnterStateでactivateCvPanelにより更新される
 }
 
+/* retryState
+   - 現在のフェーズをやり直す
+   - 状態をリセットして再スタートする */
 function retryState() {
   playTransition();
   updateScorePanel(null);
@@ -3064,6 +3069,9 @@ function retryState() {
   onEnterState(currentState, prev);
 }
 
+/* vibrate
+   - コントローラーを振動させる
+   - 一定間隔で複数回フィードバックを与える */
 function vibrate() {
   const lGp = getLeftGamepad();
   const rGp = getRightGamepad();
