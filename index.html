@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ori越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -374,27 +374,35 @@ import * as THREE from 'three';
 import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
 
 /* ================================================================
-   CONSTANTS & CONFIG
+ゲーム設定（バランス調整用）
+  - フェーズごとの難易度・判定基準・報酬量を定義
+  - 数値を変えるだけでゲーム性を調整できる
 ================================================================ */
 const CONFIG = {
+  /* 鍛造フェーズ設定
+     - 叩く回数・速度判定・温度変化・スパーク量を管理 */
   FORGING: {
     TOTAL_HITS: 30,
     VELOCITY_THRESHOLD: 0.8,
-    FORGE_HEAT_RATE: 12.5,     // per second in furnace（加熱2倍ゆっくり）
-    COOL_RATE: 4,              // per second in air
+    FORGE_HEAT_RATE: 10.0,
+    COOL_RATE: 4.0,
     HOT_THRESHOLD: 60,
     MISS_THRESHOLD: 30,
     SPARK_COUNT_PERFECT: 80,
     SPARK_COUNT_GOOD: 40,
     SPARK_COUNT_MISS: 5,
   },
+  /* 成形フェーズ設定
+     - 歪み補正・ヒット強度・ゾーン数を管理 */
   SHAPING: {
     MAX_HITS: 50,
     ZONE_COUNT: 5,
     HIT_POWER_SCALE: 0.08,
     SMALL_PENALTY: 0.3,
-    VELOCITY_THRESHOLD: 0.25,  // 半分の遅さでも判定
+    VELOCITY_THRESHOLD: 0.25,
   },
+  /* 研磨フェーズ設定
+     - ストローク数・角度判定・精度を管理 */
   SHARPENING: {
     TOTAL_STROKES: 30,
     STROKE_THRESHOLD: 0.04,
@@ -404,87 +412,107 @@ const CONFIG = {
 };
 
 /* ================================================================
-   STATE MACHINE
+状態管理
+   - 現在のフェーズを文字列で管理
+   - INTRO → 鍛造 → 成形 → 研磨 → 結果 の流れ
 ================================================================ */
 const State = {
-  INTRO_0: 'INTRO_0',   // タイトル演出（越前打刃物）
-  INTRO_1: 'INTRO_1',   // 歴史
-  INTRO_2: 'INTRO_2',   // 特徴（二枚広げ）
-  INTRO_3: 'INTRO_3',   // 製造工程
-  INTRO_4: 'INTRO_4',   // 体験内容
+  INTRO_0: 'INTRO_0',
+  INTRO_1: 'INTRO_1',
+  INTRO_2: 'INTRO_2',
+  INTRO_3: 'INTRO_3',
+  INTRO_4: 'INTRO_4',
   FORGING: 'FORGING',
   SHAPING: 'SHAPING',
   SHARPENING: 'SHARPENING',
   RESULT: 'RESULT',
 };
 const INTRO_STATES = ['INTRO_0','INTRO_1','INTRO_2','INTRO_3','INTRO_4'];
+/* Intro判定
+   - 現在がイントロ中かどうかを簡単に判定 */
 function isIntroState(s) { return INTRO_STATES.includes(s); }
+/* 現在状態
+   - ゲーム進行の中心となる変数 */
 let currentState = State.INTRO_0;
-
+/* 刃の状態
+   - 歪み・左右差・鋭さを保持 */
 let bladeState = { shapeDistortion: 0, symmetryError: 0, sharpness: 0 };
-// フェーズ確定スコア（終了時に保存、最終結果でそのまま使用）
+/* フェーズ別スコア */
 const _phaseScores = { forging: 0, shaping: 0, sharpening: 0 };
 
 /* ================================================================
-   FADE & TRANSITION SYSTEM
+フェード制御
+  - 画面の暗転・明転を管理
+  - 入力ロックとコールバックで安全に遷移
 ================================================================ */
-let _fadeOpacity     = 1.0;   // 現在の透明度（0=透明, 1=不透明）
-let _fadeDir         = 0;     // +1=フェードイン, -1=フェードアウト, 0=静止
-let _fadeDuration    = 1.0;   // 秒
+let _fadeOpacity     = 1.0;
+let _fadeDir         = 0;
+let _fadeDuration    = 1.0;
 let _fadeElapsed     = 0.0;
-let _fadeCallback    = null;  // フェードアウト完了時コールバック
-let _inputLocked     = false; // フェード中は入力無効
+let _fadeCallback    = null;
+let _inputLocked     = false; 
 
-// intro_0 スケールアニメーション
-// フェードオーバーレイ（Three.js 全画面Planeを使用）
+/* フェード用黒板
+   - カメラ前に配置して画面全体を覆う
+   - renderOrderで最前面に固定 */
 const _fadeGeo = new THREE.PlaneGeometry(100, 100);
 const _fadeMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, depthTest: false, depthWrite: false });
 const _fadePlane = new THREE.Mesh(_fadeGeo, _fadeMat);
 _fadePlane.renderOrder = 999;
 _fadePlane.position.set(0, 0, -0.5);
-// camera.add は camera 定義後に行う（下の THREE.JS CORE セクションで実行）
-
 
 /* ================================================================
-   PERFORMANCE TOGGLE FLAGS
+パフォーマンス設定
+  - 描画負荷を調整するためのスイッチ
 ================================================================ */
 const PerfToggles = {
-  useCanvasParticles:       true,  // Canvas2D パーティクル ON/OFF
-  useCanvasTransferThrottle: false, // GPU転送 間引き（3フレームに1回）
-  useInstanceThrottle:       false, // InstancedMesh 間引き（2フレームに1回）
+  useCanvasParticles:        true,
+  useCanvasTransferThrottle: false,
+  useInstanceThrottle:       false,
 };
-// 内部カウンター
+
+/* フレームカウンター
+   - 間引き制御に使用 */
 let _cvTransferFrameCount = 0;
 let _instThrottleFrame    = 0;
 
 /* ================================================================
-   CANVAS PARTICLE SYSTEM（intro + 体験中共用）
-   - 下→上へゆっくり上昇、上端でフェードアウト、下部で再生成
-   - パーリン風ごく小さい左右揺れ（"漂う"程度）
-   - VR / AR 共通
-================================================================ */
+   CANVASパーティクルシステム（背景演出）
+   - 粒子が下→上へゆっくり流れる（火の粉・煙のような動き）
+   - 上端または寿命で消え、下から再生成される
+   - intro / game / result で見た目と粒子数を切り替え
+   - Canvasに描画 → テクスチャとして反映
+   - 関数の役割
+     - activateCvPanel：開始
+     - updateCvPanel：毎フレーム処理（本体）
+     - _tickParticles：動き計算
+     - _drawParticles：見た目描画
+     - _spawnPt：粒子生成
 
-// パーリン風スムーズノイズ（収束しない非整数比）
+================================================================ */
+/* スムーズノイズ生成
+   - sinを組み合わせて「自然なゆらぎ」を作る
+   - 粒子の左右のふわふわ動きに使用 */
 function _ptSmooth(t, f, ph) {
   return Math.sin(t * f + ph) * 0.6 + Math.sin(t * f * 1.618 + ph * 1.37) * 0.4;
 }
 
-// パーティクル生成ヘルパー（新規 or 再生成時に呼ぶ）
+/* 粒子を1つ生成
+   - 位置・速度・大きさ・色・寿命をランダム設定
+   - 画面下側から自然に湧くように調整 */
 function _spawnPt(existingY) {
-  // X分布: 中央寄り＋端に溜まらない工夫
-  // 中央(0.5)からgauss分布で生成し、端(0〜0.08 / 0.92〜1)は確率を大幅に下げる
   let x;
   for (let attempt = 0; attempt < 8; attempt++) {
     const gx = (Math.random()+Math.random()+Math.random()+Math.random()-2) * 0.32;
     x = 0.5 + gx;
-    if (x >= -0.2 && x <= 1.2) break; // 端回避 (条件さらに緩和)
+    if (x >= -0.2 && x <= 1.2) break;
   }
   x = Math.max(0.04, Math.min(0.96, x));
 
   return {
     x,
     y:   (existingY !== undefined) ? existingY : Math.random(),
-    vy:  0.00025 + Math.random() * 0.00045,  // 速度2倍（元: 0.00012〜0.00034）
+    vy:  0.00025 + Math.random() * 0.00045,
     r:   0.8 + Math.random() * 1.8,
     f1:  0.18 + Math.random() * 0.10,
     f2:  0.11 + Math.random() * 0.07,
@@ -492,29 +520,35 @@ function _spawnPt(existingY) {
     ph2: Math.random() * 6.28,
     t:   Math.random() * 40,
     age:    0,
-    maxAge: 14.0 + Math.random() * 20.0,     // さらに2倍（14〜34秒）
+    maxAge: 14.0 + Math.random() * 20.0,
     col:  Math.random() < 0.07 ? 'w' : (Math.random() < 0.45 ? 'o' : 'r'),
   };
 }
 
-// ── 粒子配列（用途ごとに独立・サイズ明確化）────────────────────
+/* 粒子配列（シーン別）
+   - intro: 多めで演出強め
+   - game: 軽め（パフォーマンス重視）
+   - result: 控えめ */
 const PARTICLE_BASE        = 160;
-const PARTICLE_COUNT_INTRO = PARTICLE_BASE * 3;   // intro系: 480個
-const PARTICLE_COUNT_GAME  = Math.round(PARTICLE_BASE * 1.1); // 体験中: ~176個（VR負荷削減）
-const PARTICLE_COUNT_RESULT = 100;                // 結果パネル
+const PARTICLE_COUNT_INTRO = PARTICLE_BASE * 3;
+const PARTICLE_COUNT_GAME  = Math.round(PARTICLE_BASE * 1.1);
+const PARTICLE_COUNT_RESULT = 100;
 const _cvPtsIntro  = Array.from({ length: PARTICLE_COUNT_INTRO  }, () => _spawnPt());
 const _cvPtsGame   = Array.from({ length: PARTICLE_COUNT_GAME   }, () => _spawnPt());
 const _cvPtsResult = Array.from({ length: PARTICLE_COUNT_RESULT }, () => _spawnPt());
 
-// ── 現在アクティブなパネルのCanvas/Tex（毎フレーム再描画） ──────
-let _cvPtCanvas      = null;  // 共用オフスクリーンCanvas
-let _cvPtTex         = null;  // 共用CanvasTexture
-let _cvPanelMode     = null;  // 'intro0' | 'intro' | 'game' | 'result'
-let _cvPanelPts      = null;  // 現在使う粒子配列
-let _cvPanelBright   = 1.0;   // 明るさ係数
-let _cvPanelExtraFn  = null;  // 背景グラデ後に呼ぶ追加描画関数（テキスト等）
+/* 現在のCanvasパネル状態
+   - 描画対象・モード・粒子・明るさなどを保持 */
+let _cvPtCanvas      = null;
+let _cvPtTex         = null;
+let _cvPanelMode     = null;
+let _cvPanelPts      = null;
+let _cvPanelBright   = 1.0;
+let _cvPanelExtraFn  = null;
 
-// ── 背景描画：モード別 ──────────────────────────────────────────
+/* 背景描画（モード別）
+   - game: ほぼ黒（集中）
+   - intro/result: 赤黒グラデーション（雰囲気重視） */
 function _drawPanelBg(ctx, W, H, mode) {
   if (mode === 'game') {
     // 体験中：ほぼ完全な黒
@@ -529,7 +563,7 @@ function _drawPanelBg(ctx, W, H, mode) {
     bg.addColorStop(1.0, '#0c0202');
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
-    // 放射状グラデーション（下中央から赤みのにじみ）
+    // 放射状グラデーション
     const rg = ctx.createRadialGradient(W*0.5, H*0.9, 0, W*0.5, H*0.5, W*0.5);
     rg.addColorStop(0,   'rgba(100,8,4,0.30)');
     rg.addColorStop(0.5, 'rgba(60,4,2,0.12)');
@@ -539,14 +573,18 @@ function _drawPanelBg(ctx, W, H, mode) {
   }
 }
 
-// ── メイン更新関数：animationLoopから毎フレーム呼ぶ ────────────
+/* パネル更新（毎フレーム）
+   - 背景描画
+   - 粒子の更新＆描画
+   - テキストなど追加描画
+   - 必要に応じてGPUへ転送 */
 function updateCvPanel(delta) {
   if (!_cvPtCanvas || !_cvPanelPts) return;
   const W   = _cvPtCanvas.width, H = _cvPtCanvas.height;
   if (!_cvPtCanvas._ctx2d) _cvPtCanvas._ctx2d = _cvPtCanvas.getContext('2d');
   const ctx = _cvPtCanvas._ctx2d;
 
-  // 背景は常に描画（パーティクルOFF時も背景を描いてCanvasを初期化する）
+  // 背景は常に描画
   _drawPanelBg(ctx, W, H, _cvPanelMode);
 
   // [Toggle 1] useCanvasParticles: パーティクルtick/draw
@@ -554,7 +592,7 @@ function updateCvPanel(delta) {
     _tickParticles(_cvPanelPts, delta);
     _drawParticles(ctx, _cvPanelPts, W, H, _cvPanelBright);
   }
-  // OFF時: パーティクル非描画。背景描画でキャンバスはクリア済み。
+  // OFF時: パーティクル非描画。背景描画でキャンバスはクリア。
 
   // テキスト等の追加描画は常に実行（パーティクルOFF時もテキストを必ず表示）
   if (_cvPanelExtraFn) _cvPanelExtraFn(ctx, W, H);
@@ -571,7 +609,8 @@ function updateCvPanel(delta) {
   if (_cvPtTex) _cvPtTex.needsUpdate = true;
 }
 
-// ── パネル起動：モードと描画関数を設定 ────────────────────────
+/* パネル開始
+   - Canvas・粒子・モードなどをセット */
 function activateCvPanel(canvas, tex, mode, pts, bright, extraFn) {
   _cvPtCanvas    = canvas;
   _cvPtTex       = tex;
@@ -580,30 +619,36 @@ function activateCvPanel(canvas, tex, mode, pts, bright, extraFn) {
   _cvPanelBright = bright;
   _cvPanelExtraFn = extraFn || null;
 }
+
+/* パネル停止
+   - 参照をリセットして描画停止 */
 function deactivateCvPanel() {
   _cvPtCanvas = null; _cvPtTex = null;
   _cvPanelMode = null; _cvPanelPts = null;
 }
 
-// ── tick: 毎フレームdelta駆動で粒子状態を更新 ──────────────────
-// 方針: 可視領域 0.0〜1.0、更新領域 -0.1〜1.1（外側で張り付かせて見せない）
+/* 粒子の状態更新（毎フレーム）
+   - ゆらゆら横移動（ノイズ）
+   - ゆっくり上昇
+   - 端で減速＆中央へ戻る
+   - 上端 or 寿命で再生成 */
 function _tickParticles(particles, delta) {
   for (const p of particles) {
     p.t += delta * 0.22;
-    // パーリン風ごく小さい左右揺れ（黄金比で非周期、漂う程度）
+    // パーリン風ごく小さい左右揺れ
     let vx = (_ptSmooth(p.t, p.f1, p.ph1) * 0.4
             + _ptSmooth(p.t, p.f2, p.ph2) * 0.6) * 0.005 * delta * 60;
-    // 中央へ戻す力（弱く自然に）
+    // 中央へ戻す力
     const centerForce = (0.5 - p.x) * 0.0015;
     vx += centerForce;
-    // 端に近づくほど速度減衰（端でのロック防止）
+    // 端に近づくほど速度減衰
     const edgeDist   = Math.abs(p.x - 0.5);
     const edgeFactor = 1.0 - Math.min(edgeDist * 2.0, 1.0);
     vx *= edgeFactor;
     // 横速度上限
     const maxVX = 0.002;
     vx = Math.max(-maxVX, Math.min(maxVX, vx));
-    // 更新領域は -0.1〜1.1（画面外まで許可、端に張り付かない）
+    // 更新領域は -0.1〜1.1
     p.x = Math.max(-0.1, Math.min(1.1, p.x + vx));
     // 上昇（y=1.0=下端 → y=0.0=上端）
     p.y  -= p.vy * delta * 60;
@@ -617,13 +662,16 @@ function _tickParticles(particles, delta) {
   }
 }
 
-// ── draw: 粒子をCanvasに描画（tick後に呼ぶ）────────────────────
+/* 粒子描画
+   - 寿命と高さでフェードアウト
+   - 小さな円として描画
+   - 色（白・オレンジ・赤）で火の粉っぽさを表現 */
 function _drawParticles(ctx, particles, W, H, brightScale) {
   for (const p of particles) {
-    // 画面外の粒子は描画しない（ロジック上は存在、見えないだけ）
+    // 画面外の粒子は描画しない
     if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0) continue;
     const lifeFrac = p.age / p.maxAge;
-    // 寿命の95%以降でフェードアウト（それ以前は完全不透明）
+    // 寿命の95%以降でフェードアウト
     const fadeStart = 0.95;
     const fadeFrac  = lifeFrac < fadeStart
       ? 1.0
@@ -647,16 +695,32 @@ function _drawParticles(ctx, particles, W, H, brightScale) {
   }
 }
 
-// updateCvParticles / _tickGameParticles → updateCvPanel に統合
-
+/* ================================================================
+   フェード制御システム（画面遷移＋演出）
+   - フェードアウト（暗転）→ 状態遷移 → フェードイン（復帰）
+   - 入力ロックで遷移中の誤操作防止
+   - コールバックで遷移後の処理を差し込み可能
+   - 関数の役割
+     - startFade → フェードを開始する（準備）
+     -  updateFade → フェードを進める（実行）
+     -  fadeToNext → シーン遷移をまとめて実行（演出＋制御）
+================================================================ */
+/* イージング関数
+   - t: 0〜1の進行度
+   - 見た目を滑らかにするための補間関数 */
 function easeInOutQuad(t) { return t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t+2,2)/2; }
 function easeOutCubic(t)  { return 1 - Math.pow(1-t, 3); }
 
+/* フェード開始（初期設定）
+   - dir: -1=フェードアウト / 1=フェードイン
+   - duration: フェード時間
+   - callback: フェード完了時の処理 */
 function startFade(dir, duration, callback) {
   _fadeDir      = dir;
   _fadeDuration = duration;
   _fadeElapsed  = 0;
   _inputLocked  = true;
+
   if (dir === -1) {
     // フェードアウト: 暗くなる
     _fadeOpacity  = 0.0;
@@ -664,18 +728,22 @@ function startFade(dir, duration, callback) {
   } else {
     // フェードイン: 明るくなる
     _fadeOpacity  = 1.0;
-    _fadeCallback = callback; // フェードイン完了時にも呼ぶ
+    _fadeCallback = callback;
   }
   _fadeMat.opacity = _fadeOpacity;
 }
 
+/* フェード更新（アニメーション本体）
+   - delta: 経過時間 */
 function updateFade(delta) {
   if (_fadeDir === 0) return;
+
   _fadeElapsed += delta;
   const t = Math.min(_fadeElapsed / _fadeDuration, 1.0);
   const e = easeInOutQuad(t);
+
   if (_fadeDir === -1) {
-    // フェードアウト：画面が暗くなる（opacity 0→1）
+    // フェードアウト：画面が暗くなる
     _fadeMat.opacity = e;
     if (t >= 1.0) {
       _fadeMat.opacity = 1.0;
@@ -683,20 +751,22 @@ function updateFade(delta) {
       _inputLocked = false;
       if (_fadeCallback) { const cb = _fadeCallback; _fadeCallback = null; cb(); }
     }
+
   } else {
-    // フェードイン：画面が明るくなる（opacity 1→0）
+    // フェードイン：画面が明るくなる
     _fadeMat.opacity = 1.0 - e;
     if (t >= 1.0) {
       _fadeMat.opacity = 0.0;
       _fadeDir = 0;
       _inputLocked = false;
-      // フェードイン完了コールバック（スケールアニメ等）
+      // フェードイン完了コールバック
       if (_fadeCallback) { const cb = _fadeCallback; _fadeCallback = null; cb(); }
     }
   }
 }
 
-// フェード音：低い金属音
+/* フェード音再生
+   - 低い金属音で「場面転換」を演出 */
 function playFadeSound() {
   try {
     resumeAudio();
@@ -714,12 +784,18 @@ function playFadeSound() {
   } catch(e) {}
 }
 
-// INTRO→次のINTROへのフェード遷移
+/* 次の状態へフェード遷移
+   - フェードアウト → 状態変更 → フェードイン */
 function fadeToNext(duration = 1.0) {
+  // 演出① 音
   playFadeSound();
-  // フェードアウト完了 → 次stateに遷移 → フェードイン開始
+
+  // フェードアウト開始
   startFade(-1, duration, () => {
+    // 暗転後に状態遷移
     nextState();
+
+    // ゲーム中は振動
     if (
       currentState === State.FORGING ||
       currentState === State.SHAPING ||
@@ -727,41 +803,71 @@ function fadeToNext(duration = 1.0) {
     ) {
       vibrate();
     }
+
+    // 結果画面ではスコア演出
     if (
       currentState === State.RESULT
     ) {
       playFinalScore();
     }
+
+    // フェードイン開始
     startFade(1, duration, null);
   });
 }
 
 /* ================================================================
-   THREE.JS CORE
+   THREE.js 基本セットアップ（描画の土台）
+   - シーン・カメラ・レンダラーを初期化
+   - 背景色・霧で雰囲気を作る
+   - フェード用オーバーレイをカメラに追加
+   - リサイズ時に表示を自動調整
 ================================================================ */
+/* シーン（空間の定義）
+   - 背景色と霧で全体の雰囲気を作る
+   - Colorは再利用してGC負荷を減らす */
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0705);
 scene.fog = new THREE.FogExp2(0x0a0705, 0.04);
-// 毎フレームのColor生成を避けるため事前定義（ループ内で再利用）
+
+// 事前生成カラー（毎フレーム使い回し）
 const _bgColorIntro = new THREE.Color(0x0d0404);
 const _bgColorGame  = new THREE.Color(0x080808);
 
+/* カメラ（視点）
+   - プレイヤーの目の位置
+   - フェード用の黒い板を子要素として追加 */
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
 camera.position.set(0, 1.6, 0);
-// フェードオーバーレイをカメラに追加（camera定義直後）
+
+// フェードオーバーレイ（常に画面手前に表示）
 camera.add(_fadePlane);
 scene.add(camera);
 
+/* レンダラー（描画エンジン）
+   - 画面サイズ・解像度設定
+   - VR対応
+   - 影・トーンマッピングで見た目調整 */
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // VR向け：過剰なsupersampling防止
-renderer.xr.enabled = true;
+
+// 解像度制限（パフォーマンス対策）
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.xr.enabled = true; // VR対応
+
+// 影設定
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+// 明るさと色味の調整
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.9;
+
+// DOMに追加
 document.getElementById('canvas-container').prepend(renderer.domElement);
 
+/* 画面サイズ変更対応
+   - ウィンドウサイズに合わせてカメラと描画を更新 */
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -769,10 +875,16 @@ window.addEventListener('resize', () => {
 });
 
 /* ================================================================
-   AUDIO ENGINE
+   AUDIOエンジン（効果音生成）
+   - WebAudioでリアルタイムに効果音を生成
+   - ノイズ＋波形＋フィルタで金属音や摩擦音を表現
+   - 各アクションに対応した音を関数で分離
 ================================================================ */
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
+/* 音の生成ユーティリティ
+   - Oscillator（波形）＋Filter（音色）＋Gain（音量）で音を作る
+   - 短時間で減衰させて「効果音」にする */
 function createNoise(duration = 0.1, freq = 200, type = 'sawtooth', gain = 0.3) {
   const osc = audioCtx.createOscillator();
   const gainNode = audioCtx.createGain();
@@ -791,6 +903,10 @@ function createNoise(duration = 0.1, freq = 200, type = 'sawtooth', gain = 0.3) 
   osc.stop(audioCtx.currentTime + duration);
 }
 
+/* ハンマー音（精度別）
+   - Perfect：高音＋低音で気持ちいい金属音
+   - Good：やや控えめ
+   - Miss：弱く鈍い音 */
 function playHammerPerfect() {
   createNoise(0.3, 800, 'square', 0.4);
   createNoise(0.15, 200, 'sawtooth', 0.5);
@@ -802,7 +918,11 @@ function playHammerGood() {
 function playHammerMiss() {
   createNoise(0.1, 100, 'sine', 0.2);
 }
-// SHAPING専用: pow値（歪み変化量）に応じた段階音フィードバック
+
+
+/* 成形ヒット音（強さ依存）
+   - pow（力の強さ）に応じて音を変化
+   - 弱→低音、強→高音で直感的フィードバック */
 function playShapingHit(pow) {
   if      (pow < 0.5) { createNoise(0.1,  100, 'sine',     0.20); }  // コツ未満 → ズン
   else if (pow < 1.2) { createNoise(0.15, 300, 'sine',     0.22);    // コツ（低め・軽い）
@@ -814,13 +934,26 @@ function playShapingHit(pow) {
   else                { createNoise(0.30, 1100,'square',   0.40);    // キン（高い・鋭い）
                         createNoise(0.08, 350, 'sawtooth', 0.20); }
 }
+
+/* シーン遷移音
+   - 音を順番に鳴らして変化を演出 */
 function playTransition() {
   [200, 300, 400, 600].forEach((f, i) => {
     setTimeout(() => createNoise(0.2, f, 'sine', 0.25), i * 60);
   });
 }
+
+/* 完了音
+   - 上昇音で達成感を演出 */
+function playComplete() {
+  [300, 500, 700, 1000].forEach((f, i) => {
+    setTimeout(() => createNoise(0.3, f, 'sine', 0.3), i * 100);
+  });
+}
+
+/* 研磨成功音
+   - ホワイトノイズ＋フィルタで「シャーッ」という摩擦音 */
 function playSharpenGood() {
-  // シャーッという摩擦音：ホワイトノイズをバンドパスフィルタで整形
   const bufSize  = audioCtx.sampleRate * 0.12;
   const buf      = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
   const data     = buf.getChannelData(0);
@@ -839,35 +972,31 @@ function playSharpenGood() {
   gain.connect(audioCtx.destination);
   src.start(audioCtx.currentTime);
 }
+
+/* 研磨失敗音
+   - 弱くザラついた音 */
 function playSharpenBad() {
   createNoise(0.08, 150, 'sawtooth', 0.12);
 }
-function playComplete() {
-  [300, 500, 700, 1000].forEach((f, i) => {
-    setTimeout(() => createNoise(0.3, f, 'sine', 0.3), i * 100);
-  });
-}
+
+/* 最終スコア音
+   - 低音＋高音＋倍音で「和風の余韻」を表現
+   - 徐々に重ねて広がる音 */
 function playFinalScore() {
   const now = audioCtx.currentTime;
-
-  // 低めの芯（ドン）
   createNoise(0.4, 180, 'sine', 0.25);
-
-  // メインの澄んだ音（キーン）
   setTimeout(() => {
     createNoise(1.2, 880, 'sine', 0.25);
   }, 80);
-
-  // 倍音（和っぽさのキモ）
   setTimeout(() => {
     createNoise(1.0, 1320, 'sine', 0.18);
   }, 120);
-
-  // さらに高音の余韻
   setTimeout(() => {
     createNoise(0.8, 1760, 'sine', 0.12);
   }, 160);
 }
+
+/* 再生許可の初期化 */
 function resumeAudio() {
   if (audioCtx.state === 'suspended') audioCtx.resume();
 }
@@ -875,27 +1004,42 @@ document.addEventListener('click', resumeAudio, { once: true });
 document.addEventListener('keydown', resumeAudio, { once: true });
 
 /* ================================================================
-   LIGHTING
+   ライティング（シーンの見た目づくり）
+   - 全体の明るさ＋方向光で立体感を出す
+   - 刃物専用ライトで金属の輝きを強調
+   - 炉の光で雰囲気を演出（炎・赤み）
 ================================================================ */
-// 環境光：明るめに
+/* 環境光（全体を明るく）
+   - 影の暗さを和らげるベースライト */
 scene.add(new THREE.AmbientLight(0x304050, 2.5));
-// メイン光源（右上前方）：影付き
+
+/* メインライト（太陽的な光）
+   - 右上から照らす
+   - 影を作って立体感を出す
+   - 範囲と解像度を制限して軽量化 */
 const sunLight = new THREE.DirectionalLight(0xfff8f0, 2.2);
 sunLight.position.set(2, 6, 2);
 sunLight.castShadow = true;
-sunLight.shadow.mapSize.set(512, 512);  // VR向け：解像度を下げて影コスト削減
+sunLight.shadow.mapSize.set(512, 512);
 sunLight.shadow.camera.near = 0.1;
-sunLight.shadow.camera.far = 8;   // 体験範囲に限定
+sunLight.shadow.camera.far = 8;
 scene.add(sunLight);
-// 刃物専用：作業台真上からの強いライト（金属の輝きを強調）
+
+/* 刃物専用ライト
+   - 真上から当ててハイライトを強調 */
 const bladeTopLight = new THREE.DirectionalLight(0xe8f0ff, 1.8);
 bladeTopLight.position.set(0, 4, -1);
 scene.add(bladeTopLight);
-// フィルライト（左側から補助）
+
+/* フィルライト（補助）
+   - 逆側から弱く当てて影を潰す */
 const fillLight = new THREE.DirectionalLight(0xb0c8e0, 1.0);
 fillLight.position.set(-3, 2, -1);
 scene.add(fillLight);
 
+/* 炉の光（炎）
+   - オレンジの点光源で雰囲気演出
+   - 明るさは後で変化させる前提 */
 const forgeLight = new THREE.PointLight(0xff4400, 0, 3);
 forgeLight.position.set(-1.2, 1.0, -1.5);
 scene.add(forgeLight);
@@ -904,20 +1048,31 @@ emberLight.position.set(-1.2, 0.9, -1.5);
 scene.add(emberLight);
 
 /* ================================================================
-   XR RIG & CONTROLLERS
+   XRリグ＆コントローラ
+   - VRコントローラの取得・管理
+   - 左右の手を識別
+   - トリガー入力でゲーム操作
+   - レーザーポインタ表示
 ================================================================ */
+/* XRリグ（プレイヤーの基準）
+   - カメラやコントローラをまとめる親オブジェクト */
 const xrRig = new THREE.Group();
 scene.add(xrRig);
 
+/* コントローラ見た目
+   - 実際のコントローラの3Dモデルを表示 */
 const ctrlModelFactory = new XRControllerModelFactory();
 const grip0 = renderer.xr.getControllerGrip(0);
 const grip1 = renderer.xr.getControllerGrip(1);
 grip0.add(ctrlModelFactory.createControllerModel(grip0));
 grip1.add(ctrlModelFactory.createControllerModel(grip1));
 
+/* コントローラ入力
+   - ボタンやトリガーの入力取得用 */
 const ctrl0 = renderer.xr.getController(0);
 const ctrl1 = renderer.xr.getController(1);
 
+/* VR開始時処理 */
 renderer.xr.addEventListener('sessionstart', () => {
   [ctrl0, ctrl1, grip0, grip1].forEach(obj => {
     if (obj.parent !== xrRig) {
@@ -930,6 +1085,8 @@ renderer.xr.addEventListener('sessionstart', () => {
 let rightController = null;
 let leftController  = null;
 
+/* 左右コントローラ管理
+   - 接続時に右手/左手を判定 */
 function onControllerConnected(event) {
   const ctrl = event.target;
   const hand = event.data.handedness;
@@ -946,8 +1103,10 @@ ctrl0.addEventListener('disconnected', onControllerDisconnected);
 ctrl1.addEventListener('connected', onControllerConnected);
 ctrl1.addEventListener('disconnected', onControllerDisconnected);
 
-// selectstart = トリガー押下イベント（gamepad polling の補完）
-// VRではgamepadのpollingが遅れる場合があるため、イベントベースでも補足
+/* トリガー操作
+   - selectstart：押した瞬間
+   - selectend：離した瞬間
+   - 状態に応じて次フェーズへ */
 ctrl0.addEventListener('selectstart', () => {
   // INTRO/RESULTでトリガーを引いたら次フェーズへ（A代わり）
   if (isIntroState(currentState) || currentState === State.RESULT) {
@@ -962,12 +1121,15 @@ ctrl1.addEventListener('selectstart', () => {
 ctrl0.addEventListener('selectend', () => { wasAPressed = false; });
 ctrl1.addEventListener('selectend', () => { wasAPressed = false; });
 
-// Controller velocity tracking
+/* コントローラ速度
+   - 前フレームとの差から速度を計算
+   - 打撃の強さ判定に使用 */
 const prevRightPos = new THREE.Vector3();
 const currRightPos = new THREE.Vector3();
 let rightVelocity = 0;
 
-// Laser pointers
+/* レーザーポインタ
+   - 前方に線を出してUI操作や位置確認 */
 function addLaser(ctrl) {
   const geo = new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-1)
@@ -981,33 +1143,57 @@ addLaser(ctrl0);
 addLaser(ctrl1);
 
 /* ================================================================
-   SPARK SYSTEM — Points 固定プール方式
-   AdditiveBlending で確実に発光表示
+   スパーク（火花）システム
+   - 固定数の粒子プールを使って高速に火花を表現
+   - 加算合成で「光っている」ように見せる
+   - 鍛造・成形・水などモード別に動きと色を変える
+   - 役割
+     - spawnSparks：発生
+     - updateSparks：動き＆寿命管理
+     - spkMesh：描画
+     - _spk：状態管理
 ================================================================ */
 const SPARK_MAX = 400;
+
+/* パーティクルバッファ
+   - 位置・色をGPUに送る配列
+   - 毎フレーム更新して描画 */
 const _spkPositions = new Float32Array(SPARK_MAX * 3);
 const _spkColors    = new Float32Array(SPARK_MAX * 3);
+
 const spkGeo = new THREE.BufferGeometry();
+
 const _spkPosBuf = new THREE.BufferAttribute(_spkPositions, 3);
 const _spkColBuf = new THREE.BufferAttribute(_spkColors, 3);
+
 _spkPosBuf.setUsage(THREE.DynamicDrawUsage);
 _spkColBuf.setUsage(THREE.DynamicDrawUsage);
+
 spkGeo.setAttribute('position', _spkPosBuf);
 spkGeo.setAttribute('color',    _spkColBuf);
+
 spkGeo.drawRange = { start: 0, count: SPARK_MAX };
+
 const spkMat = new THREE.PointsMaterial({
-  size: 0.004,                         // 極小サイズ
+  size: 0.004,
   vertexColors: true,
   sizeAttenuation: true,
   transparent: true,
   blending: THREE.AdditiveBlending,
-  depthWrite: true,  // Zバッファに書き込まない（他オブジェクトを遮らない）
-  depthTest:  true,   // Zバッファを読む（手前/奥の自然な前後関係を維持）
+  depthWrite: true,
+  depthTest:  true,
 });
+
+/* Pointsメッシュ
+   - 小さい点で火花を描画
+   - AdditiveBlendingで発光表現 */
 const spkMesh = new THREE.Points(spkGeo, spkMat);
-spkMesh.frustumCulled = false; // バウンディング球の計算をスキップ（確実に描画）
+spkMesh.frustumCulled = false;
 scene.add(spkMesh);
 
+/* 火花データ（CPU側）
+   - 位置・速度・寿命・モードを管理
+   - activeで使用中か判定 */
 const _spk = Array.from({ length: SPARK_MAX }, () => ({
   active: false,
   px: 0, py: -200, pz: 0,
@@ -1019,8 +1205,11 @@ let _spkHead = 0;
 
 for (let i = 0; i < SPARK_MAX; i++) _spkPositions[i*3+1] = -200;
 _spkPosBuf.needsUpdate = true;
-spkGeo.computeBoundingSphere(); // バウンディング球を明示的に計算
+spkGeo.computeBoundingSphere();
 
+/* 火花発生
+   - origin位置からランダムに飛ばす
+   - modeで挙動を変更（forge / water など） */
 function spawnSparks(origin, count, mode = 'forge', spread = 1.0) {
   for (let n = 0; n < count; n++) {
     const idx = _spkHead % SPARK_MAX;
@@ -1046,6 +1235,11 @@ function spawnSparks(origin, count, mode = 'forge', spread = 1.0) {
   }
 }
 
+/* 火花更新（毎フレーム）
+   - 重力で落ちる
+   - 位置更新
+   - 寿命で消える
+   - 色を時間で変化させる */
 function updateSparks(delta) {
   for (let i = 0; i < SPARK_MAX; i++) {
     const s = _spk[i];
@@ -1061,12 +1255,15 @@ function updateSparks(delta) {
     _spkPositions[b+1] = s.py;
     _spkPositions[b+2] = s.pz;
     const t = Math.max(0, s.life / s.maxLife);
+    /* 色変化ロジック
+   - forge：赤→黄色（火花）
+   - shape：青白（加工）
+   - water：水色（冷却） */
     if (s.mode === 'shape') {
       _spkColors[b]   = 0.4 + t*0.6;
       _spkColors[b+1] = 0.6 + t*0.4;
       _spkColors[b+2] = 1.0;
     } else if (s.mode === 'water') {
-      // 水滴：明るい水色〜透明
       _spkColors[b]   = 0.2 + t*0.3;
       _spkColors[b+1] = 0.5 + t*0.5;
       _spkColors[b+2] = 1.0;
@@ -1088,10 +1285,14 @@ function updateSparks(delta) {
 }
 
 /* ================================================================
-   SCENE OBJECTS
+   シーンオブジェクト生成（実体の配置）
+   - フェーズごとのグループ管理
+   - 床と作業台を生成
+   - 共通の基準位置で配置を統一
 ================================================================ */
-
-// Groups per phase
+/* フェーズ別グループ
+   - 鍛造・成形・研磨でオブジェクトを分離
+   - 表示/非表示の切り替えを簡単にする */
 const groupForging   = new THREE.Group();
 const groupShaping   = new THREE.Group();
 const groupSharpening = new THREE.Group();
@@ -1099,32 +1300,40 @@ scene.add(groupForging);
 scene.add(groupShaping);
 scene.add(groupSharpening);
 
-// --- FLOOR ---
+/* 床
+   - シーン全体の土台
+   - 影を受けることで立体感を出す */
 const floorGeo = new THREE.PlaneGeometry(20, 20);
 const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a120a, roughness: 0.95, metalness: 0.0 });
 const floor = new THREE.Mesh(floorGeo, floorMat);
 floor.rotation.x = -Math.PI / 2;
 floor.receiveShadow = true;
 scene.add(floor);
-let isARMode = false; // AR起動時にtrueになる
+let isARMode = false;
 
-// --- WORKBENCH (shared reference point) ---
+/* 作業台の基準位置
+   - すべての配置の中心となる座標 */
 const workbenchPos = new THREE.Vector3(0, 0.85, -1.1);
 
+/* 作業台生成
+   - 天板＋レンガ＋土台で構成
+   - 見た目と高さを物理的に組み上げる */
 function makeWorkbench(parent) {
   const group = new THREE.Group();
   const mortarMat = new THREE.MeshStandardMaterial({ color: 0x2a1e14, roughness: 0.95 });
   const topMat    = new THREE.MeshStandardMaterial({ color: 0x5c3020, roughness: 0.85, metalness: 0.05 });
 
-  // 天板（Y=workbenchPos.y に直接配置）
+  /* 天板
+     - 作業する場所
+     - 基準高さに直接配置 */
   const top = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.06, 0.5), topMat);
   top.position.y = workbenchPos.y;
   top.castShadow = true; top.receiveShadow = true;
   group.add(top);
 
-  // レンガ積み：天板下面(workbenchPos.y - 0.03)から床(y=0)まで積む
-  // 天板下面 = workbenchPos.y(0.85) - 0.03 = 0.82
-  // nRows = ceil(0.82 / 0.12) = 7段
+  /* レンガ構造
+     - 天板の下から床まで積み上げる
+     - 段ごとにずらしてリアルな積み方に */
   const brickColors = [0x7a3a22, 0x6a2e1a, 0x7e3e28, 0x5a2a14, 0x6e3420, 0x7a3a22, 0x6a2e1a];
   const brickH = 0.12; const nRows = 7;
   const brickW = 0.215; const brickD = 0.22; const gap = 0.012;
@@ -1141,6 +1350,8 @@ function makeWorkbench(parent) {
       bk.receiveShadow = true;
       group.add(bk);
     }
+    /* 側面補強レンガ
+       - 前後にもブロックを配置して立体感を出す */
     for (const side of [-1, 1]) {
       const bk2 = new THREE.Mesh(new THREE.BoxGeometry(0.88, brickH - gap, brickD * 0.5 - gap), bmat);
       bk2.position.set(0, rowY, side * 0.19);
@@ -1149,62 +1360,80 @@ function makeWorkbench(parent) {
     }
   }
 
-  // モルタルベース（床に接地）
+  /* 土台
+     - 一番下にあるベース */
   const base = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.04, 0.52), mortarMat);
   base.position.set(0, 0.02, 0);
   base.castShadow = true; base.receiveShadow = true;
   group.add(base);
 
-  // グループを床(y=0)に配置
+  /* 作業台の配置
+     - グループ全体をまとめて配置 */
   group.position.set(workbenchPos.x, 0, workbenchPos.z);
   parent.add(group);
   return group;
 }
 
-// ============ FORGING OBJECTS ============
+/* ================================================================
+   鍛造フェーズ用オブジェクト
+   - 作業台・炉・鉄素材・温度UIを配置
+   - ハンマー／トング（VR手持ち）もここで定義
+   - 見た目＋インタラクションの基盤を作る
+================================================================ */
+/* 作業台
+   - 鍛造フェーズの基準オブジェクト
+   - 鉄素材やUIの配置基準になる */
 const forgingBench = makeWorkbench(groupForging);
 
-// 炉 — 床からレンガ積みで立ち上がる構造
-// 炉の開口部の高さ: y=0.9 を維持
+/* 炉
+   - 床から積み上げる構造（リアルな重量感）
+   - グループ化して位置・判定をまとめる */
 const furnaceGroup = new THREE.Group();
 furnaceGroup.position.set(-1.1, 0, -1.2); // XZのみ指定、Y=0(床)から構築
 groupForging.add(furnaceGroup);
-// 参照用（BB判定に使うfurnace変数と互換性を持たせる）
 const furnace = furnaceGroup;
 
 // 炉台（床から積み上がるレンガ状の台）
 const fbMat1 = new THREE.MeshStandardMaterial({ color: 0x5a2e18, roughness: 0.92 });
 const fbMat2 = new THREE.MeshStandardMaterial({ color: 0x4a2410, roughness: 0.95 });
+
+/* 炉の構造
+   - 下→中→上の3段で構成
+   - 少しずつ絞って安定感を出す */
 // 下段ベース
 const fBase = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.3, 0.62), fbMat2);
 fBase.position.set(0, 0.15, 0);
-fBase.receiveShadow = true; // fBase.castShadow省略（VR負荷削減）
+fBase.receiveShadow = true;
 furnaceGroup.add(fBase);
 // 中段（少し絞る）
 const fMid = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.35, 0.56), fbMat1);
 fMid.position.set(0, 0.475, 0);
-// fMid.castShadow省略
 furnaceGroup.add(fMid);
 // 上段（炉本体）
 const furnaceMat = new THREE.MeshStandardMaterial({ color: 0x2a1505, roughness: 0.9, metalness: 0.2 });
 const furnaceBody = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.42, 0.50), furnaceMat);
-furnaceBody.position.set(0, 0.86, 0); // 高さ 0.65+0.35/2+0.4/2=0.85相当
+furnaceBody.position.set(0, 0.86, 0); // 炉本体の中心は y=0.86（積み上げ結果に合わせて配置）
 furnaceBody.castShadow = true;
 furnaceGroup.add(furnaceBody);
-// 炉の開口部（熱光） — 高さ 0.9 付近に維持
+
+/* 炉の開口部
+   - emissiveで発光
+   - 加熱状態を視覚的に表現 */
 const furnaceHoleMat = new THREE.MeshStandardMaterial({
   color: 0xff2200, emissive: 0xff2200, emissiveIntensity: 0.3, roughness: 1
 });
 const furnaceHole = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.12), furnaceHoleMat);
-furnaceHole.position.set(0, 0.86, 0.27); // furnaceBody基準 → worldY≈0.86
+furnaceHole.position.set(0, 0.86, 0.27);
 furnaceGroup.add(furnaceHole);
-// 煙突
+
+/* 煙突 */
 const chimneyMat = new THREE.MeshStandardMaterial({ color: 0x3a1e08, roughness: 0.95 });
 const chimney    = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.10, 0.40, 8), chimneyMat);
 chimney.position.set(0, 1.27, 0);
 furnaceGroup.add(chimney);
 
-// Iron piece — 最初から作業台の上に配置
+/* 鉄素材
+   - 最初から作業台の上に配置 */
 const ironMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8, metalness: 0.7 });
 const ironMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.06, 0.06), ironMat);
 ironMesh.castShadow = true;
@@ -1212,7 +1441,9 @@ ironMesh.castShadow = true;
 ironMesh.position.set(0, 0.91, -1.1);
 groupForging.add(ironMesh);
 
-// Temperature display — 解像度アップ＋区分表示
+/* 温度表示UI
+   - Canvasで描画 → テクスチャ化 → スプライト表示
+   - 鉄に追従して表示される */
 const tempCanvas = document.createElement('canvas');
 tempCanvas.width = 330; tempCanvas.height = 80;
 const tempCtx = tempCanvas.getContext('2d');
@@ -1224,13 +1455,20 @@ tempSprite.scale.set(0.35, 0.11, 1);
 tempSprite.position.set(0.37, 0.10, 0.10);
 ironMesh.add(tempSprite);
 
+/* 温度ゾーン判定
+   - 0〜100の内部値で評価
+   - HOT / GOOD / COLD に分類 */
 function getTempZone(temp) {
-  // 100-80: 熱すぎ△ / 80-60: 適正○ / 60未満: 冷めすぎ×
-  if (temp >= 80) return { label: '△ 高温/HOT', color: '#ff6622', judge: 'hot' };
+  // 内部温度スケール（0〜100想定）
+  // 80以上: 高温 / 60〜79: 適温 / 60未満: 低温
+  if (temp >= 80) return { label: '△ 高温/HOT',  color: '#ff6622', judge: 'hot' };
   if (temp >= 60) return { label: '〇 適温/GOOD', color: '#88ff44', judge: 'good' };
-  return               { label: '× 低温/COLD', color: '#4488ff', judge: 'cold' };
+  return                 { label: '× 低温/COLD',  color: '#4488ff', judge: 'cold' };
 }
 
+/* 温度UI更新
+   - 数値＋色＋ラベルを描画
+   - テクスチャ更新で反映 */
 function updateTempSprite(temp) {
   const zone = getTempZone(temp);
   tempCtx.clearRect(0, 0, 330, 80);
@@ -1252,33 +1490,26 @@ function updateTempSprite(temp) {
   tempTex.needsUpdate = true;
 }
 
-// Hammer (right hand visual)
-// VRコントローラー座標系：
-//   +Y = グリップ上方向、-Z = コントローラー先端方向
-// ハンマーは「柄を握る」イメージ：
-//   柄をY軸方向、ヘッドを-Y（下）に配置
-// groupは scene に置き、VR時は rightController の子にする
+/* ハンマー（右手）
+   - コントローラー原点＝柄の中心
+   - 下方向にヘッドを配置 */
 const hammerGroup = new THREE.Group();
 const hammerHandle = new THREE.Mesh(
   new THREE.CylinderGeometry(0.013, 0.016, 0.30, 8),
   new THREE.MeshStandardMaterial({ color: 0x5a3515, roughness: 0.85 })
 );
-// 柄をY軸方向（コントローラーのグリップ軸）に沿わせる
-// ハンドルの中心をコントローラー原点に合わせる
 hammerHandle.position.set(0, 0, 0);
 const hammerHead = new THREE.Mesh(
   new THREE.BoxGeometry(0.09, 0.065, 0.065),
   new THREE.MeshStandardMaterial({ color: 0x606060, roughness: 0.5, metalness: 0.85 })
 );
-// ヘッドを柄の下端（-Y）に付ける
 hammerHead.position.set(0, -0.18, 0);
 hammerGroup.add(hammerHandle);
 hammerGroup.add(hammerHead);
-// コントローラーに子として追加したとき、手の平の中心から下にヘッドが来るよう微調整
-// localPositionはVR追加時にリセットするので初期値は0
 hammerGroup.position.set(0, 0, 0);
 
-// Left hand tong visual
+/* トング（左手）
+   - 鉄をつかむための簡易モデル */
 const tongGroup = new THREE.Group();
 const tongMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.7, metalness: 0.6 });
 const tongArm = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.015, 0.3), tongMat);
@@ -1286,13 +1517,23 @@ tongArm.position.set(0, 0, -0.15);
 tongGroup.add(tongArm);
 tongGroup.position.set(0, -0.03, -0.1);
 
-// ============ SHAPING OBJECTS ============
+/* ================================================================
+   成形フェーズ用オブジェクト
+   - 刃物モデル（本体＋なかご）を生成
+   - 表裏2枚構造で「叩いて整える」表現
+   - 歪み（ゾーン）を分割して可視化
+   - 各ゾーンの状態を数値＋色で表示
+================================================================ */
+/* 作業台
+   - 成形フェーズの基準位置 */
 const shapingBench = makeWorkbench(groupShaping);
 
-// Blade model — リアルな和包丁/刃物形状
-// 日本の包丁型ジオメトリ（1.2倍スケール）
-// メイン部分: X:0〜0.408, Y:0〜0.07
-// なかご部分: X:-0.102〜0（1.2倍）
+/* 刃物ジオメトリ
+   - Shapeから押し出して包丁形状を作成
+   - 本体＋なかご（柄の中に入る部分）で構成 */
+/* 刃本体
+   - 切先〜峰までの形状
+   - bevelでエッジに厚み */
 function createBladeGeometry() {
   const shape = new THREE.Shape();
   shape.moveTo(0,      0);        // 刃先・柄元
@@ -1306,6 +1547,9 @@ function createBladeGeometry() {
     bevelThickness: 0.001, bevelSize: 0.0015, bevelSegments: 2,
   });
 }
+/* なかご
+   - 柄に差し込まれる部分
+   - bevelなしでシンプル形状 */
 function createNakagoGeometry() {
   const shape = new THREE.Shape();
   shape.moveTo(-0.102, 0.049);
@@ -1322,25 +1566,30 @@ const nakagoMat = new THREE.MeshStandardMaterial({ color: 0x5a6268, roughness: 0
 const bladeMesh  = new THREE.Mesh(bladeGeo, bladeMat);
 const nakagoMesh = new THREE.Mesh(nakagoGeo, nakagoMat);
 nakagoMesh.castShadow = true;
-bladeMesh.add(nakagoMesh); // メイン部分の子 → 常に一緒に動く
+/* 刃モデル構成
+   - bladeMesh（本体）にnakagoMeshを子として追加
+   - 一体として動く */
+bladeMesh.add(nakagoMesh);
 bladeMesh.castShadow = true;
-// bladeGeo: X:0〜0.5, Y:0〜0.12 (新ジオメトリ)
-// rotation.x=-PI/2: 元Y軸 → ワールド-Z軸 (Y:0.06中心 → Z:-0.06)
-// rotation.x=+PI/2: 元Y軸 → ワールド+Z軸 (Y:0.06中心 → Z:+0.06)
-// bladeMesh.position.z で補正し、表裏どちらでもZワールド中心をbladePivot.zに合わせる
-// 表(rotation.x=-PI/2): mesh.position.z = +0.06 → 中心Z=0に補正
-// 裏(rotation.x=+PI/2): mesh.position.z = -0.06 → 中心Z=0に補正
+
+/* 向き調整
+   - rotation.xでXZ平面に寝かせる
+   - positionで中心を補正 */
 const bladePivot = new THREE.Group();
 bladeMesh.position.set(-0.204, 0, 0.035); // X中心補正(0.408/2) + Z補正
 bladeMesh.rotation.x = -Math.PI / 2;      // 表: 表面が上
 
-// ── 二枚広げ演出 ────────────────────────────────────────────
+/* 二枚構造（表裏）
+   - 刃を2枚に分けて上下に配置
+   - 叩くことで歪みを表現するため */
+/* 表：+方向にオフセット
+   裏：-方向にオフセット
+   → 厚みを持った板として扱う */
 const BLADE_HALF   = 0.003 * 1.3;   // 片側オフセット = 0.0039（元0.003の1.3倍）
 const BLADE_DEPTH  = 0.006;          // bladeGeoのdepth（Z方向厚み）
 
-// 接地補正ヘルパー
-// rotation.x=-PI/2(表): ローカルZ=0が底面 → 補正0
-// rotation.x=+PI/2(裏): ローカルZ=depth が底面 → 補正+depth
+/* 接地補正
+   - 表裏で接地面が変わるため高さ補正 */
 function _bladeGroundOffset(flipped) {
   return flipped ? BLADE_DEPTH : 0;
 }
@@ -1354,26 +1603,34 @@ const bladeMesh2 = bladeMesh.clone();
 bladeMesh2.position.set(-0.204, -BLADE_HALF, 0.035);
 bladeMesh2.rotation.x = -Math.PI / 2;
 
+/* 刃全体（pivot）
+   - 作業台の高さに配置
+   - 表裏まとめて移動 */
 bladePivot.add(bladeMesh);
 bladePivot.add(bladeMesh2);
-
 
 // bladePivot を作業台に接地（表: 補正0）
 bladePivot.position.set(0, workbenchPos.y + _bladeGroundOffset(false), workbenchPos.z);
 groupShaping.add(bladePivot);
 
-// Zone indicators — 表(+)裏(-)歪みをスプライトで表示
+/* ゾーン分割
+   - 刃を複数エリアに分割
+   - 各エリアごとに歪みを管理 */
 const ZONE_COUNT = CONFIG.SHAPING.ZONE_COUNT;
-const zoneIndicators = []; // 色ボックス
-const zoneSprites    = []; // 数値スプライト
+const zoneIndicators = [];
+const zoneSprites    = [];
 const zones = [];
 
-// ゾーンごとのCanvasスプライトを生成
+/* スプライト生成 */
 function makeZoneCanvas() {
   const c = document.createElement('canvas');
   c.width = 96; c.height = 48;
   return c;
 }
+
+/* スプライト更新
+   - 歪みに応じて色と数値を変更
+   - +（赤）/ 0（緑）/ -（青） */
 function updateZoneSprite(idx) {
   const z = zones[idx];
   const c = zoneSprites[idx]._canvas;
@@ -1394,19 +1651,15 @@ function updateZoneSprite(idx) {
   zoneSprites[idx]._tex.needsUpdate = true;
 }
 
-// 刃物のXZ平面上の配置に合わせたゾーン設定
-// bladeGeo は X: 0〜0.5, Y: 0〜0.09 の形状 → rotation.x=-PI/2後は X: 0〜0.5, Z: 0〜0.09
-// bladeMesh.position.x = -0.25 なので ワールドX: -0.25 〜 +0.25
+/* 刃物のXZ平面上の配置に合わせたゾーン設定 */
 const BLADE_WORLD_X0 = -0.204;  // 柄側 (bladeGeo X:0, pos.x=-0.204 → worldX=-0.204)
 const BLADE_WORLD_X1 =  0.204;  // 切先側 (bladeGeo X:0.408, pos.x=-0.204 → worldX=+0.204)
 const BLADE_WORLD_Z  = workbenchPos.z;  // bladePivot.position.z = workbenchPos.z
 const BLADE_Y        = workbenchPos.y + 0.03 + 0.03; // ゾーン: 接地面+0.03m上(裏表不変)
 
-// ゾーン配置: なかご1か所 + 刃4か所（均等割り）
-// bladeMesh X:0〜0.34, position.x=-0.17 → worldX:-0.17〜+0.17
-// なかごX:-0.085〜0 → worldX:-0.255〜-0.17 → 中心-0.21
-// 刃部分worldX:-0.17〜+0.17を4等分: -0.13, -0.05, +0.03, +0.11
-// ゾーン位置：なかご中心(-0.255) + 刃4か所均等割り(-0.153, -0.051, +0.051, +0.153)
+/* ゾーン位置
+   - なかご1＋刃4で計5分割
+   - X方向に均等配置 */
 const ZONE_POSITIONS = [
   -0.255, // なかご中心
   -0.153, // 刃①（均等割り）
@@ -1414,6 +1667,7 @@ const ZONE_POSITIONS = [
   +0.051, // 刃③
   +0.153, // 刃④
 ];
+
 for (let i = 0; i < ZONE_COUNT; i++) {
   const wx = ZONE_POSITIONS[i];
 
@@ -1446,41 +1700,36 @@ for (let i = 0; i < ZONE_COUNT; i++) {
   updateZoneSprite(i);
 }
 
-// ============ SHARPENING OBJECTS ============
+/* ================================================================
+   研磨フェーズ用オブジェクト
+   - 砥石と刃物を配置し、研ぎ動作を再現
+   - 角度をリアルタイム表示して操作をガイド
+   - VR手元にUIを追従させて直感的に調整できる
+================================================================ */
+/* 作業台
+   - 研磨フェーズの基準位置 */
 const sharpenBench = makeWorkbench(groupSharpening);
 
-// Whetstone — Z軸方向が長辺（前後に動かして研ぐ）
+/* 砥石
+   - Z方向（前後）に動かして研ぐ前提の形状
+   - 上面に別メッシュで研磨面を表現 */
 const stoneMat  = new THREE.MeshStandardMaterial({ color: 0x9a9080, roughness: 0.9 });
 const stoneMesh = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.05, 0.36), stoneMat);
 stoneMesh.position.set(0, workbenchPos.y + 0.055, -1.1);
 stoneMesh.receiveShadow = true;
 stoneMesh.castShadow    = true;
 groupSharpening.add(stoneMesh);
+
+/* 砥石の表面
+   - 少し明るくして“削れる面”を強調 */
 const stoneSurfMat = new THREE.MeshStandardMaterial({ color: 0xb0a898, roughness: 0.7 });
 const stoneSurf    = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.005, 0.34), stoneSurfMat);
 stoneSurf.position.set(0, 0.028, 0);
 stoneMesh.add(stoneSurf);
 
-// 砥石上に方向矢印スプライト（前後方向のガイド）
-const arrowCanvas = document.createElement('canvas');
-arrowCanvas.width = 128; arrowCanvas.height = 128;
-{
-  const ac = arrowCanvas.getContext('2d');
-  ac.fillStyle = 'rgba(0,0,0,0)';
-  ac.fillRect(0, 0, 128, 128);
-  ac.strokeStyle = 'rgba(255,220,80,0.8)';
-  ac.lineWidth = 6;
-  ac.beginPath(); ac.moveTo(64, 20); ac.lineTo(64, 108); ac.stroke();
-  ac.beginPath(); ac.moveTo(64, 20); ac.lineTo(44, 44); ac.stroke();
-  ac.beginPath(); ac.moveTo(64, 20); ac.lineTo(84, 44); ac.stroke();
-  ac.beginPath(); ac.moveTo(64, 108); ac.lineTo(44, 84); ac.stroke();
-  ac.beginPath(); ac.moveTo(64, 108); ac.lineTo(84, 84); ac.stroke();
-}
-const arrowTex    = new THREE.CanvasTexture(arrowCanvas);
-// 矢印スプライトは不要のため追加しない
-// groupSharpening.add(arrowSprite);
-
-// 角度表示 HUD パネル（右手トリガー右側に動的配置）
+/* 角度表示HUD
+   - 刃の角度をリアルタイム表示
+   - 右手コントローラーの横に追従 */
 const angleHudCanvas = document.createElement('canvas');
 angleHudCanvas.width = 272; angleHudCanvas.height = 200;  // メッシュ比(0.15:0.11=1.36:1)に合わせた解像度
 const angleHudTex = new THREE.CanvasTexture(angleHudCanvas);
@@ -1492,34 +1741,44 @@ const angleHudMesh = new THREE.Mesh(
 angleHudMesh.position.set(0.4, workbenchPos.y + 0.20, -1.2);
 scene.add(angleHudMesh);  // groupSharpeningではなくsceneに追加（手に追従させるため）
 
+/* 角度表示更新
+   - OK/NG判定
+   - 角度数値＋評価記号（◎○△×）
+   - 色で精度をフィードバック */
 function updateAngleHud(leftDeg, rightDeg, isAligned, bladeAngleDeg) {
-  // Canvasは 256x80 だがメッシュは(0.15,0.11)なので縦長に圧縮される
-  // → テキストを上下に分けてコンパクトに
   const ctx = angleHudCanvas.getContext('2d');
   ctx.clearRect(0, 0, 272, 200);
   ctx.fillStyle = 'rgba(0,0,0,0.85)';
   ctx.beginPath(); ctx.roundRect(3, 3, 266, 194, 10); ctx.fill();
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  /* 表示ロジック
+     - isAligned=false → NG表示
+     - isAligned=true  → 角度＋評価 */
   if (!isAligned) {
     ctx.fillStyle = '#ff4411';
     ctx.font = 'bold 80px monospace';
     ctx.fillText('NG', 136, 100);
   } else {
-    // 角度 + グレード記号
+    /* 色フィードバック
+       - 緑：理想に近い
+       - 黄：ややズレ
+       - 赤：ズレ大 */
     const err = bladeAngleDeg - CONFIG.SHARPENING.IDEAL_ANGLE;
-    const col = Math.abs(err) < 7 ? '#66ff88' : Math.abs(err) < 14 ? '#ffee44' : '#ff6644';
+    const col = Math.abs(err) < 10 ? '#66ff88' : Math.abs(err) < 20 ? '#ffee44' : '#ff6644';
     // グレード判定（updateSharpeningと同じ範囲）
     let gradeSymbol = '×';
-    if      (bladeAngleDeg >= -22 && bladeAngleDeg <= -8)  gradeSymbol = '◎';
-    else if ((bladeAngleDeg > -8 && bladeAngleDeg < -3) || (bladeAngleDeg >= -35 && bladeAngleDeg < -22)) gradeSymbol = '○';
-    else if (bladeAngleDeg >= -3 && bladeAngleDeg <= 4)    gradeSymbol = '△';
+    if      (bladeAngleDeg >= -25 && bladeAngleDeg <= -5)  gradeSymbol = '◎';
+    else if ((bladeAngleDeg > -5 && bladeAngleDeg < 5) || (bladeAngleDeg >= -35 && bladeAngleDeg < -25)) gradeSymbol = '○';
+    else if ((bladeAngleDeg >= 5 && bladeAngleDeg <= 15) || (bladeAngleDeg >= -45 && bladeAngleDeg < -35))  gradeSymbol = '△';
     ctx.fillStyle = col;
     ctx.font = 'bold 54px monospace';
     const sign = bladeAngleDeg >= 0 ? '+' : '';
     ctx.fillText(`${sign}${Math.round(bladeAngleDeg)}° ${gradeSymbol}`, 136, 100);
   }
   angleHudTex.needsUpdate = true;
-  // 右手コントローラー右側+0.15mに動的配置
+  /* HUD追従
+     - 右手位置＋右方向にオフセット
+     - 回転もコントローラーに同期 */
   if (rightController) {
     const rhWorld = new THREE.Vector3();
     rightController.getWorldPosition(rhWorld);
@@ -1529,20 +1788,28 @@ function updateAngleHud(leftDeg, rightDeg, isAligned, bladeAngleDeg) {
   }
 }
 
-// 研ぎフェーズ用刃物（SHAPINGと同じ形状）
+/* 研磨用刃モデル
+   - 成形フェーズと同じ形状を使用
+   - 向きを研ぎ動作用に調整 */
 const sharpenBladeGroup = new THREE.Group();
-const sharpenBladeMesh  = bladeMesh.clone(); // nakagoも子としてclone済み
-// X中心補正: pos.x=-0.17, Y中心=0.035→回転後Z=0
+const sharpenBladeMesh  = bladeMesh.clone();
 sharpenBladeMesh.position.set(-0.204, 0, 0); // X中心補正(0.408/2)
 sharpenBladeMesh.rotation.set(Math.PI / 2, 0, 0); // 刃先を奥(+Z)へ
-// edgeMarker（刃先線）は不要のため省略
 sharpenBladeGroup.add(sharpenBladeMesh);
+
+/* 刃の配置
+   - 砥石の上に少し浮かせて配置 */
 sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.2);
 groupSharpening.add(sharpenBladeGroup);
 
 /* ================================================================
    VR CANVAS TEXT PANEL
+   → Canvasで文字を描いて、それを3Dの板に貼って表示する仕組み
 ================================================================ */
+/* 文字Canvas生成
+   - テキストを2D Canvasに描画して画像化
+   - 改行（\n）対応・中央揃え
+   - このCanvasがそのままTextureとして使われる */
 function makeTextCanvas(text, w, h, bg, fg, fontSize) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
@@ -1553,7 +1820,7 @@ function makeTextCanvas(text, w, h, bg, fg, fontSize) {
   ctx.font = `${fontSize}px 'Hiragino Mincho ProN', serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  // Multi-line support
+
   const lines = text.split('\n');
   const lineH = fontSize * 1.4;
   const startY = h / 2 - ((lines.length - 1) * lineH) / 2;
@@ -1563,16 +1830,26 @@ function makeTextCanvas(text, w, h, bg, fg, fontSize) {
   return c;
 }
 
-
-// フェーズ得点表示パネル（刃物近く）
 const scorePanelGroup = new THREE.Group();
 scene.add(scorePanelGroup);
+
 let scorePanelMesh = null;
+
+/* スコア表示更新
+   - テキストからパネルを生成して表示
+   - 行数に応じてサイズ自動調整
+   - 表示位置は任意指定（未指定ならデフォルト位置）
+   - Canvas → Texture → Planeに貼付して表示 */
 function updateScorePanel(text, worldPos) {
+  /* 既存パネル削除
+     - 毎回作り直すことで状態管理を単純化 */
   if (scorePanelMesh) scorePanelGroup.remove(scorePanelMesh);
   if (!text) { scorePanelMesh = null; return; }
   const lines = text.split('\n');
   const cw = 512, ch = 56 + lines.length * 52;
+
+  /* Canvas生成
+     - 表示内容を画像として描画 */
   const cv = document.createElement('canvas');
   cv.width = cw; cv.height = ch;
   const ctx = cv.getContext('2d');
@@ -1588,53 +1865,75 @@ function updateScorePanel(text, worldPos) {
   lines.forEach((line, i) => {
     ctx.fillText(line, cw/2, 28 + 28 + i * 52);
   });
+  /* Texture化
+     - Canvasを3Dに貼るため変換 */
   const tex = new THREE.CanvasTexture(cv);
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide });
   const panelH = 0.07 * lines.length + 0.04;
+
+  /* パネル生成
+     - 平面にテクスチャを貼る */
   scorePanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.60, panelH), mat);
   const pos = worldPos || new THREE.Vector3(0, workbenchPos.y + 0.23, -1.25);
+  /* 位置設定
+     - 指定 or デフォルト位置 */
   scorePanelMesh.position.copy(pos);
+  /* シーン追加
+     - グループで管理 */
   scorePanelGroup.add(scorePanelMesh);
 }
 
-// Floating info panel — 正面固定（カメラに追従しない）
+/* 情報パネル
+   - 説明表示用の空間固定UI */
 const infoPanel = new THREE.Group();
 scene.add(infoPanel);
+
+/* 情報パネル本体
+   - 必要時に生成・更新 */
 let infoPanelMesh = null;
+
 /* ================================================================
    INTRO_0 タイトル専用パネル
+   - タイトル画面の表示処理
+   - Canvasに描画した内容を3Dパネルとして表示
 ================================================================ */
-// INTRO_0 テキスト描画（背景・粒子の上に重ねる extraFn として使用）
-// INTRO_0: XR中(VR/AR)はタイトルをCanvas内に描画、ブラウザは非表示
+/* タイトル描画関数
+   - VR/AR時のみタイトルを表示（ブラウザでは非表示）
+   - メインタイトル＋サブタイトル＋開始ガイドを描画 */
 function _drawIntro0Text(ctx, W, H) {
+  /* XR判定
+     - VR/AR時のみ描画 */
   const isImmersive = renderer && renderer.xr && renderer.xr.isPresenting;
-  if (!isImmersive) return; // ブラウザモード: Canvas側タイトル不要
+  if (!isImmersive) return;
 
-  // VR / AR: タイトル「越前打刃物」を描画
+  /* メインタイトル
+     - 縁取り＋グラデーション文字 */
   const fontSize = 220;
   ctx.save();
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  // 縁取り（銀色）
+  // strokeText → 輪郭
   ctx.strokeStyle = 'rgba(192,200,210,0.90)';
   ctx.lineWidth = 4;
   ctx.font = `bold ${fontSize}px serif`;
   ctx.strokeText('越前打刃物', W/2, H/2 - 60);
-  // 文字グラデーション（暗赤〜橙赤）
+  // fillText   → 中身（グラデ）
   const grad = ctx.createLinearGradient(W/2-400, H/2-150, W/2+400, H/2+50);
   grad.addColorStop(0.0, '#8b0000'); grad.addColorStop(0.3, '#cc2200');
   grad.addColorStop(0.6, '#e84010'); grad.addColorStop(1.0, '#ff6020');
   ctx.fillStyle = grad;
   ctx.fillText('越前打刃物', W/2, H/2 - 60);
   ctx.restore();
-  // サブタイトル（シルバー）
+  /* サブタイトル
+     - 英語タイトルを中央表示 */
   ctx.save();
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = 'bold 60px serif';
   ctx.fillStyle = 'rgba(190,195,205,0.92)';
   ctx.fillText('Echizen Hamono — Blacksmith VR', W/2, H/2 + 110);
   ctx.restore();
-  // A ボタンガイド
+  /* スタートガイド
+     - 「Aボタンで開始」を下部に表示 */
   ctx.save();
   ctx.textAlign = 'center';
   ctx.font = '42px serif';
@@ -1643,45 +1942,72 @@ function _drawIntro0Text(ctx, W, H) {
   ctx.restore();
 }
 
+/* INTRO_0 パネル生成
+   - Canvasをテクスチャにして3Dパネルを作成
+   - 背景・粒子・タイトルを毎フレーム合成 */
 function updateInfoPanel_INTRO0() {
+  /* 既存パネル削除
+     - 重複防止 */
   if (infoPanelMesh) infoPanel.remove(infoPanelMesh);
-  const W = 2048, H = 1024;
+
+  /* Canvas生成
+     - 高解像度（2048x1024） */
   const cv  = document.createElement('canvas');
+  const W = 2048, H = 1024;
   cv.width = W; cv.height = H;
+
+  /* テクスチャ化
+     - Canvas → THREE.CanvasTexture */
   const tex = new THREE.CanvasTexture(cv);
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide });
+
+  /* 3Dパネル生成
+     - PlaneGeometryに貼り付けて空間に配置 */
   infoPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 1.4), mat);
   infoPanelMesh.position.set(0, 1.38, -2.2);
   infoPanel.add(infoPanelMesh);
-  // 毎フレーム: 背景グラデ → 粒子tick/draw → テキスト上書き
+  /* 毎フレーム描画
+     - 背景＋粒子＋タイトルを合成 */
   activateCvPanel(cv, tex, 'intro0', _cvPtsIntro, 1.0, _drawIntro0Text);
 }
 
-// テキスト描画関数を生成（intro も game も 2カラムレイアウト）
+/* ================================================================
+   テキスト描画関数生成
+   - タイトル＋本文をCanvasに描画
+   - intro / game 共通の2カラムレイアウト
+================================================================ */
+/* 描画関数を返す（クロージャ）
+   - modeでレイアウト切替（intro / game） */
 function _makeTextExtraFn(titleText, bodyText, mode) {
   const isGame = mode === 'game';
 
   return function(ctx, W, H) {
 
-    // intro のみ枠線
+    /* 枠線（introのみ）
+       - 画面外枠を描画 */
     if (!isGame) {
       ctx.strokeStyle = 'rgba(160,50,20,0.45)';
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.roundRect(5, 5, W-10, H-10, 20); ctx.stroke();
     }
 
-    // bodyText を左右に分割
+    /* 本文分割
+       - "---"で左右カラムに分ける */
     const sepIdx = bodyText.indexOf('\n---\n');
     const leftText  = sepIdx >= 0 ? bodyText.slice(0, sepIdx) : bodyText;
     const rightText = sepIdx >= 0 ? bodyText.slice(sepIdx + 5) : '';
 
     // カラム位置
     const COL_PAD = 60;
+
+    /* カラム位置決定
+       - intro:中央寄せ / game:左寄せ */
     const COL_L   = isGame ? COL_PAD : W * 0.25;
     const COL_R   = isGame ? (W * 0.5 + 20) : W * 0.75;
 
-    // タイトル描画
+    /* タイトル描画
+       - 上部中央＋区切り線 */
     let y = 38;
     if (titleText) {
       ctx.fillStyle = '#f0c070';
@@ -1700,7 +2026,8 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
       y += 20;
     }
 
-    // 行高さ計算
+    /* 行高さ計算
+       - 日本語/英語でフォントサイズ切替 */
     function calcHeight(text) {
       let h = 0;
       for (const line of text.split('\n')) {
@@ -1716,12 +2043,14 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
     const rightH = calcHeight(rightText);
     const contentH = Math.max(leftH, rightH);
 
-    // 縦中央寄せ
+    /* 縦中央寄せ
+       - テキスト全体を中央に配置 */
     const remaining = H - y - 30;
     const offset = Math.max(0, (remaining - contentH) / 2);
     const baseY = y + offset;
 
-    // 中央区切り線（intro も game も共通）
+    /* 中央区切り線
+       - 左右カラムの境界 */
     ctx.strokeStyle = 'rgba(160,55,20,0.25)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -1729,7 +2058,8 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
     ctx.lineTo(W/2, H - 30);
     ctx.stroke();
 
-    // カラム描画
+    /* カラム描画関数
+       - 行ごとにテキスト描画 */
     function drawCol(text, x, align, startY) {
       ctx.textBaseline = 'top';
       ctx.textAlign = align;
@@ -1753,47 +2083,97 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
     const alignLeft  = isGame ? 'left' : 'center';
     const alignRight = isGame ? 'left' : 'center';
 
+    /* カラム描画実行
+       - 左右に本文を表示 */
     drawCol(leftText,  COL_L, alignLeft,  baseY);
     drawCol(rightText, COL_R, alignRight, baseY);
   };
 }
 
+/* ================================================================
+   インフォパネル更新
+   - 説明UIを3Dパネルとして表示・更新
+================================================================ */
+/* パネル更新処理
+   - 初回: パネル生成
+   - 以降: 内容だけ更新 */
 function updateInfoPanel(text, titleText, mode) {
-  if (infoPanelMesh) infoPanel.remove(infoPanelMesh);
+  /* モード決定
+     - intro / game 自動切替 */
   const _mode = mode || (isIntroState(currentState) ? 'intro' : 'game');
-  const W = 2048, H = 1024;
   const isIntro = isIntroState(currentState);
+
+  /* 表示パラメータ
+     - 粒子・明るさ切替 */
   const pts    = isIntro ? _cvPtsIntro : _cvPtsGame;
   const bright = isIntro ? 1.0 : 0.45;
-  const cv  = document.createElement('canvas');
-  cv.width = W; cv.height = H;
-  const tex = new THREE.CanvasTexture(cv);
-  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide });
-  infoPanelMesh = new THREE.Mesh(
-    isIntro ? new THREE.PlaneGeometry(2.52, 1.26) : new THREE.PlaneGeometry(2.5, 1.40),
-    mat
-  );
-  infoPanelMesh.position.set(0, 1.38, -2.2);
-  infoPanel.add(infoPanelMesh);
-  // 毎フレーム: 背景 → 粒子tick/draw → テキスト上書き
-  activateCvPanel(cv, tex, _mode, pts, bright, _makeTextExtraFn(titleText || null, text, _mode));
+
+  if (showingPhaseResult) {
+
+    /* パネル再生成
+       - フェーズ結果時は作り直す */
+    if (infoPanelMesh) infoPanel.remove(infoPanelMesh);
+    const W = 2048, H = 1024;
+
+    /* Canvas生成 */
+    const cv  = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+
+    /* テクスチャ化 */
+    const tex = new THREE.CanvasTexture(cv);
+    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide });
+
+    /* 3Dパネル生成 */
+    infoPanelMesh = new THREE.Mesh(
+      isIntro ? new THREE.PlaneGeometry(2.52, 1.26) : new THREE.PlaneGeometry(2.5, 1.40),
+      mat
+    );
+    infoPanelMesh.position.set(0, 1.38, -2.2);
+
+    /* シーンに追加 */
+    infoPanel.add(infoPanelMesh);
+
+    /* 毎フレーム描画開始
+       - 背景＋粒子＋テキスト */
+    activateCvPanel(cv, tex, _mode, pts, bright, _makeTextExtraFn(titleText || null, text, _mode));
+  } else {
+    if (!infoPanelMesh) return;
+
+    /* 既存パネル更新
+       - テクスチャを書き換え */
+    const tex = infoPanelMesh.material.map;
+    const cv  = tex.image;
+
+    /* 毎フレーム描画更新 */
+    activateCvPanel(cv, tex, _mode, pts, bright, _makeTextExtraFn(titleText || null, text, _mode));
+
+    /* 更新フラグ */
+    tex.needsUpdate = true;
+  }
 }
 
-// Result panel
+/* ================================================================
+   リザルト表示パネル
+================================================================ */
+/* resultPanel
+   - リザルト画面全体のグループ
+   - 最初は非表示 */
 const resultPanel = new THREE.Group();
 scene.add(resultPanel);
 resultPanel.visible = false;
 let resultPanelMesh = null;
 
+/* buildResultCanvas
+   - リザルト画面の中身（スコア・ランキングなど）をCanvasに描画
+   - 最終スコアを計算して表示 */
 function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
-  // 2倍解像度
   const W = 1200, H = 1400;
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
   const ctx = c.getContext('2d');
 
-  // 枠線（背景・粒子は毎フレームupdateCvPanelが描画）
+  // 枠線
   ctx.strokeStyle = '#e05050';
   ctx.lineWidth = 4;
   ctx.beginPath(); ctx.roundRect(4, 4, W-8, H-8, 32); ctx.stroke();
@@ -1801,7 +2181,7 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.roundRect(14, 14, W-28, H-28, 26); ctx.stroke();
 
-  // Title
+  // タイトル
   ctx.fillStyle = '#ffddaa';
   ctx.font = 'bold 52px serif';
   ctx.textAlign = 'center';
@@ -1810,7 +2190,8 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
   ctx.fillStyle = '#ffaa88';
   ctx.fillText('Echizen Blades Complete', W/2, 120);
 
-  // 確定保存済みスコアをそのまま使用（再計算・RMS・正規化は一切禁止）
+  /* スコア計算
+     - 各フェーズを重み付きで合計 */
   const forgingScore  = bladeStateSnap._forging;
   const shapingScore = bladeStateSnap._shaping;
   const sharpenScore  = bladeStateSnap._sharpening;
@@ -1820,10 +2201,13 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
     sharpenScore  * 0.3
   ));
 
-  // Score big
+  /* ランク判定
+     - スコアに応じて称号を決定 */
   const rankJa = recomputedFinal >= 90 ? '名人' : recomputedFinal >= 70 ? '職人' : '見習い';
   const rankEn = recomputedFinal >= 90 ? 'Master' : recomputedFinal >= 70 ? 'Craftsman' : 'Apprentice';
 
+  /* 大スコア表示
+     - 色付きで中央に表示 */
   ctx.font = 'bold 130px serif';
   ctx.fillStyle = recomputedFinal >= 90 ? '#ffe866' : recomputedFinal >= 70 ? '#88ccff' : '#ff9966';
   ctx.textAlign = 'center';
@@ -1839,7 +2223,9 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
 
   // 今回スコアの順位
   const newRank = scores.findIndex(s => s.id === savedId);
-    // NEW RECORD表示
+
+    /* NEW記録表示
+       - 上位5位以内なら表示 */
     if (newRank >= 0 && newRank < 5) {
       ctx.font = 'bold 38px serif';
       ctx.fillStyle = '#ffe066';
@@ -1851,7 +2237,7 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
     }
 
   // ─────────────────────────────────────────────
-  // レイアウト順: Score → フェーズゲージ → Total breakdown → Divider → Ranking
+  // レイアウト順: スコア → 区切り線 → フェーズ別ゲージ → 合計式 → Divider → Ranking
   // ─────────────────────────────────────────────
 
   // 区切り線（スコア下）
@@ -1859,7 +2245,8 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(50, 370); ctx.lineTo(W-50, 370); ctx.stroke();
 
-  // フェーズゲージ（y=400 から）
+  /* フェーズ別ゲージ
+     - 鍛造・成形・研ぎのスコアをバー表示 */
   const details = [
     ['① 鍛造 Forging',  forgingScore,  0.3],
     ['② 成形 Shaping',  shapingScore, 0.4],
@@ -1893,8 +2280,9 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
     ctx.textAlign = 'left';
   });
 
-  // Total breakdown（Dividerの上）
-  const yBreakdown = 430 + 3 * 105 + 0; // ゲージ3行の直下
+  /* 合計式表示
+     - 計算式をそのまま表示 */
+  const yBreakdown = 430 + 3 * 105 + 0;
   const computed = Math.max(0, Math.min(100,
     forgingScore  * 0.3 +
     shapingScore * 0.4 +
@@ -1908,20 +2296,21 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
     W/2, yBreakdown
   );
 
-  // Divider（breakdown直下、40px余白）
+  // 区切り線（合計式直下）
   const yDivider = yBreakdown + 30;
   ctx.strokeStyle = 'rgba(255,120,80,0.4)';
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(50, yDivider); ctx.lineTo(W-50, yDivider); ctx.stroke();
 
-  // Ranking（Divider直下、40px余白）
+  // ランキングタイトル（Divider直下）
   const yRankTitle = yDivider + 60;
   ctx.font = 'bold 38px serif';
   ctx.fillStyle = '#ffddaa';
   ctx.textAlign = 'center';
   ctx.fillText('─ ランキング / Ranking ─', W/2, yRankTitle);
 
-  // ランキング一覧（各行 80px間隔）
+  /* ランキング表示
+     - 上位5件を表示＋NEW強調 */
   const yRankStart = yRankTitle + 80;
   ctx.font = '32px monospace';
   scores.slice(0, 5).forEach((s, i) => {
@@ -1944,7 +2333,8 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
     ctx.font = '32px monospace';
   });
 
-  // リプレイガイド（下端から余白80px）
+  /* リプレイ案内
+     - Aボタンで再スタート */
   ctx.fillStyle = 'rgba(255,200,150,0.6)';
   ctx.font = '28px serif';
   ctx.textAlign = 'center';
@@ -1952,11 +2342,14 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
   return c;
 }
 
+/* showResultPanel
+   - リザルトパネルを3D空間に表示
+   - 背景＋粒子＋テキストを合成 */
 function showResultPanel(score, bladeStateSnap, scores, savedId) {
   if (resultPanelMesh) resultPanel.remove(resultPanelMesh);
 
-  const W = 1200, H = 1400;
   const cv  = document.createElement('canvas');
+  const W = 1200, H = 1400;
   cv.width = W; cv.height = H;
 
   const tex = new THREE.CanvasTexture(cv);
@@ -1966,70 +2359,98 @@ function showResultPanel(score, bladeStateSnap, scores, savedId) {
     map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide
   });
 
+  /* パネル生成
+     - CanvasをテクスチャにしてMesh化 */
   resultPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.1), mat);
   resultPanelMesh.position.set(0, 1.55, -2.5);
   resultPanelMesh.rotation.set(0, 0, 0);
   resultPanel.add(resultPanelMesh);
   resultPanel.visible = true;
 
-  // テキスト内容（buildResultCanvas）をサイドCanvasに描いておく
+  /* テキスト生成
+     - buildResultCanvasで内容作成 */
   const textCv = buildResultCanvas(score, bladeStateSnap, scores, savedId);
 
-  // 毎フレーム: 背景+粒子 → テキストオーバーレイ
+  /* 毎フレーム描画
+     - 背景＋粒子＋テキストを重ねる */
   activateCvPanel(cv, tex, 'result', _cvPtsResult, 0.85, function(ctx2, W2, H2) {
     ctx2.drawImage(textCv, 0, 0, W2, H2);
   });
 }
 
 /* ================================================================
-   SCORE PERSISTENCE（1種類 / TOP5 / NEW判定つき）
+   スコア保存（ランキング管理）
 ================================================================ */
+/* LS_KEY
+   - ローカルストレージの保存キー
+   - 同じキーでデータを管理 */
 const LS_KEY = 'echizen_scores_v1';
 
-/** 読み込み */
+/* loadScores
+   - 保存済みスコアを読み込む
+   - エラー時は空配列を返す */
 function loadScores() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); }
   catch { return []; }
 }
+
+/* saveScore
+   - 新しいスコアを保存
+   - 並び替え＆TOP5に制限 */
 function saveScore(score) {
   const arr = loadScores();
+
+  /* 現在時刻
+     - IDと表示用日時を生成 */
   const now = new Date();
   const id = now.getTime();
-
   const date = now.toLocaleDateString("ja-JP");
   const clock = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
 
+  /* スコア追加
+     - 配列に新規データを追加 */
   arr.push({ score, date, clock, id });
 
 
-  // ★ 同点なら今回のスコア（id が大きい方）を上位にする
+  /* ソート
+     - スコア降順＋同点は新しい方優先 */
   arr.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
     return b.id - a.id;  // ← 同点時は id の降順
   });
 
+  /* 上位5件だけ残す */
   arr.splice(5);
 
+  /* 保存
+     - localStorageに書き込み */
   localStorage.setItem(LS_KEY, JSON.stringify(arr));
 
+  /* 順位取得
+     - 今回のスコアの順位 */
   const rank = arr.findIndex(s => s.id === id);
+
   return { scores: arr, rank, id };
 }
 
 /* ================================================================
-   UI HTML UPDATES
+   鍛造フェーズ用の状態管理
 ================================================================ */
-/* ================================================================
-   FORGING STATE VARIABLES
-================================================================ */
-let ironTemperature   = 0;
-let ironOnWorkbench   = false;
-let ironInFurnace     = false;
-let ironHeld          = false;
-let forgingHitCount   = 0;
-let shapeDistortion   = 0;
-let forgingComplete   = false;
+/* 基本状態
+   - 鉄の状態（温度・位置・所持）を管理 */
+let ironTemperature   = 0;   // 温度
+let ironOnWorkbench   = false; // 作業台上か
+let ironInFurnace     = false; // 炉の中か
+let ironHeld          = false; // 手で持っているか
 
+/* 進行管理
+   - 鍛造の進み具合 */
+let forgingHitCount   = 0;   // 叩いた回数
+let shapeDistortion   = 0;   // 歪み
+let forgingComplete   = false; // 完了フラグ
+
+/* 当たり判定（エリア）
+   - 鉄の位置判定に使用 */
 const ironBB       = new THREE.Box3();
 const workbenchBB  = new THREE.Box3().setFromCenterAndSize(
   workbenchPos.clone().add(new THREE.Vector3(0, 0.05, 0)),
@@ -2041,7 +2462,9 @@ const furnaceBB = new THREE.Box3().setFromCenterAndSize(
   new THREE.Vector3(0.65, 1.30, 0.55)
 );
 
-// Temperature color helpers
+/* tempToColor
+   - 温度に応じて色を変える
+   - 冷→暗色 / 熱→赤色 */
 function tempToColor(t) {
   if (t < 30) return new THREE.Color(0x555555);
   if (t < 60) return new THREE.Color().setHSL(0.08, 0.6, 0.2 + t * 0.003);
@@ -2049,41 +2472,66 @@ function tempToColor(t) {
 }
 
 /* ================================================================
-   SHAPING STATE VARIABLES
+   成形フェーズ用の状態管理
 ================================================================ */
-let shapingHitCount  = 0;
-let bladeHeld        = false;
-let bladeFlipped     = false;
-let bladeFlipAnim    = 0;
-let shapingComplete  = false;
+/* 進行管理
+   - 成形の進み具合 */
+let shapingHitCount  = 0;   // 叩いた回数
+let shapingComplete  = false; // 完了フラグ
+
+/* 操作状態
+   - 刃物の持ち方・向き */
+let bladeHeld        = false; // 手で持っているか
+let bladeFlipped     = false; // 表裏が反転しているか
+let bladeFlipAnim    = 0;     // 反転アニメ進行度
 
 /* ================================================================
-   SHARPENING STATE VARIABLES
+   研ぎフェーズ用の状態管理
 ================================================================ */
-let strokeCount        = 0;
-let lastStrokeDir      = 0;
-let sharpenComplete    = false;
-let totalSharpness     = 0;   // 累積加点
-let strokeScores       = 0;   // 未使用（互換用）
-let prevSharpenZ       = 0;
-let sharpenStreak      = 0;
-let consecutivePerfect = 0;   // ◎連続カウント
+/* 進行管理
+   - 研ぎの回数と完了状態 */
+let strokeCount     = 0;   // ストローク回数
+let sharpenComplete = false; // 完了フラグ
+
+/* 動き検出
+   - 研ぎ動作の方向や位置 */
+let lastStrokeDir = 0;   // 前回の動き方向
+let prevSharpenZ  = 0;   // 前フレーム位置（Z）
+
+/* スコア管理
+   - 切れ味や加点 */
+let totalSharpness = 0;  // 累積スコア
+
+/* コンボ管理
+   - 連続成功のカウント */
+let sharpenStreak      = 0; // 連続成功
+let consecutivePerfect = 0; // ◎連続数
 
 /* ================================================================
-   INPUT STATE
+   入力状態管理
 ================================================================ */
-let wasAPressed  = false;
-let wasBPressed  = false;
-let wasXPressed  = false;
+/* ボタン状態
+   - 前フレームの押下状態を保持 */
+let wasAPressed  = false; // Aボタン
+let wasBPressed  = false; // Bボタン
+let wasXPressed  = false; // Xボタン
 
-function isVRActive() { return renderer.xr.isPresenting; }
+/* isVRActive
+   - VRモードかどうか判定 */
+function isVRActive() {
+  return renderer.xr.isPresenting;
+}
 
 /* ================================================================
-   HELPER: Get controller world position (VR only)
+   VR入力ヘルパー
 ================================================================ */
 const tempVec  = new THREE.Vector3();
 const tempVecL = new THREE.Vector3();
 const tempVecR = new THREE.Vector3();
+
+/* コントローラ位置取得
+   - 左右の手のワールド座標を取得
+   - 未接続時は仮の位置を返す */
 function getRightHandPos() {
   if (rightController) { rightController.getWorldPosition(tempVecR); return tempVecR; }
   return new THREE.Vector3(0.3, 1.3, -1.0);
@@ -2092,6 +2540,9 @@ function getLeftHandPos() {
   if (leftController) { leftController.getWorldPosition(tempVecL); return tempVecL; }
   return new THREE.Vector3(-0.3, 1.3, -1.0);
 }
+
+/* トリガー入力
+   - 右トリガー / 左トリガー・グリップ判定 */
 function getRightTrigger() {
   const gp = getRightGamepad();
   return gp ? (gp.buttons[0]?.pressed ?? false) : false;
@@ -2100,10 +2551,10 @@ function getLeftTriggerOrGrip() {
   const gp = getLeftGamepad();
   return gp ? ((gp.buttons[0]?.pressed ?? false) || (gp.buttons[1]?.pressed ?? false)) : false;
 }
-// --- 安全なgamepad取得ヘルパー ---
-// rightController/leftControllerはconnectedイベント後に確定するが、
-// XRセッション開始直後はnullのことがある。
-// そのためctrl0/ctrl1のgamepadも直接参照し、handednessで右/左を判定する。
+
+
+/* Gamepad取得
+   - コントローラ未初期化でも安全に取得 */
 function getRightGamepad() {
   if (rightController?.gamepad) return rightController.gamepad;
   for (const c of [ctrl0, ctrl1]) {
@@ -2131,6 +2582,8 @@ function getLeftGamepad() {
   return null;
 }
 
+/* ボタン入力
+   - A/B/Xボタンの押下判定 */
 function getAButton() {
   const gp = getRightGamepad();
   return gp ? (gp.buttons[4]?.pressed ?? false) : false;
@@ -2143,6 +2596,9 @@ function getXButton() {
   const gp = getLeftGamepad();
   return gp ? (gp.buttons[4]?.pressed ?? false) : false;
 }
+
+/* 両手グリップ
+   - どちらかのグリップ押下を検出 */
 function getBothGrips() {
   const lg = getLeftGamepad()?.buttons[1]?.pressed  ?? false;
   const rg = getRightGamepad()?.buttons[1]?.pressed ?? false;
@@ -2150,8 +2606,12 @@ function getBothGrips() {
 }
 
 /* ================================================================
-   PHASE TRANSITIONS
+   PHASE TRANSITIONS（フェーズ管理）
+   - 各工程の初期化・状態遷移・表示切替をまとめて管理
 ================================================================ */
+/* resetForging
+   - 鍛造フェーズを初期状態に戻す
+   - 温度・位置・スコアをリセット */
 function resetForging() {
   ironTemperature = 70; // スタート時70°
   ironOnWorkbench = false;
@@ -2167,45 +2627,10 @@ function resetForging() {
   _phaseScores.shaping    = 0;
   _phaseScores.sharpening = 0;
 }
-// ── BoundingBoxベース接地補正 ─────────────────────────────────
-// 天板上面: workbenchPos.y + (天板厚み/2) = 0.85 + 0.03 = 0.88
-const TABLE_SURFACE_Y = workbenchPos.y + 0.03;
-const _bbBox = new THREE.Box3(); // 毎回再利用するBox3インスタンス
 
-// blade1/blade2 のみを対象にBBを計算（ワイヤーは除く）
-function _getBladeBB() {
-  _bbBox.makeEmpty();
-  _bbBox.expandByObject(bladeMesh);
-  _bbBox.expandByObject(bladeMesh2);
-  return _bbBox;
-}
-
-// BoundingBoxを使ってbladePivotを接地させる
-function _groundBladeByBB() {
-  // 現在のワールドBBを取得
-  const bb   = _getBladeBB();
-  const minY = bb.min.y;                   // 現在の最下点
-  const diff = TABLE_SURFACE_Y - minY;     // 不足分 or 超過分
-  bladePivot.position.y += diff;           // 補正
-}
-
-// ワイヤーメッシュを刃物の同じTransformに追従させ、ローカル法線方向にオフセット
-// bladePivotの子なので、bladeMesh/bladeMesh2 のpivotローカル座標で設定
-
-// 回転・位置を設定してからBB接地補正 → ワイヤー同期
-function _applyBladeGround(flipped) {
-  const rot  = flipped ? Math.PI/2 : -Math.PI/2;
-  const posZ = flipped ? -0.035 : 0.035;
-  // まず回転・位置を確定
-  bladeMesh.rotation.x  = rot;
-  bladeMesh.position.set(-0.204, +BLADE_HALF, posZ);
-  bladeMesh2.rotation.x = rot;
-  bladeMesh2.position.set(-0.204, -BLADE_HALF, posZ);
-  // BoundingBoxで接地
-  _groundBladeByBB();
-  // ワイヤー同期（接地後、pivotローカル座標は変わらないのでそのまま）
-}
-
+/* resetShaping
+   - 成形フェーズを初期化
+   - 歪み（ランダム）を生成して各ゾーンに設定 */
 function resetShaping() {
   shapingHitCount = 0;
   bladeHeld       = false;
@@ -2236,12 +2661,15 @@ function resetShaping() {
   bladePivot.rotation.y = 0;
   _applyBladeGround(false); // 表(flipped=false)で接地
 }
+
+/* resetSharpening
+   - 研ぎフェーズを初期化
+   - ストローク・鋭さ・位置をリセット */
 function resetSharpening() {
   strokeCount     = 0;
   lastStrokeDir   = 0;
   sharpenComplete = false;
   totalSharpness  = 0;
-  strokeScores       = 0;
   prevSharpenZ       = 0;
   sharpenStreak      = 0;
   consecutivePerfect = 0;
@@ -2250,20 +2678,50 @@ function resetSharpening() {
   sharpenBladeMesh.rotation.set(Math.PI / 2, 0, 0); // 刃先を奥に
 }
 
-function setVisibility() {
-  const isIntro = isIntroState(currentState);
-  groupForging.visible    = currentState === State.FORGING;
-  groupShaping.visible    = currentState === State.SHAPING;
-  groupSharpening.visible = currentState === State.SHARPENING;
-  resultPanel.visible     = currentState === State.RESULT;
-  infoPanel.visible       = currentState !== State.RESULT;
-  scorePanelGroup.visible = (currentState === State.FORGING || currentState === State.SHAPING || currentState === State.SHARPENING);
-  angleHudMesh.visible    = currentState === State.SHARPENING;
-  // フェーズ移行時にスコアパネルをクリア
-  updateScorePanel(null);
-  // パネルはonEnterStateでactivateCvPanelにより更新される
+/* BoundingBox接地補正
+   - 刃物の一番下を検出して机の高さに合わせる
+   - めり込み・浮きを防ぐ */
+const TABLE_SURFACE_Y = workbenchPos.y + 0.03;
+const _bbBox = new THREE.Box3(); // 毎回再利用するBox3インスタンス
+
+/* _getBladeBB
+   - 刃物2枚のBoundingBoxを取得（ワイヤー除外） */
+function _getBladeBB() {
+  _bbBox.makeEmpty();
+  _bbBox.expandByObject(bladeMesh);
+  _bbBox.expandByObject(bladeMesh2);
+  return _bbBox;
 }
 
+/* _groundBladeByBB
+   - 最下点を基準にY位置を補正して接地させる */
+function _groundBladeByBB() {
+  // 現在のワールドBBを取得
+  const bb   = _getBladeBB();
+  const minY = bb.min.y;                   // 現在の最下点
+  const diff = TABLE_SURFACE_Y - minY;     // 不足分 or 超過分
+  bladePivot.position.y += diff;           // 補正
+}
+
+/* _applyBladeGround
+   - 回転・位置を決定 → BoundingBoxで接地
+   - 表裏(flipped)に応じて向きを切替 */
+function _applyBladeGround(flipped) {
+  const rot  = flipped ? Math.PI/2 : -Math.PI/2;
+  const posZ = flipped ? -0.035 : 0.035;
+  // まず回転・位置を確定
+  bladeMesh.rotation.x  = rot;
+  bladeMesh.position.set(-0.204, +BLADE_HALF, posZ);
+  bladeMesh2.rotation.x = rot;
+  bladeMesh2.position.set(-0.204, -BLADE_HALF, posZ);
+  // BoundingBoxで接地
+  _groundBladeByBB();
+  // ワイヤー同期（接地後、pivotローカル座標は変わらないのでそのまま）
+}
+
+/* nextState
+   - フェーズを順番に進める（INTRO → 鍛造 → 成形 → 研ぎ → 結果）
+   - 遷移後に表示更新＋開始処理を実行 */
 function nextState() {
   const prev = currentState;
   if      (currentState === State.INTRO_0)     currentState = State.INTRO_1;
@@ -2280,54 +2738,90 @@ function nextState() {
   onEnterState(currentState, prev);
 }
 
-function vibrate() {
-  const lGp = getLeftGamepad();
-  const rGp = getRightGamepad();
-
-  for (let i = 0; i < 3; i++) {
-    setTimeout(() => {
-      if (lGp?.hapticActuators?.[0]) {
-        lGp.hapticActuators[0].pulse(1, 80);
-      }
-      if (rGp?.hapticActuators?.[0]) {
-        rGp.hapticActuators[0].pulse(1, 80);
-      }
-    }, i * 100);
-  }
-}
-
-function retryState() {
-  playTransition();
-  updateScorePanel(null);
-  const prev = currentState;
-  if (currentState === State.FORGING) {
-    shapeDistortion = 100; // リトライ時も最悪値から再スタート
-    resetForging();
-  } else if (currentState === State.SHAPING) {
-    resetShaping();
-  } else if (currentState === State.SHARPENING) {
-    resetSharpening();
-  }
-  onEnterState(currentState, prev);
-}
-
+/* onEnterState
+   - フェーズ開始時の処理まとめ
+   - 初期化＋説明表示＋スコア処理を行う */
 function onEnterState(state, prev) {
+
+  // ── INTRO系 ─────────────────────────
   if (isIntroState(state)) {
+
     if (state === State.INTRO_0) {
       bladeState = { shapeDistortion: 0, symmetryError: 0, sharpness: 0 };
-      resetForging(); resetShaping(); resetSharpening();
+      resetForging(); 
+      resetShaping(); 
+      resetSharpening();
+
+      updateInfoPanel_INTRO0();
+      return;
     }
-    // INTROスライドのテキスト
-    // INTRO_0はタイトル演出（updateInfoPanelは特別処理）
-    if (state === State.INTRO_0) {
-      // スケールアニメーション開始
-      updateInfoPanel_INTRO0(); // タイトル専用
-      return; // 以下のintroData処理をスキップ
+
+    const d = TEXT_DATA.intro[state];
+    if (d) updateInfoPanel(d.body, d.title);
+    return;
+  }
+
+  // ── FORGING ─────────────────────────
+  if (state === State.FORGING) {
+    resetForging();
+    shapeDistortion = 100;
+
+    const d = TEXT_DATA.forging;
+    updateInfoPanel(d.body, d.title);
+  }
+
+  // ── SHAPING ─────────────────────────
+  else if (state === State.SHAPING) {
+    resetShaping();
+    bladeState.shapeDistortion = shapeDistortion;
+    bladeState.symmetryError   = 100;
+
+    const d = TEXT_DATA.shaping;
+    updateInfoPanel(d.body, d.title);
+  }
+
+  // ── SHARPENING ─────────────────────
+  else if (state === State.SHARPENING) {
+    resetSharpening();
+
+    if (shapingComplete) {
+      bladeState.symmetryError =
+        zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
     }
-    const introData = {
-      [State.INTRO_1]: {
-        title: '① 歴史 / History',
-        body: `越前打刃物は、1337年に始まりました。
+
+    const d = TEXT_DATA.sharpening;
+    updateInfoPanel(d.body, d.title);
+  }
+
+  // ── RESULT ─────────────────────────
+  else if (state === State.RESULT) {
+    const fS = _phaseScores.forging;
+    const sS = _phaseScores.shaping;
+    const hS = _phaseScores.sharpening;
+
+    let finalScore = Math.max(0, Math.min(100,
+      fS * 0.4 + sS * 0.3 + hS * 0.3
+    ));
+
+    finalScore = Math.floor(finalScore);
+
+    const { scores, rank, id } = saveScore(finalScore);
+    showResultPanel(finalScore,
+      { _forging: fS, _shaping: sS, _sharpening: hS },
+      scores, id
+    );
+  }
+}
+
+// ================================================================
+// TEXT DATA（表示テキストだけ管理）
+// ================================================================
+const TEXT_DATA = {
+
+  intro: {
+    [State.INTRO_1]: {
+      title: '① 歴史 / History',
+      body: `越前打刃物は、1337年に始まりました。
 京都の刀匠・千代鶴国安がこの地に移り、
 農民のために鎌を作ったことが起源です。
 600年以上にわたり、その技は受け継がれています。
@@ -2340,11 +2834,12 @@ and started making sickles for local farmers.
 For over 600 years, this craft has been passed down
 from generation to generation.
 
-　　　Press A ▶ Next`,
-      },
-      [State.INTRO_2]: {
-        title: '② 製造工程 / Manufacturing Process',
-        body: `打刃物は、いくつもの工程を経て作られます。
+　　　Press A ▶ Next`
+    },
+
+    [State.INTRO_2]: {
+      title: '② 製造工程 / Manufacturing Process',
+      body: `打刃物は、いくつもの工程を経て作られます。
 大きく分けると、次の3つの流れがあります。
 
 鍛造：熱した鋼を叩き、金属を鍛える
@@ -2373,12 +2868,12 @@ Some parts are mechanized today,
 but the fundamental method has remained
 nearly unchanged for 700 years.
 
-　　　Press A ▶ Next`,
+　　　Press A ▶ Next`
+    },
 
-      },
-      [State.INTRO_3]: {
-        title: '③ 特徴：二枚広げ / Feature: Nimai-hiroge',
-        body: `越前打刃物の特徴は、「二枚広げ」という技法です。
+    [State.INTRO_3]: {
+      title: '③ 特徴：二枚広げ / Feature: Nimai-hiroge',
+      body: `越前打刃物の特徴は、「二枚広げ」という技法です。
 熱くなった2枚の刃を重ねたまま、
 表と裏の両側からハンマーで叩く方法です。
 
@@ -2409,11 +2904,12 @@ reducing uneven results.
 This technique produces blades that are light, thin,
 and maintain sharpness for a long time.
 
-　　　Press A ▶ Next`,
-      },
-      [State.INTRO_4]: {
-        title: '④ 体験内容 / Your Challenge',
-        body: `この体験では、職人の工程を再現します。
+　　　Press A ▶ Next`
+    },
+
+    [State.INTRO_4]: {
+      title: '④ 体験内容 / Your Challenge',
+      body: `この体験では、職人の工程を再現します。
 あなたの技術で、一本の刃物を完成させてください。
 
 ① 鍛造：
@@ -2440,17 +2936,13 @@ Use the Nimai‑hiroge technique to thin and even the blade
 ③ Sharpening:
 Maintain the correct angle and polish the edge to finish it
 
-　　　Press A ▶ Next`,
-      },
-    };
-    const d = introData[state];
-    updateInfoPanel(d.body, d.title);
+　　　Press A ▶ Next`
+    }
+  },
 
-  } else if (state === State.FORGING) {
-    resetForging();
-    shapeDistortion = 100;
-    updateInfoPanel(
-`鍛造は最初の工程です。
+  forging: {
+    title: '① 鍛造 / Phase 1: Forging',
+    body: `鍛造は最初の工程です。
 炉の中で鉄を赤く熱し、
 適温になったら作業台に置き、
 ハンマーで打ちます。
@@ -2476,15 +2968,12 @@ Too hot
 Too cold
 
 Aボタン：次のフェーズへ
-A: Next Phase`,
-'① 鍛造 / Phase 1: Forging');
+A: Next Phase`
+  },
 
-  } else if (state === State.SHAPING) {
-    resetShaping();
-    bladeState.shapeDistortion = shapeDistortion;
-    bladeState.symmetryError   = 100;
-    updateInfoPanel(
-`二枚広げとは、2枚の刃を
+  shaping: {
+    title: '② 成形 / Phase 2: Shaping',
+    body: `二枚広げとは、2枚の刃を
 重ねたまま叩く越前の技です。
 
 表と裏のバランスを意識して、
@@ -2508,16 +2997,12 @@ Minus(-)歪み → 裏から叩く
 Distortion=0 → 100pt
 
 Aボタン：終了
-A: Finish`,
-'② 成形 / Phase 2: Shaping');
+A: Finish`
+  },
 
-  } else if (state === State.SHARPENING) {
-    resetSharpening();
-    if (shapingComplete) {
-      bladeState.symmetryError = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
-    }
-    updateInfoPanel(
-`研ぎは刃を完成させる最後の工程です。
+  sharpening: {
+    title: '③ 研ぎ / Phase 3: Sharpening',
+    body: `研ぎは刃を完成させる最後の工程です。
 砥石の角度を保つことで、
 鋭い刃が生まれます。
 
@@ -2545,30 +3030,69 @@ HUD: NG = 不一致
 ◎10回 → +10ptボーナス
 
 Aボタン：次のフェーズへ
-A: Next Phase`,
-'③ 研ぎ / Phase 3: Sharpening');
+A: Next Phase`
+  }
 
-  } else if (state === State.RESULT) {
-    // 各フェーズ確定スコアをそのまま使用（再計算禁止）
-    const fS = _phaseScores.forging;
-    const sS = _phaseScores.shaping;
-    const hS = _phaseScores.sharpening;
-    
-    let finalScore = Math.max(0, Math.min(100,
-      fS * 0.4 + sS * 0.3 + hS * 0.3
-    ));
+};
 
-    finalScore = Math.floor(finalScore);  // ★ 小数点以下切り捨て
+/* setVisibility
+   - 現在のフェーズに応じて表示/非表示を切り替える
+   - 不要なUIを隠し、必要なものだけ表示する */
+function setVisibility() {
+  const isIntro = isIntroState(currentState);
+  groupForging.visible    = currentState === State.FORGING;
+  groupShaping.visible    = currentState === State.SHAPING;
+  groupSharpening.visible = currentState === State.SHARPENING;
+  resultPanel.visible     = currentState === State.RESULT;
+  infoPanel.visible       = currentState !== State.RESULT;
+  scorePanelGroup.visible = (currentState === State.FORGING || currentState === State.SHAPING || currentState === State.SHARPENING);
+  angleHudMesh.visible    = currentState === State.SHARPENING;
+  // フェーズ移行時にスコアパネルをクリア
+  updateScorePanel(null);
+}
 
-    const { scores, rank, id } = saveScore(finalScore);
-    showResultPanel(finalScore, { _forging: fS, _shaping: sS, _sharpening: hS }, scores, id);
+/* retryState
+   - 現在のフェーズをやり直す
+   - 状態をリセットして再スタートする */
+function retryState() {
+  playTransition();
+  updateScorePanel(null);
+  const prev = currentState;
+  if (currentState === State.FORGING) {
+    shapeDistortion = 100; // リトライ時も最悪値から再スタート
+    resetForging();
+  } else if (currentState === State.SHAPING) {
+    resetShaping();
+  } else if (currentState === State.SHARPENING) {
+    resetSharpening();
+  }
+  onEnterState(currentState, prev);
+}
+
+/* vibrate
+   - コントローラーを振動させる
+   - 一定間隔で複数回フィードバックを与える */
+function vibrate() {
+  const lGp = getLeftGamepad();
+  const rGp = getRightGamepad();
+
+  for (let i = 0; i < 3; i++) {
+    setTimeout(() => {
+      if (lGp?.hapticActuators?.[0]) {
+        lGp.hapticActuators[0].pulse(1, 80);
+      }
+      if (rGp?.hapticActuators?.[0]) {
+        rGp.hapticActuators[0].pulse(1, 80);
+      }
+    }, i * 100);
   }
 }
+
 
 /* ================================================================
    GLOBAL INPUT HANDLER
 ================================================================ */
-let showingPhaseResult = false;
+let showingPhaseResult = true;
 
 let _sq0c;
 let _sqc;
@@ -2583,6 +3107,8 @@ function lockInputFor(seconds) {
 function handleGlobalInput() {
   const aPressed = getAButton();
   const bPressed = getBButton();
+
+  const _nowIsGame = (currentState === State.FORGING || currentState === State.SHAPING || currentState === State.SHARPENING);
 
   if (aPressed && !wasAPressed && !_inputLocked) {
 
@@ -2623,7 +3149,7 @@ function handleGlobalInput() {
         // 結果表示
         updateInfoPanel(
           `鍛造結果
-  歪み: ${Math.round(shapeDistortion)}
+  強化度（鍛造）: ${Math.round(shapeDistortion)}
 
   Aボタン：次へ`,
           isEarly ? '① 鍛造（途中終了）' : '① 鍛造完了'
@@ -2649,7 +3175,7 @@ function handleGlobalInput() {
         );
         updateInfoPanel(
           `成形結果
-  スコア: ${Math.round(_phaseScores.shaping)}pt
+  均一度（成形）: ${Math.round(_phaseScores.shaping)}pt
 
   Aボタン：次へ`,
           isEarly ? '② 成形（途中終了）' : '② 成形完了'
@@ -2672,7 +3198,7 @@ function handleGlobalInput() {
         _phaseScores.sharpening = Math.min(100, Math.round(totalSharpness));
         updateInfoPanel(
           `研ぎ結果
-  ポイント: ${_phaseScores.sharpening}pt
+  鋭利度（研ぎ）: ${_phaseScores.sharpening}pt
 
   Aボタン：次へ`,
           isEarly ? '③ 研ぎ（途中終了）' : '③ 研ぎ完了'
@@ -2690,7 +3216,7 @@ function handleGlobalInput() {
   wasAPressed = aPressed;
 
   // ===== Bボタン（リトライ） =====
-  if (bPressed && !wasBPressed && !_inputLocked) {
+  if (bPressed && !wasBPressed && !_inputLocked && _nowIsGame) {
     showingPhaseResult = false;
     retryState();
   }
@@ -2792,7 +3318,7 @@ function updateForging(delta) {
   const hammerHitsIron = ironBB.containsPoint(hammerHeadWorld) ||
                          hammerHeadWorld.distanceTo(ironMesh.position) < 0.14;
 
-  if (rightTrig && !prevRightTrigger && forgingHitCooldown <= 0 && forgingHitCount < CONFIG.FORGING.TOTAL_HITS &&!showingPhaseResult) {
+  if (rightTrig && !prevRightTrigger && forgingHitCooldown <= 0 && forgingHitCount < CONFIG.FORGING.TOTAL_HITS && !showingPhaseResult) {
     forgingHitCooldown = 0.25;
     forgingHitCount++;
 
@@ -2919,7 +3445,7 @@ function updateShaping(delta) {
 
   // ---- 打撃判定 ----
   const shapingTrig = getRightTrigger();
-  if (shapingTrig && !prevShapingTrigger && shapingHitCooldown <= 0 && shapingHitCount < CONFIG.SHAPING.MAX_HITS &&!showingPhaseResult) {
+  if (shapingTrig && !prevShapingTrigger && shapingHitCooldown <= 0 && shapingHitCount < CONFIG.SHAPING.MAX_HITS && !showingPhaseResult) {
     shapingHitCooldown = 0.18;
     shapingHitCount++;
 
@@ -3069,7 +3595,7 @@ function updateSharpening(delta) {
 
   updateAngleHud(leftTiltDeg, rightTiltDeg, isAligned, bladeAngleDeg);
 
-  if (held &&!showingPhaseResult) {
+  if (held && !showingPhaseResult) {
     // コントローラーのトリガー位置（midから少し先端方向）が刃物中心になるよう調整
     // コントローラーグリップの中心より少し奥(-Z)に刃物を配置
     sharpenBladeGroup.position.set(
@@ -3124,7 +3650,7 @@ function updateSharpening(delta) {
             // ○：やや近い
             addPoints = 2;
             grade     = '○';
-          } else if ((bladeAngleDeg >= 5 && bladeAngleDeg <= 10) ||
+          } else if ((bladeAngleDeg >= 5 && bladeAngleDeg <= 15) ||
                      (bladeAngleDeg >= -45 && bladeAngleDeg < -35)) {
             // △：やや遠い
             addPoints = 1;
@@ -3266,8 +3792,6 @@ for (let i = 0; i < particleCount; i++) {
 }
 _ptOrange.instanceMatrix.needsUpdate = true;
 _ptYellow.instanceMatrix.needsUpdate = true;
-
-
 
 /* ================================================================
    BROWSER UI PARTICLE SYSTEM
