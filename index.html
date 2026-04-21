@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -3089,37 +3089,53 @@ function vibrate() {
 }
 
 /* ================================================================
-   UPDATE FORGING
+   UPDATE FORGING（鍛造の更新処理）
+   - 鉄の操作・加熱・打撃判定を毎フレーム更新
 ================================================================ */
+/* 主要な状態変数
+  - トリガーの前回状態（連打防止）
+  - 打撃のクールタイム */
 let prevRightTrigger = false;
 let forgingHitCooldown = 0;
 
+/* updateForging
+  - 鍛造フェーズのメイン処理
+  - 掴む・加熱・打撃・スコア更新を行う */
 function updateForging(delta) {
-  hammerGroup.visible = true; // FORGINGではハンマー表示
+  hammerGroup.visible = true;
+
+  /* コントローラー入力取得
+    - 左右の手の位置
+    - トリガー状態 */
   const lhPos    = getLeftHandPos();
   const rhPos    = getRightHandPos();
   const leftTrig = getLeftTriggerOrGrip();
 
-  // Update iron BB
+  /* 当たり判定（鉄の位置）
+    - BoundingBoxを更新 */
   ironBB.setFromCenterAndSize(ironMesh.position, new THREE.Vector3(0.28, 0.09, 0.09));
 
-  // Detect furnace / workbench overlap
+  /* 炉・作業台の判定
+    - 鉄がどこにあるか判定 */
   const ironInFurnaceNow   = furnaceBB.containsPoint(ironMesh.position);
   const ironOnWorkbenchNow = workbenchBB.containsPoint(ironMesh.position);
   ironInFurnace   = ironInFurnaceNow;
   ironOnWorkbench = ironOnWorkbenchNow;
 
-  // Grab logic: 左手が鉄に近くてトリガー/グリップを引いたら掴む
+  /* 掴み処理
+    - 左手で鉄を持つ */
   const lhToIron = lhPos.distanceTo(ironMesh.position);
   if (leftTrig && lhToIron < 0.35 && !ironHeld) ironHeld = true;
   if (!leftTrig) ironHeld = false;
 
-  // 鉄を左手に追従させる
+  /* 鉄を手に追従
+    - 掴んでいる間だけ移動 */
   if (ironHeld) {
     ironMesh.position.set(lhPos.x, Math.max(lhPos.y - 0.04, 0.5), lhPos.z);
   }
 
-  // ---- ハンマーをコントローラーに追従させる ----
+  /* ハンマー追従
+    - 右手コントローラーに装着 */
   {
     let targetGrip = null;
     if (rightController === ctrl0) targetGrip = grip0;
@@ -3133,14 +3149,16 @@ function updateForging(delta) {
     hammerGroup.rotation.set(Math.PI / 2, 0, 0);
   }
 
-  // ---- ハンマーヘッドのワールド座標を取得して当たり判定 ----
-  // hammerHeadはhammerGroupの子で position.set(0, -0.18, 0)
-  // rotation.x = PI/2 適用後のワールド座標を取得
+  /* ハンマー位置取得
+    - 当たり判定用 */
   const hammerHeadWorld = new THREE.Vector3();
   hammerHead.getWorldPosition(hammerHeadWorld);
 
-  // Temperature update + 炉内左手バイブ
+  /* 温度処理
+    - 炉内：加熱＋光＋振動
+    - 外：冷却 */
   if (ironInFurnace) {
+    // 加熱処理
     ironTemperature = Math.min(100, ironTemperature + CONFIG.FORGING.FORGE_HEAT_RATE * delta);
     forgeLight.intensity = 1.5 + Math.sin(Date.now()*0.01)*0.3;
     emberLight.intensity = 0.8;
@@ -3156,13 +3174,15 @@ function updateForging(delta) {
       }
     }
   } else {
+    // 冷却処理
     ironTemperature = Math.max(0, ironTemperature - CONFIG.FORGING.COOL_RATE * delta);
     forgeLight.intensity = THREE.MathUtils.lerp(forgeLight.intensity, 0.4, delta*2);
     emberLight.intensity = THREE.MathUtils.lerp(emberLight.intensity, 0.2, delta*2);
     furnaceHoleMat.emissiveIntensity = 0.3;
   }
 
-  // Update iron color
+  /* 見た目更新
+    - 色・発光・温度表示 */
   ironMesh.material.color.copy(tempToColor(ironTemperature));
   ironMesh.material.emissive = ironTemperature > 50
     ? new THREE.Color().setHSL(0.04, 1, (ironTemperature - 50) * 0.006)
@@ -3171,7 +3191,8 @@ function updateForging(delta) {
 
   updateTempSprite(ironTemperature);
 
-  // Velocity
+  /* 速度計算
+    - 打撃の強さ判定用 */
   prevRightPos.copy(currRightPos);
   currRightPos.copy(rhPos);
   rightVelocity = prevRightPos.distanceTo(currRightPos) / Math.max(delta, 0.001);
@@ -3181,7 +3202,8 @@ function updateForging(delta) {
   const rightTrig = getRightTrigger();
   const hammerHitsIron = ironBB.containsPoint(hammerHeadWorld) ||
                          hammerHeadWorld.distanceTo(ironMesh.position) < 0.14;
-
+  /* 打撃判定
+    - トリガー・速度・位置・温度で評価 */
   if (rightTrig && !prevRightTrigger && forgingHitCooldown <= 0 && forgingHitCount < CONFIG.FORGING.TOTAL_HITS && !showingPhaseResult) {
     forgingHitCooldown = 0.25;
     forgingHitCount++;
@@ -3191,6 +3213,8 @@ function updateForging(delta) {
     const isHit      = hammerHitsIron;
     const tempZone   = getTempZone(ironTemperature);
 
+    /* 打撃判定
+      - トリガー・速度・位置・温度で評価 */
     let result = 'Miss';
     if (tempZone.judge === 'cold') {
       // 冷めすぎ: Missのみ
@@ -3206,34 +3230,37 @@ function updateForging(delta) {
       else result = 'Miss';
     }
 
-    // 歪み更新
+    /* 歪み更新
+      - 成功で減少、失敗で増加 */
     if (result === 'Perfect')      shapeDistortion = Math.max(0,   shapeDistortion - 5);
     else if (result === 'Good')    shapeDistortion = Math.max(0,   shapeDistortion - 1);
     else if (result === 'Miss')    shapeDistortion = Math.min(100, shapeDistortion + 3);
 
-    // Sparks（鍛造：5倍量、オレンジ炎色）
+    /* エフェクト - 火花 */
     const sparkOrigin = hammerHeadWorld.clone().add(new THREE.Vector3(0, 0.02, 0));
     const sparkCount = result === 'Perfect' ? CONFIG.FORGING.SPARK_COUNT_PERFECT * 5 :
                        result === 'Good'    ? CONFIG.FORGING.SPARK_COUNT_GOOD    * 5 :
                                               CONFIG.FORGING.SPARK_COUNT_MISS;
     spawnSparks(sparkOrigin, sparkCount, 'forge', 1.0);
 
-    // Sound
+    /* エフェクト - 音 */
     if (result === 'Perfect') playHammerPerfect();
     else if (result === 'Good') playHammerGood();
     else playHammerMiss();
 
-    // VR haptics
+    /* エフェクト - 振動 */
     const rGp = getRightGamepad();
     if (rGp?.hapticActuators?.[0]) {
       rGp.hapticActuators[0].pulse(result === 'Perfect' ? 0.8 : 0.3, 80);
     }
 
+    /* スコア表示更新 */
     updateScorePanel(`① 打撃 ${forgingHitCount}/${CONFIG.FORGING.TOTAL_HITS}\n${result}  歪み:${Math.round(shapeDistortion)}`, new THREE.Vector3(0, workbenchPos.y + 0.43, -1.1));
 
+    /* フェーズ終了判定
+      - 規定回数で完了 */
     if (forgingHitCount >= CONFIG.FORGING.TOTAL_HITS) {
       forgingComplete = true;
-      // フェーズ終了時にスコアを確定保存
       _phaseScores.forging = Math.round(Math.max(0, Math.min(100, 100 - shapeDistortion)));
       updateInfoPanel(`鍛造が完了しました！\n歪み: ${Math.round(shapeDistortion)}\n\nForging complete!\nDistortion: ${Math.round(shapeDistortion)}\n\nAボタン：次のフェーズへ　A: Next Phase`, '① 鍛造完了 / Forging Complete');
       playComplete();
@@ -3244,22 +3271,30 @@ function updateForging(delta) {
 }
 
 /* ================================================================
-   UPDATE SHAPING
+   UPDATE SHAPING（成形フェーズの更新）
 ================================================================ */
+/* 状態管理用の変数
+  - 打撃クールタイム
+  - トリガー・ボタンの前回状態
+  - 位置計算用ベクトル */
 let shapingHitCooldown = 0;
 let prevShapingTrigger = false;
 let prevXButton = false;
 const bladeWorldPos = new THREE.Vector3();
 
+/* メイン更新処理
+  - ハンマー操作・打撃判定
+  - 歪み修正・スコア計算
+  - フェーズ完了判定 */
 function updateShaping(delta) {
   hammerGroup.visible = true; // SHAPINGではハンマー表示
   const rhPos    = getRightHandPos();
   const xBtn     = getXButton();
 
-  // 刃物は作業台に固定（左手追従なし）
-  // ---- 表裏反転：bladeMesh.rotation.xのみ変更 + Z位置補正 ----
-  // 表(rotation.x=-PI/2): mesh.position.z=+0.06 で刃物中心をZ=0に
-  // 裏(rotation.x=+PI/2): mesh.position.z=-0.06 で刃物中心をZ=0に
+  /* 表裏反転処理
+    - Xボタンで刃を反転
+    - アニメーションしながら回転・位置補正
+    - BoundingBoxで常に作業台に接地 */
   if (xBtn && !wasXPressed) {
     bladeFlipped  = !bladeFlipped;
     bladeFlipAnim = 1.0;
@@ -3287,7 +3322,8 @@ function updateShaping(delta) {
     _applyBladeGround(bladeFlipped);
   }
 
-  // ---- ゾーンインジケーター更新（刃物固定のため位置はそのまま、色のみ更新）----
+  /* ゾーン表示更新
+    - 歪みに応じて色と透明度を変更 */
   for (let i = 0; i < ZONE_COUNT; i++) {
     const d    = zones[i].distortion;
     const abs  = Math.abs(d);
@@ -3297,17 +3333,19 @@ function updateShaping(delta) {
     zoneIndicators[i].material.opacity = 0.25 + norm * 0.5;
   }
 
-  // ---- ハンマー速度 ----
+  /* ハンマー速度計算
+    - コントローラー移動から速度を算出 */
   prevRightPos.copy(currRightPos);
   currRightPos.copy(rhPos);
   rightVelocity = prevRightPos.distanceTo(currRightPos) / Math.max(delta, 0.001);
   shapingHitCooldown = Math.max(0, shapingHitCooldown - delta);
 
-  // ハンマーヘッドのワールド座標取得（当たり判定と火花の発生位置）
+  /* 打撃判定
+    - トリガー入力＋クールタイム管理
+    - 最も近いゾーンを判定 */
   const shapingHammerHeadWorld = new THREE.Vector3();
   hammerHead.getWorldPosition(shapingHammerHeadWorld);
 
-  // ---- 打撃判定 ----
   const shapingTrig = getRightTrigger();
   if (shapingTrig && !prevShapingTrigger && shapingHitCooldown <= 0 && shapingHitCount < CONFIG.SHAPING.MAX_HITS && !showingPhaseResult) {
     shapingHitCooldown = 0.18;
@@ -3322,9 +3360,10 @@ function updateShaping(delta) {
     }
 
     if (nearestDist < 0.22) {
-      // ---- 歪み修正ロジック ----
-      // 表向き(bladeFlipped=false): +歪みを叩くと減少（+方向の歪みを修正）
-      // 裏向き(bladeFlipped=true) : -歪みを叩くと増加（-方向の歪みを修正）
+      /* 歪み修正ロジック
+        - 表：＋歪みを減らす
+        - 裏：−歪みを減らす
+        - 叩きすぎると逆に悪化 */
       const d   = zones[nearestIdx].distortion;
       const pow = THREE.MathUtils.clamp(
         (rightVelocity || 1.5) * CONFIG.SHAPING.HIT_POWER_SCALE * 10,
@@ -3344,61 +3383,60 @@ function updateShaping(delta) {
         if (d < 0) {
           zones[nearestIdx].distortion = Math.min(0, d + pow);
         } else {
+          // 既に0以上 = 叩きすぎ → 歪みが悪化
           zones[nearestIdx].distortion = Math.min(50, d + pow * 0.3);
         }
       }
-
+      // 見た目更新（歪みの変化を反映）
       updateZoneSprite(nearestIdx);
 
-      const absNow = Math.abs(zones[nearestIdx].distortion);
-      // pow値ベースの音フィードバック（旧 Perfect/Good 判定を廃止）
+      // 音（叩く強さに応じて変化）
       playShapingHit(pow);
-      // 火花量も pow に比例
+
+      // 火花エフェクト
+      // 強さに応じて火花の量を決定
       const sparkCount = Math.round(THREE.MathUtils.clamp(pow * 30, 20, 150));
-
-      // const shapingSparkOrigin = shapingHammerHeadWorld.clone().add(new THREE.Vector3(0, 0.01, 0));
-
-      // ③ 火花発生位置の修正：ハンマーヘッドのXZ座標を刃物表面のY座標にクランプして接触点を算出
-      // 刃物表面のY座標（BoundingBoxで取得、フリップに対応）
+      // 刃物の表面位置を取得（表裏で上下が変わる）
       const _bladeBBForSpark = _getBladeBB();
       const bladeTopY = bladeFlipped ? _bladeBBForSpark.min.y : _bladeBBForSpark.max.y;
+      // ハンマー位置のXZ + 刃物表面のY ＝ 接触点
       const shapingSparkOrigin = new THREE.Vector3(
         shapingHammerHeadWorld.x,
-        bladeTopY,           // 刃物表面のY（上面 or 下面）に固定
+        bladeTopY,
         shapingHammerHeadWorld.z
       );
-
+      // 火花生成
       spawnSparks(shapingSparkOrigin, sparkCount, 'shape', 0.3);
 
     } else {
+      // ミス時の処理
+      //（当たっていない場合）
       playHammerMiss();
       spawnSparks(shapingHammerHeadWorld.clone(), 9, 'shape', 0.3);
     }
 
+    // 振動フィードバック
     const rGp = getRightGamepad();
     if (rGp?.hapticActuators?.[0]) {
       rGp.hapticActuators[0].pulse(0.5, 60);
     }
 
-    // L2ノルムスコア: score = 100 × (1 - Σx_i² / Σx_i0²)
-
-    // const shapingScore = Math.max(0, Math.min(100, _sq0h > 0 ? 100 * (1 - _sqh / _sq0h) : 0));
+    /* スコア計算
+      - 歪みの二乗和から100点満点で評価 */
     _sq0c = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
     _sqc  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
     const score = Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0));
-    // const avgAbs = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
-    // RMS誤差をsymmetryErrorに保存（RESULT遷移時に使用）
-    // bladeState.symmetryError = Math.sqrt(_sqh / zones.length);
-    // スコアパネルのみ更新（説明パネルは打撃ごとに更新しない）
     updateScorePanel(`② 打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS}\n${Math.round(score)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.43, -1.25));
   }
   prevShapingTrigger = shapingTrig;
 
+  /* フェーズ終了判定
+    - 規定回数で完了
+    - スコア保存・結果表示 */
   if (shapingHitCount >= CONFIG.SHAPING.MAX_HITS && !shapingComplete) {
     shapingComplete = true;
 
     const score = Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0));
-    // フェーズ終了時にスコアを確定保存（以降は再計算しない）
     _phaseScores.shaping = Math.round(score);
     bladeState.symmetryError = Math.sqrt(_sqc / zones.length);
     updateInfoPanel(`成形が完了しました！\nスコア: ${Math.round(score)}pt\n\nShaping complete!\nScore: ${Math.round(score)}pt\n\nAボタン：次のフェーズへ　A: Next Phase`, '② 成形完了 / Shaping Complete');
@@ -3408,60 +3446,62 @@ function updateShaping(delta) {
 }
 
 /* ================================================================
-   UPDATE SHARPENING
+   UPDATE SHARPENING（研ぎフェーズの更新）
 ================================================================ */
+/* メイン処理
+  - 両手操作で刃物を動かす
+  - 角度判定・ストローク判定
+  - スコア加算・完了判定 */
 function updateSharpening(delta) {
   hammerGroup.visible = false;
 
   const lhPos = getLeftHandPos();
   const rhPos = getRightHandPos();
 
-  // ---- グリップ判定：両手同時 ----
+  /* グリップ判定
+    - 両手で握ったときのみ操作可能 */
   const lGrip = (getLeftGamepad()?.buttons[0]?.pressed  ?? false) ||
                 (getLeftGamepad()?.buttons[1]?.pressed  ?? false);
   const rGrip = (getRightGamepad()?.buttons[0]?.pressed ?? false) ||
                 (getRightGamepad()?.buttons[1]?.pressed ?? false);
   const held  = lGrip && rGrip;
 
+  /* 刃物の位置計算
+    - 両手の中間位置に配置 */
   const midX = (lhPos.x + rhPos.x) * 0.5;
   const midY = (lhPos.y + rhPos.y) * 0.5;
   const midZ = (lhPos.z + rhPos.z) * 0.5;
 
-  // ---- コントローラーの「前後傾き」を取得 ----
-  // 「手の甲を上にして持つ」状態でのピッチ（前後方向の傾き）
-  // コントローラーのローカルZ軸(-forward)をワールドに変換し、
-  // そのY成分がコントローラーの前後傾きを表す
-  // 水平=0°、奥に倒す=正、手前に倒す=負
+  /* コントローラーの傾き取得
+    - 前後の傾き（角度）を計算
+    - 水平=0°、奥=＋、手前=− */
   let leftTiltDeg  = 0;
   let rightTiltDeg = 0;
   if (leftController && rightController) {
-    // コントローラー前方向ベクトル（-Z局所軸）のワールド変換
     const lFwd = new THREE.Vector3(0, 0, -1).applyQuaternion(leftController.quaternion);
     const rFwd = new THREE.Vector3(0, 0, -1).applyQuaternion(rightController.quaternion);
-    // 前方ベクトルのY成分 → 上向きが正（奥に傾ける）、下向きが負（手前に傾ける）
-    // arcsinでラジアン→度に変換、水平=0°
     leftTiltDeg  = Math.asin(THREE.MathUtils.clamp(lFwd.y, -1, 1)) * (180 / Math.PI);
     rightTiltDeg = Math.asin(THREE.MathUtils.clamp(rFwd.y, -1, 1)) * (180 / Math.PI);
   }
 
-  // ---- 両手の角度一致チェック（差が30°以内）----
+  /* 角度チェック
+    - 両手の差が小さいとOK
+    - 平均角度を刃の角度として使用 */
   const angleDiff = Math.abs(leftTiltDeg - rightTiltDeg);
   const isAligned = angleDiff < 30;
 
   // 刃角 = 両手の平均傾き
-  // 奥に倒す（正の値）= 刃が砥石面に対して傾く = 正しい研ぎ角
-  // 水平（0°）= 刃が砥石面に平行 = ぎりぎり得点
-  // 手前に倒す（負の値）= 逆方向 = 得点なし
   const avgTiltDeg = (leftTiltDeg + rightTiltDeg) * 0.5;
-  // 有効な刃角：水平0°〜奥方向の正の傾き
-  // 目標：約15°（少し奥に倒した状態）
-  const bladeAngleDeg = avgTiltDeg; // 符号付きのまま使用（奥=正が良い）
+  const bladeAngleDeg = avgTiltDeg;
 
+  /* HUD表示更新
+    - 左右の角度・一致状態を表示 */
   updateAngleHud(leftTiltDeg, rightTiltDeg, isAligned, bladeAngleDeg);
 
+  /* 刃物の位置・回転更新
+    - 握っている間だけ追従
+    - 角度が揃っているときのみ回転反映 */
   if (held && !showingPhaseResult) {
-    // コントローラーのトリガー位置（midから少し先端方向）が刃物中心になるよう調整
-    // コントローラーグリップの中心より少し奥(-Z)に刃物を配置
     sharpenBladeGroup.position.set(
       midX,
       Math.max(midY - 0.02, workbenchPos.y + 0.06),
@@ -3469,9 +3509,6 @@ function updateSharpening(delta) {
     );
 
     if (isAligned) {
-      // 刃物は砥石に対して常にX軸方向（左右）に向ける
-      // handVecによるY回転は行わない（右手を奥に動かすと逆回転になるバグを防ぐ）
-      // tiltのみ適用：avgTiltDeg が正（奥傾け）→ 刃が砥石面に当たる
       const tiltRad = (avgTiltDeg * Math.PI) / 180;
       sharpenBladeGroup.rotation.y = 0; // 常にX軸方向（砥石に平行）
       sharpenBladeMesh.rotation.set(Math.PI / 2 + tiltRad, 0, 0);
@@ -3480,11 +3517,9 @@ function updateSharpening(delta) {
     const dz  = midZ - prevSharpenZ;
     const dir = Math.sign(dz);
 
-    // 砥石上にあるかチェック
-    // stoneMesh.position.z=-1.1, size.z=0.36 → 実Z範囲: -1.28〜-0.92
-    // コントローラーはbladeGroup.z+0.06の位置なので補正: -1.22〜-0.86
-    // 3倍甘め（±0.18*3=±0.54）: -1.1+0.06-0.54=-1.58 〜 -1.1+0.06+0.54=-0.50
-    // ただし「砥石がない奥側」は除外: 奥の限界を -1.34（砥石後端より少し余裕）
+    /* ストローク判定
+      - 前後移動で1回カウント
+      - 砥石の上にある場合のみ有効 */
     const onStone = midZ > -1.34 && midZ < -0.50;
     if (Math.abs(dz) > 0.0075 && dir !== 0 && dir !== lastStrokeDir && onStone) {
       lastStrokeDir = dir;
@@ -3495,48 +3530,45 @@ function updateSharpening(delta) {
         } else {
           strokeCount++;
 
-          // ---- 加点方式スコア（目標 -15°：手前に傾ける）----
-          // ×  : 0点  (奥方向 > +2°、または傾けすぎ < -30°)
-          // △  : 1点  (水平付近、-5°〜+2°)
-          // ○  : 2点  (やや良い、-10°〜-5° または -30°〜-20°)
-          // ◎  : 3点  (目標付近、-20°〜-10° = 目標-15°±5°)
-          // ◎10回連続で+10ボーナス
+          /* スコア判定（角度評価）
+            - ◎：理想角度 → 3点
+            - ○：良い → 2点
+            - △：微妙 → 1点
+            - ×：ダメ → 0点 */
           let addPoints = 0;
           let grade     = '×';
 
-          // 角度範囲3割増し（甘め判定）
           if (bladeAngleDeg >= -25 && bladeAngleDeg <= -5) {
-            // ◎：目標-15°の±10°以内（元±5°の1.3倍）
             addPoints = 3;
             grade     = '◎';
           } else if ((bladeAngleDeg > -5 && bladeAngleDeg < 5) ||
                      (bladeAngleDeg >= -35 && bladeAngleDeg < -25)) {
-            // ○：やや近い
             addPoints = 2;
             grade     = '○';
           } else if ((bladeAngleDeg >= 5 && bladeAngleDeg <= 15) ||
                      (bladeAngleDeg >= -45 && bladeAngleDeg < -35)) {
-            // △：やや遠い
             addPoints = 1;
             grade     = '△';
           } else {
-            // ×：奥方向 or 傾けすぎ
             addPoints = 0;
             grade     = '×';
           }
 
-          // ◎累積ボーナス（30回中10回で+10点、連続不要）
+          /* ボーナス
+            - ◎が10回で+10点 */
           if (grade === '◎') {
             consecutivePerfect++;
             if (consecutivePerfect === 10) {
-              addPoints += 10; // ◎累計10回で+10ボーナス（1回のみ）
+              addPoints += 10;
             }
           }
-          // リセットしない（累積カウント）
-
           totalSharpness += addPoints;
 
-          // 良い判定（◎○）= シャーッ音＋水滴
+          /* 研ぎのフィードバック処理
+            - 判定に応じて 音・エフェクト・振動 を返す */
+          /* 音とエフェクト
+            - ◎・○：成功 → シャーッ音＋水しぶき
+            - ×・△：失敗 → ダメ音 */
           if (grade === '◎' || grade === '○') {
             playSharpenGood();
             const waterOrigin = sharpenBladeGroup.position.clone().add(new THREE.Vector3(0, 0.05, 0));
@@ -3545,6 +3577,9 @@ function updateSharpening(delta) {
             playSharpenBad();
           }
 
+          /* 振動（ハプティクス）
+            - 判定が良いほど強く振動
+            - ◎：強い / ○：中 / その他：弱い */
           const lGp = getLeftGamepad();
           const rGp = getRightGamepad();
           const strength = grade === '◎' ? 0.6 : grade === '○' ? 0.4 : 0.15;
@@ -3552,12 +3587,10 @@ function updateSharpening(delta) {
             lGp.hapticActuators[0].pulse(strength, 80);
           }
           if (rGp?.hapticActuators?.[0]) {
-            rGp.hapticActuators[0].pulse(strength, 50);
+            rGp.hapticActuators[0].pulse(strength, 80);
           }
 
-          const bonusMsg = consecutivePerfect > 0 && consecutivePerfect % 10 === 0
-            ? '\n★ ◎×10 ボーナス +10!'
-            : '';
+          /* スコア表示更新 */
           updateScorePanel(`③ ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES}\n${grade} 合計:${Math.round(totalSharpness)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.43, -1.2));
         }
       }
@@ -3565,6 +3598,9 @@ function updateSharpening(delta) {
     prevSharpenZ = midZ;
 
   } else {
+    /* 手を離したとき
+      - 刃物を初期位置に戻す
+      - 状態リセット */
     sharpenBladeGroup.position.set(0, workbenchPos.y + 0.09, -1.2);
     sharpenBladeGroup.rotation.set(0, 0, 0);
     sharpenBladeMesh.rotation.set(Math.PI / 2, 0, 0);
@@ -3572,24 +3608,45 @@ function updateSharpening(delta) {
     lastStrokeDir = 0;
   }
 
+  /* フェーズ終了判定
+    - 規定回数で完了
+    - スコア保存・結果表示 */
   if (strokeCount >= CONFIG.SHARPENING.TOTAL_STROKES && !sharpenComplete) {
-    sharpenComplete = true;
-    // フェーズ終了時にスコアを確定保存（100点クランプのみ、正規化しない）
-    _phaseScores.sharpening = Math.min(100, Math.round(totalSharpness));
-    updateInfoPanel(`研ぎが完了しました！\n合計ポイント: ${_phaseScores.sharpening}pt\n\nSharpening complete!\nTotal points: ${_phaseScores.sharpening}pt\n\nAボタン：結果へ　A: See Results`, '③ 研ぎ完了 / Sharpening Complete');
-    playComplete();
-    showingPhaseResult = true;
+    finishSharpening(true); // 完了
   }
 }
 
-/* ================================================================
-   GLOBAL INPUT HANDLER
-================================================================ */
-let showingPhaseResult = true;
 
+function finishSharpening(isComplete) {
+  sharpenComplete = true;
+
+  _phaseScores.sharpening = Math.min(100, Math.round(totalSharpness));
+
+  updateInfoPanel(
+    `研ぎ結果
+鋭利度（研ぎ）: ${_phaseScores.sharpening}pt
+
+Aボタン：次へ`,
+    isComplete ? '③ 研ぎ完了' : '③ 研ぎ（途中終了）'
+  );
+
+  playComplete();
+  showingPhaseResult = true;
+}
+
+
+/* ================================================================
+   GLOBAL INPUT HANDLER（全体入力管理）
+================================================================ */
+/* 状態管理用の変数
+  - 結果表示中かどうか
+  - スコア計算用（成形） */
+let showingPhaseResult = true;
 let _sq0c;
 let _sqc;
 
+/* 入力ロック処理
+  - 一定時間ボタン操作を無効化 */
 function lockInputFor(seconds) {
   _inputLocked = true;
   setTimeout(() => {
@@ -3597,15 +3654,21 @@ function lockInputFor(seconds) {
   }, seconds * 1000);
 }
 
+/* メイン入力処理
+  - Aボタン：進行・結果表示
+  - Bボタン：リトライ */
 function handleGlobalInput() {
   const aPressed = getAButton();
   const bPressed = getBButton();
 
   const _nowIsGame = (currentState === State.FORGING || currentState === State.SHAPING || currentState === State.SHARPENING);
 
+  /* Aボタン処理
+    - 状態に応じて分岐 */
   if (aPressed && !wasAPressed && !_inputLocked) {
 
-    // ===== ★結果表示中（①→②→③→RESULT） =====
+    /* 結果表示中
+      - 次のフェーズへ進む */
     if (showingPhaseResult) {
       showingPhaseResult = false;
       fadeToNext(1.0);
@@ -3613,14 +3676,16 @@ function handleGlobalInput() {
       return;
     }
 
-    // ===== INTRO =====
+    /* INTRO
+      - スライドを次へ */
     if (isIntroState(currentState)) {
       if (_fadeDir === 0) {
         fadeToNext(1.0);
       }
     }
 
-    // ===== RESULT → 最初へ =====
+    /* RESULT
+      - 最初に戻る（リセット） */
     else if (currentState === State.RESULT) {
       playFadeSound();
       startFade(-1, 3.0, () => {
@@ -3629,11 +3694,11 @@ function handleGlobalInput() {
       });
     }
 
-    // ===== 鍛造 =====
+    /* 鍛造フェーズ
+      - 途中でも終了可能
+      - スコア確定→結果表示 */
     else if (currentState === State.FORGING) {
-
       const isEarly = !forgingComplete;
-
       // スコア確定
       if (isEarly) {
         _phaseScores.forging = Math.round(
@@ -3655,11 +3720,11 @@ function handleGlobalInput() {
 
     }
 
-    // ===== 成形 =====
+    /* 成形フェーズ
+      - 歪みからスコア計算
+      - 途中終了でも確定 */
     else if (currentState === State.SHAPING) {
-
       const isEarly = !shapingComplete;
-
       if (isEarly) {
         _sq0c = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
         _sqc  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
@@ -3682,33 +3747,19 @@ function handleGlobalInput() {
 
     }
 
-    // ===== 研ぎ =====
+    /* 研ぎフェーズ
+      - 現在のポイントをそのまま確定 */
     else if (currentState === State.SHARPENING) {
-
-      const isEarly = !sharpenComplete;
-
-      if (isEarly) {
-        _phaseScores.sharpening = Math.min(100, Math.round(totalSharpness));
-        updateInfoPanel(
-          `研ぎ結果
-  鋭利度（研ぎ）: ${_phaseScores.sharpening}pt
-
-  Aボタン：次へ`,
-          isEarly ? '③ 研ぎ（途中終了）' : '③ 研ぎ完了'
-        );
-
-        playComplete();
-        showingPhaseResult = true;
+      if (!sharpenComplete) {
+        finishSharpening(false); // 途中終了
         lockInputFor(1);
       }
-
     }
   }
-
-  // 押下状態更新
   wasAPressed = aPressed;
 
-  // ===== Bボタン（リトライ） =====
+  /* Bボタン処理
+    - 現在フェーズをリトライ */
   if (bPressed && !wasBPressed && !_inputLocked && _nowIsGame) {
     showingPhaseResult = false;
     retryState();
@@ -3716,6 +3767,7 @@ function handleGlobalInput() {
 
   wasBPressed = bPressed;
 }
+
 
 /* ================================================================
    INTRO VISUALS
