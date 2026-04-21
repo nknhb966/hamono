@@ -3752,9 +3752,7 @@ function updateSharpening(delta) {
 
 function finishSharpening(isComplete) {
   sharpenComplete = true;
-
   _phaseScores.sharpening = Math.min(100, Math.round(totalSharpness));
-
   updateInfoPanel(
     `研ぎ結果
 鋭利度（研ぎ）: ${_phaseScores.sharpening}pt
@@ -3762,7 +3760,6 @@ function finishSharpening(isComplete) {
 Aボタン：次へ`,
     isComplete ? '③ 研ぎ完了' : '③ 研ぎ（途中終了）'
   );
-
   playComplete();
   showingPhaseResult = true;
 }
