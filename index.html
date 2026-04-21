@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2434,16 +2434,23 @@ function saveScore(score) {
 }
 
 /* ================================================================
-   FORGING STATE VARIABLES
+   鍛造フェーズ用の状態管理
 ================================================================ */
-let ironTemperature   = 0;
-let ironOnWorkbench   = false;
-let ironInFurnace     = false;
-let ironHeld          = false;
-let forgingHitCount   = 0;
-let shapeDistortion   = 0;
-let forgingComplete   = false;
+/* 基本状態
+   - 鉄の状態（温度・位置・所持）を管理 */
+let ironTemperature   = 0;   // 温度
+let ironOnWorkbench   = false; // 作業台上か
+let ironInFurnace     = false; // 炉の中か
+let ironHeld          = false; // 手で持っているか
 
+/* 進行管理
+   - 鍛造の進み具合 */
+let forgingHitCount   = 0;   // 叩いた回数
+let shapeDistortion   = 0;   // 歪み
+let forgingComplete   = false; // 完了フラグ
+
+/* 当たり判定（エリア）
+   - 鉄の位置判定に使用 */
 const ironBB       = new THREE.Box3();
 const workbenchBB  = new THREE.Box3().setFromCenterAndSize(
   workbenchPos.clone().add(new THREE.Vector3(0, 0.05, 0)),
@@ -2455,7 +2462,9 @@ const furnaceBB = new THREE.Box3().setFromCenterAndSize(
   new THREE.Vector3(0.65, 1.30, 0.55)
 );
 
-// Temperature color helpers
+/* tempToColor
+   - 温度に応じて色を変える
+   - 冷→暗色 / 熱→赤色 */
 function tempToColor(t) {
   if (t < 30) return new THREE.Color(0x555555);
   if (t < 60) return new THREE.Color().setHSL(0.08, 0.6, 0.2 + t * 0.003);
@@ -2463,41 +2472,66 @@ function tempToColor(t) {
 }
 
 /* ================================================================
-   SHAPING STATE VARIABLES
+   成形フェーズ用の状態管理
 ================================================================ */
-let shapingHitCount  = 0;
-let bladeHeld        = false;
-let bladeFlipped     = false;
-let bladeFlipAnim    = 0;
-let shapingComplete  = false;
+/* 進行管理
+   - 成形の進み具合 */
+let shapingHitCount  = 0;   // 叩いた回数
+let shapingComplete  = false; // 完了フラグ
+
+/* 操作状態
+   - 刃物の持ち方・向き */
+let bladeHeld        = false; // 手で持っているか
+let bladeFlipped     = false; // 表裏が反転しているか
+let bladeFlipAnim    = 0;     // 反転アニメ進行度
 
 /* ================================================================
-   SHARPENING STATE VARIABLES
+   研ぎフェーズ用の状態管理
 ================================================================ */
-let strokeCount        = 0;
-let lastStrokeDir      = 0;
-let sharpenComplete    = false;
-let totalSharpness     = 0;   // 累積加点
-let strokeScores       = 0;   // 未使用（互換用）
-let prevSharpenZ       = 0;
-let sharpenStreak      = 0;
-let consecutivePerfect = 0;   // ◎連続カウント
+/* 進行管理
+   - 研ぎの回数と完了状態 */
+let strokeCount     = 0;   // ストローク回数
+let sharpenComplete = false; // 完了フラグ
+
+/* 動き検出
+   - 研ぎ動作の方向や位置 */
+let lastStrokeDir = 0;   // 前回の動き方向
+let prevSharpenZ  = 0;   // 前フレーム位置（Z）
+
+/* スコア管理
+   - 切れ味や加点 */
+let totalSharpness = 0;  // 累積スコア
+
+/* コンボ管理
+   - 連続成功のカウント */
+let sharpenStreak      = 0; // 連続成功
+let consecutivePerfect = 0; // ◎連続数
 
 /* ================================================================
-   INPUT STATE
+   入力状態管理
 ================================================================ */
-let wasAPressed  = false;
-let wasBPressed  = false;
-let wasXPressed  = false;
+/* ボタン状態
+   - 前フレームの押下状態を保持 */
+let wasAPressed  = false; // Aボタン
+let wasBPressed  = false; // Bボタン
+let wasXPressed  = false; // Xボタン
 
-function isVRActive() { return renderer.xr.isPresenting; }
+/* isVRActive
+   - VRモードかどうか判定 */
+function isVRActive() {
+  return renderer.xr.isPresenting;
+}
 
 /* ================================================================
-   HELPER: Get controller world position (VR only)
+   VR入力ヘルパー
 ================================================================ */
 const tempVec  = new THREE.Vector3();
 const tempVecL = new THREE.Vector3();
 const tempVecR = new THREE.Vector3();
+
+/* コントローラ位置取得
+   - 左右の手のワールド座標を取得
+   - 未接続時は仮の位置を返す */
 function getRightHandPos() {
   if (rightController) { rightController.getWorldPosition(tempVecR); return tempVecR; }
   return new THREE.Vector3(0.3, 1.3, -1.0);
@@ -2506,6 +2540,9 @@ function getLeftHandPos() {
   if (leftController) { leftController.getWorldPosition(tempVecL); return tempVecL; }
   return new THREE.Vector3(-0.3, 1.3, -1.0);
 }
+
+/* トリガー入力
+   - 右トリガー / 左トリガー・グリップ判定 */
 function getRightTrigger() {
   const gp = getRightGamepad();
   return gp ? (gp.buttons[0]?.pressed ?? false) : false;
@@ -2514,10 +2551,10 @@ function getLeftTriggerOrGrip() {
   const gp = getLeftGamepad();
   return gp ? ((gp.buttons[0]?.pressed ?? false) || (gp.buttons[1]?.pressed ?? false)) : false;
 }
-// --- 安全なgamepad取得ヘルパー ---
-// rightController/leftControllerはconnectedイベント後に確定するが、
-// XRセッション開始直後はnullのことがある。
-// そのためctrl0/ctrl1のgamepadも直接参照し、handednessで右/左を判定する。
+
+
+/* Gamepad取得
+   - コントローラ未初期化でも安全に取得 */
 function getRightGamepad() {
   if (rightController?.gamepad) return rightController.gamepad;
   for (const c of [ctrl0, ctrl1]) {
@@ -2545,6 +2582,8 @@ function getLeftGamepad() {
   return null;
 }
 
+/* ボタン入力
+   - A/B/Xボタンの押下判定 */
 function getAButton() {
   const gp = getRightGamepad();
   return gp ? (gp.buttons[4]?.pressed ?? false) : false;
@@ -2557,6 +2596,9 @@ function getXButton() {
   const gp = getLeftGamepad();
   return gp ? (gp.buttons[4]?.pressed ?? false) : false;
 }
+
+/* 両手グリップ
+   - どちらかのグリップ押下を検出 */
 function getBothGrips() {
   const lg = getLeftGamepad()?.buttons[1]?.pressed  ?? false;
   const rg = getRightGamepad()?.buttons[1]?.pressed ?? false;
@@ -2564,8 +2606,12 @@ function getBothGrips() {
 }
 
 /* ================================================================
-   PHASE TRANSITIONS
+   PHASE TRANSITIONS（フェーズ管理）
+   - 各工程の初期化・状態遷移・表示切替をまとめて管理
 ================================================================ */
+/* resetForging
+   - 鍛造フェーズを初期状態に戻す
+   - 温度・位置・スコアをリセット */
 function resetForging() {
   ironTemperature = 70; // スタート時70°
   ironOnWorkbench = false;
@@ -2581,45 +2627,10 @@ function resetForging() {
   _phaseScores.shaping    = 0;
   _phaseScores.sharpening = 0;
 }
-// ── BoundingBoxベース接地補正 ─────────────────────────────────
-// 天板上面: workbenchPos.y + (天板厚み/2) = 0.85 + 0.03 = 0.88
-const TABLE_SURFACE_Y = workbenchPos.y + 0.03;
-const _bbBox = new THREE.Box3(); // 毎回再利用するBox3インスタンス
 
-// blade1/blade2 のみを対象にBBを計算（ワイヤーは除く）
-function _getBladeBB() {
-  _bbBox.makeEmpty();
-  _bbBox.expandByObject(bladeMesh);
-  _bbBox.expandByObject(bladeMesh2);
-  return _bbBox;
-}
-
-// BoundingBoxを使ってbladePivotを接地させる
-function _groundBladeByBB() {
-  // 現在のワールドBBを取得
-  const bb   = _getBladeBB();
-  const minY = bb.min.y;                   // 現在の最下点
-  const diff = TABLE_SURFACE_Y - minY;     // 不足分 or 超過分
-  bladePivot.position.y += diff;           // 補正
-}
-
-// ワイヤーメッシュを刃物の同じTransformに追従させ、ローカル法線方向にオフセット
-// bladePivotの子なので、bladeMesh/bladeMesh2 のpivotローカル座標で設定
-
-// 回転・位置を設定してからBB接地補正 → ワイヤー同期
-function _applyBladeGround(flipped) {
-  const rot  = flipped ? Math.PI/2 : -Math.PI/2;
-  const posZ = flipped ? -0.035 : 0.035;
-  // まず回転・位置を確定
-  bladeMesh.rotation.x  = rot;
-  bladeMesh.position.set(-0.204, +BLADE_HALF, posZ);
-  bladeMesh2.rotation.x = rot;
-  bladeMesh2.position.set(-0.204, -BLADE_HALF, posZ);
-  // BoundingBoxで接地
-  _groundBladeByBB();
-  // ワイヤー同期（接地後、pivotローカル座標は変わらないのでそのまま）
-}
-
+/* resetShaping
+   - 成形フェーズを初期化
+   - 歪み（ランダム）を生成して各ゾーンに設定 */
 function resetShaping() {
   shapingHitCount = 0;
   bladeHeld       = false;
@@ -2650,12 +2661,15 @@ function resetShaping() {
   bladePivot.rotation.y = 0;
   _applyBladeGround(false); // 表(flipped=false)で接地
 }
+
+/* resetSharpening
+   - 研ぎフェーズを初期化
+   - ストローク・鋭さ・位置をリセット */
 function resetSharpening() {
   strokeCount     = 0;
   lastStrokeDir   = 0;
   sharpenComplete = false;
   totalSharpness  = 0;
-  strokeScores       = 0;
   prevSharpenZ       = 0;
   sharpenStreak      = 0;
   consecutivePerfect = 0;
@@ -2664,20 +2678,50 @@ function resetSharpening() {
   sharpenBladeMesh.rotation.set(Math.PI / 2, 0, 0); // 刃先を奥に
 }
 
-function setVisibility() {
-  const isIntro = isIntroState(currentState);
-  groupForging.visible    = currentState === State.FORGING;
-  groupShaping.visible    = currentState === State.SHAPING;
-  groupSharpening.visible = currentState === State.SHARPENING;
-  resultPanel.visible     = currentState === State.RESULT;
-  infoPanel.visible       = currentState !== State.RESULT;
-  scorePanelGroup.visible = (currentState === State.FORGING || currentState === State.SHAPING || currentState === State.SHARPENING);
-  angleHudMesh.visible    = currentState === State.SHARPENING;
-  // フェーズ移行時にスコアパネルをクリア
-  updateScorePanel(null);
-  // パネルはonEnterStateでactivateCvPanelにより更新される
+/* BoundingBox接地補正
+   - 刃物の一番下を検出して机の高さに合わせる
+   - めり込み・浮きを防ぐ */
+const TABLE_SURFACE_Y = workbenchPos.y + 0.03;
+const _bbBox = new THREE.Box3(); // 毎回再利用するBox3インスタンス
+
+/* _getBladeBB
+   - 刃物2枚のBoundingBoxを取得（ワイヤー除外） */
+function _getBladeBB() {
+  _bbBox.makeEmpty();
+  _bbBox.expandByObject(bladeMesh);
+  _bbBox.expandByObject(bladeMesh2);
+  return _bbBox;
 }
 
+/* _groundBladeByBB
+   - 最下点を基準にY位置を補正して接地させる */
+function _groundBladeByBB() {
+  // 現在のワールドBBを取得
+  const bb   = _getBladeBB();
+  const minY = bb.min.y;                   // 現在の最下点
+  const diff = TABLE_SURFACE_Y - minY;     // 不足分 or 超過分
+  bladePivot.position.y += diff;           // 補正
+}
+
+/* _applyBladeGround
+   - 回転・位置を決定 → BoundingBoxで接地
+   - 表裏(flipped)に応じて向きを切替 */
+function _applyBladeGround(flipped) {
+  const rot  = flipped ? Math.PI/2 : -Math.PI/2;
+  const posZ = flipped ? -0.035 : 0.035;
+  // まず回転・位置を確定
+  bladeMesh.rotation.x  = rot;
+  bladeMesh.position.set(-0.204, +BLADE_HALF, posZ);
+  bladeMesh2.rotation.x = rot;
+  bladeMesh2.position.set(-0.204, -BLADE_HALF, posZ);
+  // BoundingBoxで接地
+  _groundBladeByBB();
+  // ワイヤー同期（接地後、pivotローカル座標は変わらないのでそのまま）
+}
+
+/* nextState
+   - フェーズを順番に進める（INTRO → 鍛造 → 成形 → 研ぎ → 結果）
+   - 遷移後に表示更新＋開始処理を実行 */
 function nextState() {
   const prev = currentState;
   if      (currentState === State.INTRO_0)     currentState = State.INTRO_1;
@@ -2694,54 +2738,90 @@ function nextState() {
   onEnterState(currentState, prev);
 }
 
-function vibrate() {
-  const lGp = getLeftGamepad();
-  const rGp = getRightGamepad();
-
-  for (let i = 0; i < 3; i++) {
-    setTimeout(() => {
-      if (lGp?.hapticActuators?.[0]) {
-        lGp.hapticActuators[0].pulse(1, 80);
-      }
-      if (rGp?.hapticActuators?.[0]) {
-        rGp.hapticActuators[0].pulse(1, 80);
-      }
-    }, i * 100);
-  }
-}
-
-function retryState() {
-  playTransition();
-  updateScorePanel(null);
-  const prev = currentState;
-  if (currentState === State.FORGING) {
-    shapeDistortion = 100; // リトライ時も最悪値から再スタート
-    resetForging();
-  } else if (currentState === State.SHAPING) {
-    resetShaping();
-  } else if (currentState === State.SHARPENING) {
-    resetSharpening();
-  }
-  onEnterState(currentState, prev);
-}
-
+/* onEnterState
+   - フェーズ開始時の処理まとめ
+   - 初期化＋説明表示＋スコア処理を行う */
 function onEnterState(state, prev) {
+
+  // ── INTRO系 ─────────────────────────
   if (isIntroState(state)) {
+
     if (state === State.INTRO_0) {
       bladeState = { shapeDistortion: 0, symmetryError: 0, sharpness: 0 };
-      resetForging(); resetShaping(); resetSharpening();
+      resetForging(); 
+      resetShaping(); 
+      resetSharpening();
+
+      updateInfoPanel_INTRO0();
+      return;
     }
-    // INTROスライドのテキスト
-    // INTRO_0はタイトル演出（updateInfoPanelは特別処理）
-    if (state === State.INTRO_0) {
-      // スケールアニメーション開始
-      updateInfoPanel_INTRO0(); // タイトル専用
-      return; // 以下のintroData処理をスキップ
+
+    const d = TEXT_DATA.intro[state];
+    if (d) updateInfoPanel(d.body, d.title);
+    return;
+  }
+
+  // ── FORGING ─────────────────────────
+  if (state === State.FORGING) {
+    resetForging();
+    shapeDistortion = 100;
+
+    const d = TEXT_DATA.forging;
+    updateInfoPanel(d.body, d.title);
+  }
+
+  // ── SHAPING ─────────────────────────
+  else if (state === State.SHAPING) {
+    resetShaping();
+    bladeState.shapeDistortion = shapeDistortion;
+    bladeState.symmetryError   = 100;
+
+    const d = TEXT_DATA.shaping;
+    updateInfoPanel(d.body, d.title);
+  }
+
+  // ── SHARPENING ─────────────────────
+  else if (state === State.SHARPENING) {
+    resetSharpening();
+
+    if (shapingComplete) {
+      bladeState.symmetryError =
+        zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
     }
-    const introData = {
-      [State.INTRO_1]: {
-        title: '① 歴史 / History',
-        body: `越前打刃物は、1337年に始まりました。
+
+    const d = TEXT_DATA.sharpening;
+    updateInfoPanel(d.body, d.title);
+  }
+
+  // ── RESULT ─────────────────────────
+  else if (state === State.RESULT) {
+    const fS = _phaseScores.forging;
+    const sS = _phaseScores.shaping;
+    const hS = _phaseScores.sharpening;
+
+    let finalScore = Math.max(0, Math.min(100,
+      fS * 0.4 + sS * 0.3 + hS * 0.3
+    ));
+
+    finalScore = Math.floor(finalScore);
+
+    const { scores, rank, id } = saveScore(finalScore);
+    showResultPanel(finalScore,
+      { _forging: fS, _shaping: sS, _sharpening: hS },
+      scores, id
+    );
+  }
+}
+
+// ================================================================
+// TEXT DATA（表示テキストだけ管理）
+// ================================================================
+const TEXT_DATA = {
+
+  intro: {
+    [State.INTRO_1]: {
+      title: '① 歴史 / History',
+      body: `越前打刃物は、1337年に始まりました。
 京都の刀匠・千代鶴国安がこの地に移り、
 農民のために鎌を作ったことが起源です。
 600年以上にわたり、その技は受け継がれています。
@@ -2754,11 +2834,12 @@ and started making sickles for local farmers.
 For over 600 years, this craft has been passed down
 from generation to generation.
 
-　　　Press A ▶ Next`,
-      },
-      [State.INTRO_2]: {
-        title: '② 製造工程 / Manufacturing Process',
-        body: `打刃物は、いくつもの工程を経て作られます。
+　　　Press A ▶ Next`
+    },
+
+    [State.INTRO_2]: {
+      title: '② 製造工程 / Manufacturing Process',
+      body: `打刃物は、いくつもの工程を経て作られます。
 大きく分けると、次の3つの流れがあります。
 
 鍛造：熱した鋼を叩き、金属を鍛える
@@ -2787,12 +2868,12 @@ Some parts are mechanized today,
 but the fundamental method has remained
 nearly unchanged for 700 years.
 
-　　　Press A ▶ Next`,
+　　　Press A ▶ Next`
+    },
 
-      },
-      [State.INTRO_3]: {
-        title: '③ 特徴：二枚広げ / Feature: Nimai-hiroge',
-        body: `越前打刃物の特徴は、「二枚広げ」という技法です。
+    [State.INTRO_3]: {
+      title: '③ 特徴：二枚広げ / Feature: Nimai-hiroge',
+      body: `越前打刃物の特徴は、「二枚広げ」という技法です。
 熱くなった2枚の刃を重ねたまま、
 表と裏の両側からハンマーで叩く方法です。
 
@@ -2823,11 +2904,12 @@ reducing uneven results.
 This technique produces blades that are light, thin,
 and maintain sharpness for a long time.
 
-　　　Press A ▶ Next`,
-      },
-      [State.INTRO_4]: {
-        title: '④ 体験内容 / Your Challenge',
-        body: `この体験では、職人の工程を再現します。
+　　　Press A ▶ Next`
+    },
+
+    [State.INTRO_4]: {
+      title: '④ 体験内容 / Your Challenge',
+      body: `この体験では、職人の工程を再現します。
 あなたの技術で、一本の刃物を完成させてください。
 
 ① 鍛造：
@@ -2854,17 +2936,13 @@ Use the Nimai‑hiroge technique to thin and even the blade
 ③ Sharpening:
 Maintain the correct angle and polish the edge to finish it
 
-　　　Press A ▶ Next`,
-      },
-    };
-    const d = introData[state];
-    updateInfoPanel(d.body, d.title);
+　　　Press A ▶ Next`
+    }
+  },
 
-  } else if (state === State.FORGING) {
-    resetForging();
-    shapeDistortion = 100;
-    updateInfoPanel(
-`鍛造は最初の工程です。
+  forging: {
+    title: '① 鍛造 / Phase 1: Forging',
+    body: `鍛造は最初の工程です。
 炉の中で鉄を赤く熱し、
 適温になったら作業台に置き、
 ハンマーで打ちます。
@@ -2890,15 +2968,12 @@ Too hot
 Too cold
 
 Aボタン：次のフェーズへ
-A: Next Phase`,
-'① 鍛造 / Phase 1: Forging');
+A: Next Phase`
+  },
 
-  } else if (state === State.SHAPING) {
-    resetShaping();
-    bladeState.shapeDistortion = shapeDistortion;
-    bladeState.symmetryError   = 100;
-    updateInfoPanel(
-`二枚広げとは、2枚の刃を
+  shaping: {
+    title: '② 成形 / Phase 2: Shaping',
+    body: `二枚広げとは、2枚の刃を
 重ねたまま叩く越前の技です。
 
 表と裏のバランスを意識して、
@@ -2922,16 +2997,12 @@ Minus(-)歪み → 裏から叩く
 Distortion=0 → 100pt
 
 Aボタン：終了
-A: Finish`,
-'② 成形 / Phase 2: Shaping');
+A: Finish`
+  },
 
-  } else if (state === State.SHARPENING) {
-    resetSharpening();
-    if (shapingComplete) {
-      bladeState.symmetryError = zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
-    }
-    updateInfoPanel(
-`研ぎは刃を完成させる最後の工程です。
+  sharpening: {
+    title: '③ 研ぎ / Phase 3: Sharpening',
+    body: `研ぎは刃を完成させる最後の工程です。
 砥石の角度を保つことで、
 鋭い刃が生まれます。
 
@@ -2959,25 +3030,56 @@ HUD: NG = 不一致
 ◎10回 → +10ptボーナス
 
 Aボタン：次のフェーズへ
-A: Next Phase`,
-'③ 研ぎ / Phase 3: Sharpening');
+A: Next Phase`
+  }
 
-  } else if (state === State.RESULT) {
-    // 各フェーズ確定スコアをそのまま使用（再計算禁止）
-    const fS = _phaseScores.forging;
-    const sS = _phaseScores.shaping;
-    const hS = _phaseScores.sharpening;
-    
-    let finalScore = Math.max(0, Math.min(100,
-      fS * 0.4 + sS * 0.3 + hS * 0.3
-    ));
+};
 
-    finalScore = Math.floor(finalScore);  // ★ 小数点以下切り捨て
+function setVisibility() {
+  const isIntro = isIntroState(currentState);
+  groupForging.visible    = currentState === State.FORGING;
+  groupShaping.visible    = currentState === State.SHAPING;
+  groupSharpening.visible = currentState === State.SHARPENING;
+  resultPanel.visible     = currentState === State.RESULT;
+  infoPanel.visible       = currentState !== State.RESULT;
+  scorePanelGroup.visible = (currentState === State.FORGING || currentState === State.SHAPING || currentState === State.SHARPENING);
+  angleHudMesh.visible    = currentState === State.SHARPENING;
+  // フェーズ移行時にスコアパネルをクリア
+  updateScorePanel(null);
+  // パネルはonEnterStateでactivateCvPanelにより更新される
+}
 
-    const { scores, rank, id } = saveScore(finalScore);
-    showResultPanel(finalScore, { _forging: fS, _shaping: sS, _sharpening: hS }, scores, id);
+function retryState() {
+  playTransition();
+  updateScorePanel(null);
+  const prev = currentState;
+  if (currentState === State.FORGING) {
+    shapeDistortion = 100; // リトライ時も最悪値から再スタート
+    resetForging();
+  } else if (currentState === State.SHAPING) {
+    resetShaping();
+  } else if (currentState === State.SHARPENING) {
+    resetSharpening();
+  }
+  onEnterState(currentState, prev);
+}
+
+function vibrate() {
+  const lGp = getLeftGamepad();
+  const rGp = getRightGamepad();
+
+  for (let i = 0; i < 3; i++) {
+    setTimeout(() => {
+      if (lGp?.hapticActuators?.[0]) {
+        lGp.hapticActuators[0].pulse(1, 80);
+      }
+      if (rGp?.hapticActuators?.[0]) {
+        rGp.hapticActuators[0].pulse(1, 80);
+      }
+    }, i * 100);
   }
 }
+
 
 /* ================================================================
    GLOBAL INPUT HANDLER
@@ -3682,8 +3784,6 @@ for (let i = 0; i < particleCount; i++) {
 }
 _ptOrange.instanceMatrix.needsUpdate = true;
 _ptYellow.instanceMatrix.needsUpdate = true;
-
-
 
 /* ================================================================
    BROWSER UI PARTICLE SYSTEM
