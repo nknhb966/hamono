@@ -1804,7 +1804,12 @@ groupSharpening.add(sharpenBladeGroup);
 
 /* ================================================================
    VR CANVAS TEXT PANEL
+   → Canvasで文字を描いて、それを3Dの板に貼って表示する仕組み
 ================================================================ */
+/* 文字Canvas生成
+   - テキストを2D Canvasに描画して画像化
+   - 改行（\n）対応・中央揃え
+   - このCanvasがそのままTextureとして使われる */
 function makeTextCanvas(text, w, h, bg, fg, fontSize) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
@@ -1815,7 +1820,7 @@ function makeTextCanvas(text, w, h, bg, fg, fontSize) {
   ctx.font = `${fontSize}px 'Hiragino Mincho ProN', serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  // Multi-line support
+
   const lines = text.split('\n');
   const lineH = fontSize * 1.4;
   const startY = h / 2 - ((lines.length - 1) * lineH) / 2;
@@ -1825,15 +1830,26 @@ function makeTextCanvas(text, w, h, bg, fg, fontSize) {
   return c;
 }
 
-// フェーズ得点表示パネル（刃物近く）
 const scorePanelGroup = new THREE.Group();
 scene.add(scorePanelGroup);
+
 let scorePanelMesh = null;
+
+/* スコア表示更新
+   - テキストからパネルを生成して表示
+   - 行数に応じてサイズ自動調整
+   - 表示位置は任意指定（未指定ならデフォルト位置）
+   - Canvas → Texture → Planeに貼付して表示 */
 function updateScorePanel(text, worldPos) {
+  /* 既存パネル削除
+     - 毎回作り直すことで状態管理を単純化 */
   if (scorePanelMesh) scorePanelGroup.remove(scorePanelMesh);
   if (!text) { scorePanelMesh = null; return; }
   const lines = text.split('\n');
   const cw = 512, ch = 56 + lines.length * 52;
+
+  /* Canvas生成
+     - 表示内容を画像として描画 */
   const cv = document.createElement('canvas');
   cv.width = cw; cv.height = ch;
   const ctx = cv.getContext('2d');
@@ -1849,54 +1865,75 @@ function updateScorePanel(text, worldPos) {
   lines.forEach((line, i) => {
     ctx.fillText(line, cw/2, 28 + 28 + i * 52);
   });
+  /* Texture化
+     - Canvasを3Dに貼るため変換 */
   const tex = new THREE.CanvasTexture(cv);
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide });
   const panelH = 0.07 * lines.length + 0.04;
+
+  /* パネル生成
+     - 平面にテクスチャを貼る */
   scorePanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.60, panelH), mat);
   const pos = worldPos || new THREE.Vector3(0, workbenchPos.y + 0.23, -1.25);
+  /* 位置設定
+     - 指定 or デフォルト位置 */
   scorePanelMesh.position.copy(pos);
+  /* シーン追加
+     - グループで管理 */
   scorePanelGroup.add(scorePanelMesh);
 }
 
-// Floating info panel — 正面固定（カメラに追従しない）
+/* 情報パネル
+   - 説明表示用の空間固定UI */
 const infoPanel = new THREE.Group();
 scene.add(infoPanel);
+
+/* 情報パネル本体
+   - 必要時に生成・更新 */
 let infoPanelMesh = null;
 
 /* ================================================================
    INTRO_0 タイトル専用パネル
+   - タイトル画面の表示処理
+   - Canvasに描画した内容を3Dパネルとして表示
 ================================================================ */
-// INTRO_0 テキスト描画（背景・粒子の上に重ねる extraFn として使用）
-// INTRO_0: XR中(VR/AR)はタイトルをCanvas内に描画、ブラウザは非表示
+/* タイトル描画関数
+   - VR/AR時のみタイトルを表示（ブラウザでは非表示）
+   - メインタイトル＋サブタイトル＋開始ガイドを描画 */
 function _drawIntro0Text(ctx, W, H) {
+  /* XR判定
+     - VR/AR時のみ描画 */
   const isImmersive = renderer && renderer.xr && renderer.xr.isPresenting;
-  if (!isImmersive) return; // ブラウザモード: Canvas側タイトル不要
+  if (!isImmersive) return;
 
-  // VR / AR: タイトル「越前打刃物」を描画
+  /* メインタイトル
+     - 縁取り＋グラデーション文字 */
   const fontSize = 220;
   ctx.save();
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  // 縁取り（銀色）
+  // strokeText → 輪郭
   ctx.strokeStyle = 'rgba(192,200,210,0.90)';
   ctx.lineWidth = 4;
   ctx.font = `bold ${fontSize}px serif`;
   ctx.strokeText('越前打刃物', W/2, H/2 - 60);
-  // 文字グラデーション（暗赤〜橙赤）
+  // fillText   → 中身（グラデ）
   const grad = ctx.createLinearGradient(W/2-400, H/2-150, W/2+400, H/2+50);
   grad.addColorStop(0.0, '#8b0000'); grad.addColorStop(0.3, '#cc2200');
   grad.addColorStop(0.6, '#e84010'); grad.addColorStop(1.0, '#ff6020');
   ctx.fillStyle = grad;
   ctx.fillText('越前打刃物', W/2, H/2 - 60);
   ctx.restore();
-  // サブタイトル（シルバー）
+  /* サブタイトル
+     - 英語タイトルを中央表示 */
   ctx.save();
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = 'bold 60px serif';
   ctx.fillStyle = 'rgba(190,195,205,0.92)';
   ctx.fillText('Echizen Hamono — Blacksmith VR', W/2, H/2 + 110);
   ctx.restore();
-  // A ボタンガイド
+  /* スタートガイド
+     - 「Aボタンで開始」を下部に表示 */
   ctx.save();
   ctx.textAlign = 'center';
   ctx.font = '42px serif';
@@ -1905,45 +1942,72 @@ function _drawIntro0Text(ctx, W, H) {
   ctx.restore();
 }
 
+/* INTRO_0 パネル生成
+   - Canvasをテクスチャにして3Dパネルを作成
+   - 背景・粒子・タイトルを毎フレーム合成 */
 function updateInfoPanel_INTRO0() {
+  /* 既存パネル削除
+     - 重複防止 */
   if (infoPanelMesh) infoPanel.remove(infoPanelMesh);
-  const W = 2048, H = 1024;
+
+  /* Canvas生成
+     - 高解像度（2048x1024） */
   const cv  = document.createElement('canvas');
+  const W = 2048, H = 1024;
   cv.width = W; cv.height = H;
+
+  /* テクスチャ化
+     - Canvas → THREE.CanvasTexture */
   const tex = new THREE.CanvasTexture(cv);
   tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide });
+
+  /* 3Dパネル生成
+     - PlaneGeometryに貼り付けて空間に配置 */
   infoPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 1.4), mat);
   infoPanelMesh.position.set(0, 1.38, -2.2);
   infoPanel.add(infoPanelMesh);
-  // 毎フレーム: 背景グラデ → 粒子tick/draw → テキスト上書き
+  /* 毎フレーム描画
+     - 背景＋粒子＋タイトルを合成 */
   activateCvPanel(cv, tex, 'intro0', _cvPtsIntro, 1.0, _drawIntro0Text);
 }
 
-// テキスト描画関数を生成（intro も game も 2カラムレイアウト）
+/* ================================================================
+   テキスト描画関数生成
+   - タイトル＋本文をCanvasに描画
+   - intro / game 共通の2カラムレイアウト
+================================================================ */
+/* 描画関数を返す（クロージャ）
+   - modeでレイアウト切替（intro / game） */
 function _makeTextExtraFn(titleText, bodyText, mode) {
   const isGame = mode === 'game';
 
   return function(ctx, W, H) {
 
-    // intro のみ枠線
+    /* 枠線（introのみ）
+       - 画面外枠を描画 */
     if (!isGame) {
       ctx.strokeStyle = 'rgba(160,50,20,0.45)';
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.roundRect(5, 5, W-10, H-10, 20); ctx.stroke();
     }
 
-    // bodyText を左右に分割
+    /* 本文分割
+       - "---"で左右カラムに分ける */
     const sepIdx = bodyText.indexOf('\n---\n');
     const leftText  = sepIdx >= 0 ? bodyText.slice(0, sepIdx) : bodyText;
     const rightText = sepIdx >= 0 ? bodyText.slice(sepIdx + 5) : '';
 
     // カラム位置
     const COL_PAD = 60;
+
+    /* カラム位置決定
+       - intro:中央寄せ / game:左寄せ */
     const COL_L   = isGame ? COL_PAD : W * 0.25;
     const COL_R   = isGame ? (W * 0.5 + 20) : W * 0.75;
 
-    // タイトル描画
+    /* タイトル描画
+       - 上部中央＋区切り線 */
     let y = 38;
     if (titleText) {
       ctx.fillStyle = '#f0c070';
@@ -1962,7 +2026,8 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
       y += 20;
     }
 
-    // 行高さ計算
+    /* 行高さ計算
+       - 日本語/英語でフォントサイズ切替 */
     function calcHeight(text) {
       let h = 0;
       for (const line of text.split('\n')) {
@@ -1978,12 +2043,14 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
     const rightH = calcHeight(rightText);
     const contentH = Math.max(leftH, rightH);
 
-    // 縦中央寄せ
+    /* 縦中央寄せ
+       - テキスト全体を中央に配置 */
     const remaining = H - y - 30;
     const offset = Math.max(0, (remaining - contentH) / 2);
     const baseY = y + offset;
 
-    // 中央区切り線（intro も game も共通）
+    /* 中央区切り線
+       - 左右カラムの境界 */
     ctx.strokeStyle = 'rgba(160,55,20,0.25)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -1991,7 +2058,8 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
     ctx.lineTo(W/2, H - 30);
     ctx.stroke();
 
-    // カラム描画
+    /* カラム描画関数
+       - 行ごとにテキスト描画 */
     function drawCol(text, x, align, startY) {
       ctx.textBaseline = 'top';
       ctx.textAlign = align;
@@ -2015,56 +2083,97 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
     const alignLeft  = isGame ? 'left' : 'center';
     const alignRight = isGame ? 'left' : 'center';
 
+    /* カラム描画実行
+       - 左右に本文を表示 */
     drawCol(leftText,  COL_L, alignLeft,  baseY);
     drawCol(rightText, COL_R, alignRight, baseY);
   };
 }
 
+/* ================================================================
+   インフォパネル更新
+   - 説明UIを3Dパネルとして表示・更新
+================================================================ */
+/* パネル更新処理
+   - 初回: パネル生成
+   - 以降: 内容だけ更新 */
 function updateInfoPanel(text, titleText, mode) {
+  /* モード決定
+     - intro / game 自動切替 */
   const _mode = mode || (isIntroState(currentState) ? 'intro' : 'game');
-    const isIntro = isIntroState(currentState);
-    const pts    = isIntro ? _cvPtsIntro : _cvPtsGame;
-    const bright = isIntro ? 1.0 : 0.45;
+  const isIntro = isIntroState(currentState);
+
+  /* 表示パラメータ
+     - 粒子・明るさ切替 */
+  const pts    = isIntro ? _cvPtsIntro : _cvPtsGame;
+  const bright = isIntro ? 1.0 : 0.45;
+
   if (showingPhaseResult) {
+
+    /* パネル再生成
+       - フェーズ結果時は作り直す */
     if (infoPanelMesh) infoPanel.remove(infoPanelMesh);
     const W = 2048, H = 1024;
+
+    /* Canvas生成 */
     const cv  = document.createElement('canvas');
     cv.width = W; cv.height = H;
+
+    /* テクスチャ化 */
     const tex = new THREE.CanvasTexture(cv);
     tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
     const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide });
+
+    /* 3Dパネル生成 */
     infoPanelMesh = new THREE.Mesh(
       isIntro ? new THREE.PlaneGeometry(2.52, 1.26) : new THREE.PlaneGeometry(2.5, 1.40),
       mat
     );
     infoPanelMesh.position.set(0, 1.38, -2.2);
+
+    /* シーンに追加 */
     infoPanel.add(infoPanelMesh);
-    // 毎フレーム: 背景 → 粒子tick/draw → テキスト上書き
+
+    /* 毎フレーム描画開始
+       - 背景＋粒子＋テキスト */
     activateCvPanel(cv, tex, _mode, pts, bright, _makeTextExtraFn(titleText || null, text, _mode));
   } else {
     if (!infoPanelMesh) return;
 
+    /* 既存パネル更新
+       - テクスチャを書き換え */
     const tex = infoPanelMesh.material.map;
     const cv  = tex.image;
+
+    /* 毎フレーム描画更新 */
     activateCvPanel(cv, tex, _mode, pts, bright, _makeTextExtraFn(titleText || null, text, _mode));
+
+    /* 更新フラグ */
     tex.needsUpdate = true;
   }
 }
 
-// Result panel
+/* ================================================================
+   リザルト表示パネル
+================================================================ */
+/* resultPanel
+   - リザルト画面全体のグループ
+   - 最初は非表示 */
 const resultPanel = new THREE.Group();
 scene.add(resultPanel);
 resultPanel.visible = false;
 let resultPanelMesh = null;
 
+/* buildResultCanvas
+   - リザルト画面の中身（スコア・ランキングなど）をCanvasに描画
+   - 最終スコアを計算して表示 */
 function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
-  // 2倍解像度
   const W = 1200, H = 1400;
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
   const ctx = c.getContext('2d');
 
-  // 枠線（背景・粒子は毎フレームupdateCvPanelが描画）
+  // 枠線
   ctx.strokeStyle = '#e05050';
   ctx.lineWidth = 4;
   ctx.beginPath(); ctx.roundRect(4, 4, W-8, H-8, 32); ctx.stroke();
@@ -2072,7 +2181,7 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.roundRect(14, 14, W-28, H-28, 26); ctx.stroke();
 
-  // Title
+  // タイトル
   ctx.fillStyle = '#ffddaa';
   ctx.font = 'bold 52px serif';
   ctx.textAlign = 'center';
@@ -2081,7 +2190,8 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
   ctx.fillStyle = '#ffaa88';
   ctx.fillText('Echizen Blades Complete', W/2, 120);
 
-  // 確定保存済みスコアをそのまま使用（再計算・RMS・正規化は一切禁止）
+  /* スコア計算
+     - 各フェーズを重み付きで合計 */
   const forgingScore  = bladeStateSnap._forging;
   const shapingScore = bladeStateSnap._shaping;
   const sharpenScore  = bladeStateSnap._sharpening;
@@ -2091,10 +2201,13 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
     sharpenScore  * 0.3
   ));
 
-  // Score big
+  /* ランク判定
+     - スコアに応じて称号を決定 */
   const rankJa = recomputedFinal >= 90 ? '名人' : recomputedFinal >= 70 ? '職人' : '見習い';
   const rankEn = recomputedFinal >= 90 ? 'Master' : recomputedFinal >= 70 ? 'Craftsman' : 'Apprentice';
 
+  /* 大スコア表示
+     - 色付きで中央に表示 */
   ctx.font = 'bold 130px serif';
   ctx.fillStyle = recomputedFinal >= 90 ? '#ffe866' : recomputedFinal >= 70 ? '#88ccff' : '#ff9966';
   ctx.textAlign = 'center';
@@ -2110,7 +2223,9 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
 
   // 今回スコアの順位
   const newRank = scores.findIndex(s => s.id === savedId);
-    // NEW RECORD表示
+
+    /* NEW記録表示
+       - 上位5位以内なら表示 */
     if (newRank >= 0 && newRank < 5) {
       ctx.font = 'bold 38px serif';
       ctx.fillStyle = '#ffe066';
@@ -2122,7 +2237,7 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
     }
 
   // ─────────────────────────────────────────────
-  // レイアウト順: Score → フェーズゲージ → Total breakdown → Divider → Ranking
+  // レイアウト順: スコア → 区切り線 → フェーズ別ゲージ → 合計式 → Divider → Ranking
   // ─────────────────────────────────────────────
 
   // 区切り線（スコア下）
@@ -2130,7 +2245,8 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(50, 370); ctx.lineTo(W-50, 370); ctx.stroke();
 
-  // フェーズゲージ（y=400 から）
+  /* フェーズ別ゲージ
+     - 鍛造・成形・研ぎのスコアをバー表示 */
   const details = [
     ['① 鍛造 Forging',  forgingScore,  0.3],
     ['② 成形 Shaping',  shapingScore, 0.4],
@@ -2164,8 +2280,9 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
     ctx.textAlign = 'left';
   });
 
-  // Total breakdown（Dividerの上）
-  const yBreakdown = 430 + 3 * 105 + 0; // ゲージ3行の直下
+  /* 合計式表示
+     - 計算式をそのまま表示 */
+  const yBreakdown = 430 + 3 * 105 + 0;
   const computed = Math.max(0, Math.min(100,
     forgingScore  * 0.3 +
     shapingScore * 0.4 +
@@ -2179,20 +2296,21 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
     W/2, yBreakdown
   );
 
-  // Divider（breakdown直下、40px余白）
+  // 区切り線（合計式直下）
   const yDivider = yBreakdown + 30;
   ctx.strokeStyle = 'rgba(255,120,80,0.4)';
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(50, yDivider); ctx.lineTo(W-50, yDivider); ctx.stroke();
 
-  // Ranking（Divider直下、40px余白）
+  // ランキングタイトル（Divider直下）
   const yRankTitle = yDivider + 60;
   ctx.font = 'bold 38px serif';
   ctx.fillStyle = '#ffddaa';
   ctx.textAlign = 'center';
   ctx.fillText('─ ランキング / Ranking ─', W/2, yRankTitle);
 
-  // ランキング一覧（各行 80px間隔）
+  /* ランキング表示
+     - 上位5件を表示＋NEW強調 */
   const yRankStart = yRankTitle + 80;
   ctx.font = '32px monospace';
   scores.slice(0, 5).forEach((s, i) => {
@@ -2215,7 +2333,8 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
     ctx.font = '32px monospace';
   });
 
-  // リプレイガイド（下端から余白80px）
+  /* リプレイ案内
+     - Aボタンで再スタート */
   ctx.fillStyle = 'rgba(255,200,150,0.6)';
   ctx.font = '28px serif';
   ctx.textAlign = 'center';
@@ -2223,11 +2342,14 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
   return c;
 }
 
+/* showResultPanel
+   - リザルトパネルを3D空間に表示
+   - 背景＋粒子＋テキストを合成 */
 function showResultPanel(score, bladeStateSnap, scores, savedId) {
   if (resultPanelMesh) resultPanel.remove(resultPanelMesh);
 
-  const W = 1200, H = 1400;
   const cv  = document.createElement('canvas');
+  const W = 1200, H = 1400;
   cv.width = W; cv.height = H;
 
   const tex = new THREE.CanvasTexture(cv);
@@ -2237,59 +2359,80 @@ function showResultPanel(score, bladeStateSnap, scores, savedId) {
     map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide
   });
 
+  /* パネル生成
+     - CanvasをテクスチャにしてMesh化 */
   resultPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.1), mat);
   resultPanelMesh.position.set(0, 1.55, -2.5);
   resultPanelMesh.rotation.set(0, 0, 0);
   resultPanel.add(resultPanelMesh);
   resultPanel.visible = true;
 
-  // テキスト内容（buildResultCanvas）をサイドCanvasに描いておく
+  /* テキスト生成
+     - buildResultCanvasで内容作成 */
   const textCv = buildResultCanvas(score, bladeStateSnap, scores, savedId);
 
-  // 毎フレーム: 背景+粒子 → テキストオーバーレイ
+  /* 毎フレーム描画
+     - 背景＋粒子＋テキストを重ねる */
   activateCvPanel(cv, tex, 'result', _cvPtsResult, 0.85, function(ctx2, W2, H2) {
     ctx2.drawImage(textCv, 0, 0, W2, H2);
   });
 }
 
 /* ================================================================
-   SCORE PERSISTENCE（1種類 / TOP5 / NEW判定つき）
+   スコア保存（ランキング管理）
 ================================================================ */
+/* LS_KEY
+   - ローカルストレージの保存キー
+   - 同じキーでデータを管理 */
 const LS_KEY = 'echizen_scores_v1';
 
-/** 読み込み */
+/* loadScores
+   - 保存済みスコアを読み込む
+   - エラー時は空配列を返す */
 function loadScores() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); }
   catch { return []; }
 }
+
+/* saveScore
+   - 新しいスコアを保存
+   - 並び替え＆TOP5に制限 */
 function saveScore(score) {
   const arr = loadScores();
+
+  /* 現在時刻
+     - IDと表示用日時を生成 */
   const now = new Date();
   const id = now.getTime();
-
   const date = now.toLocaleDateString("ja-JP");
   const clock = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
 
+  /* スコア追加
+     - 配列に新規データを追加 */
   arr.push({ score, date, clock, id });
 
 
-  // ★ 同点なら今回のスコア（id が大きい方）を上位にする
+  /* ソート
+     - スコア降順＋同点は新しい方優先 */
   arr.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
     return b.id - a.id;  // ← 同点時は id の降順
   });
 
+  /* 上位5件だけ残す */
   arr.splice(5);
 
+  /* 保存
+     - localStorageに書き込み */
   localStorage.setItem(LS_KEY, JSON.stringify(arr));
 
+  /* 順位取得
+     - 今回のスコアの順位 */
   const rank = arr.findIndex(s => s.id === id);
+
   return { scores: arr, rank, id };
 }
 
-/* ================================================================
-   UI HTML UPDATES
-================================================================ */
 /* ================================================================
    FORGING STATE VARIABLES
 ================================================================ */
