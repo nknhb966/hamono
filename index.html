@@ -2785,8 +2785,8 @@ function onEnterState(state, prev) {
     resetSharpening();
 
     if (shapingComplete) {
-      bladeState.symmetryError =
-        zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
+      // bladeState.symmetryError =
+        // zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
     }
 
     const d = TEXT_DATA.sharpening;
@@ -3151,60 +3151,27 @@ function handleGlobalInput() {
       - 途中でも終了可能
       - スコア確定→結果表示 */
     else if (currentState === State.FORGING) {
-      const isEarly = !forgingComplete;
-      // スコア確定
-      if (isEarly) {
-        _phaseScores.forging = Math.round(
-          Math.max(0, Math.min(100, 100 - shapeDistortion))
-        );
-        // 結果表示
-        updateInfoPanel(
-          `鍛造結果
-  強化度（鍛造）: ${Math.round(shapeDistortion)}
-
-  Aボタン：次へ`,
-          isEarly ? '① 鍛造（途中終了）' : '① 鍛造完了'
-        );
-
-        playComplete();
-        showingPhaseResult = true;
+      if (!forgingComplete) {
+        finishForging(false);
         lockInputFor(1);
       }
-
     }
 
     /* 成形フェーズ
       - 歪みからスコア計算
       - 途中終了でも確定 */
     else if (currentState === State.SHAPING) {
-      const isEarly = !shapingComplete;
-      if (isEarly) {
-        _sq0c = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
-        _sqc  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
-        _phaseScores.shaping = Math.round(
-          Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0))
-        );
-        updateInfoPanel(
-          `成形結果
-  均一度（成形）: ${Math.round(_phaseScores.shaping)}pt
-
-  Aボタン：次へ`,
-          isEarly ? '② 成形（途中終了）' : '② 成形完了'
-        );
-
-        playComplete();
-        showingPhaseResult = true;
+      if (!shapingComplete) {
+        finishShaping(false);
         lockInputFor(1);
       }
-
-
     }
 
     /* 研ぎフェーズ
       - 現在のポイントをそのまま確定 */
     else if (currentState === State.SHARPENING) {
       if (!sharpenComplete) {
-        finishSharpening(false); // 途中終了
+        finishSharpening(false);
         lockInputFor(1);
       }
     }
@@ -3220,7 +3187,55 @@ function handleGlobalInput() {
 
   wasBPressed = bPressed;
 }
+function finishForging(isComplete) {
+  forgingComplete = true;
+  _phaseScores.forging = Math.round(
+    Math.max(0, Math.min(100, 100 - shapeDistortion))
+  );
+  updateInfoPanel(
+`鍛造結果
+強化度（鍛造）: ${Math.round(_phaseScores.forging)}
 
+Aボタン：次へ`,
+    isComplete ? '① 鍛造完了' : '① 鍛造（途中終了）'
+  );
+  playComplete();
+  showingPhaseResult = true;
+}
+
+function finishShaping(isComplete) {
+  shapingComplete = true;
+  _sq0c = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
+  _sqc  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
+  const score = Math.max(0, Math.min(100,
+    _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0
+  ));
+  _phaseScores.shaping = Math.round(score);
+  // bladeState.symmetryError = Math.sqrt(_sqc / zones.length);
+  updateInfoPanel(
+`成形結果
+均一度（成形）: ${_phaseScores.shaping}pt
+
+Aボタン：次へ`,
+    isComplete ? '② 成形完了' : '② 成形（途中終了）'
+  );
+  playComplete();
+  showingPhaseResult = true;
+}
+
+function finishSharpening(isComplete) {
+  sharpenComplete = true;
+  _phaseScores.sharpening = Math.min(100, Math.round(totalSharpness));
+  updateInfoPanel(
+    `研ぎ結果
+鋭利度（研ぎ）: ${_phaseScores.sharpening}pt
+
+Aボタン：次へ`,
+    isComplete ? '③ 研ぎ完了' : '③ 研ぎ（途中終了）'
+  );
+  playComplete();
+  showingPhaseResult = true;
+}
 /* ================================================================
    UPDATE FORGING（鍛造の更新処理）
    - 鉄の操作・加熱・打撃判定を毎フレーム更新
@@ -3392,12 +3407,8 @@ function updateForging(delta) {
 
     /* フェーズ終了判定
       - 規定回数で完了 */
-    if (forgingHitCount >= CONFIG.FORGING.TOTAL_HITS) {
-      forgingComplete = true;
-      _phaseScores.forging = Math.round(Math.max(0, Math.min(100, 100 - shapeDistortion)));
-      updateInfoPanel(`鍛造が完了しました！\n歪み: ${Math.round(shapeDistortion)}\n\nForging complete!\nDistortion: ${Math.round(shapeDistortion)}\n\nAボタン：次のフェーズへ　A: Next Phase`, '① 鍛造完了 / Forging Complete');
-      playComplete();
-      showingPhaseResult = true;
+    if (forgingHitCount >= CONFIG.FORGING.TOTAL_HITS && !forgingComplete) {
+      finishForging(true);
     }
   }
   prevRightTrigger = rightTrig;
@@ -3567,14 +3578,16 @@ function updateShaping(delta) {
     - 規定回数で完了
     - スコア保存・結果表示 */
   if (shapingHitCount >= CONFIG.SHAPING.MAX_HITS && !shapingComplete) {
-    shapingComplete = true;
+    finishShaping(true);
 
-    const score = Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0));
-    _phaseScores.shaping = Math.round(score);
-    bladeState.symmetryError = Math.sqrt(_sqc / zones.length);
-    updateInfoPanel(`成形が完了しました！\nスコア: ${Math.round(score)}pt\n\nShaping complete!\nScore: ${Math.round(score)}pt\n\nAボタン：次のフェーズへ　A: Next Phase`, '② 成形完了 / Shaping Complete');
-    playComplete();
-    showingPhaseResult = true;
+    // shapingComplete = true;
+
+    // const score = Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0));
+    // _phaseScores.shaping = Math.round(score);
+    // // bladeState.symmetryError = Math.sqrt(_sqc / zones.length);
+    // updateInfoPanel(`成形が完了しました！\nスコア: ${Math.round(score)}pt\n\nShaping complete!\nScore: ${Math.round(score)}pt\n\nAボタン：次のフェーズへ　A: Next Phase`, '② 成形完了 / Shaping Complete');
+    // playComplete();
+    // showingPhaseResult = true;
   }
 }
 
@@ -3747,21 +3760,6 @@ function updateSharpening(delta) {
   if (strokeCount >= CONFIG.SHARPENING.TOTAL_STROKES && !sharpenComplete) {
     finishSharpening(true); // 完了
   }
-}
-
-
-function finishSharpening(isComplete) {
-  sharpenComplete = true;
-  _phaseScores.sharpening = Math.min(100, Math.round(totalSharpness));
-  updateInfoPanel(
-    `研ぎ結果
-鋭利度（研ぎ）: ${_phaseScores.sharpening}pt
-
-Aボタン：次へ`,
-    isComplete ? '③ 研ぎ完了' : '③ 研ぎ（途中終了）'
-  );
-  playComplete();
-  showingPhaseResult = true;
 }
 
 /* ================================================================
