@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2363,8 +2363,7 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
     ctx.textAlign = 'right';
     ctx.fillStyle = 'rgba(255,180,130,0.6)';
     ctx.font = '22px monospace';
-    // clock が未保存の古いデータは日付のみ表示
-    const dateTime = s.clock ? `${s.date} ${s.clock}` : s.date;
+    const dateTime = `${s.date} ${s.clock}`;
     ctx.fillText(dateTime, W - 60, y);
     if (isThisScore) {
       ctx.fillStyle = '#ffe066';
@@ -4112,8 +4111,7 @@ function renderScoreModal() {
     const cls = medals[i] || 'other';
     const el  = document.createElement('div');
     el.className = `rmodal-entry ${cls}`;
-    // clock が未保存の古いデータは日付のみ表示
-    const dateTime = s.clock ? `${s.date} ${s.clock}` : s.date;
+    const dateTime = `${s.date} ${s.clock}`;
     el.innerHTML = `
       <span class="entry-rank-score">${['🥇','🥈','🥉','4位','5位'][i]||((i+1)+'位')} &nbsp; ${Math.round(s.score)} 点</span>
       <span class="entry-date">${dateTime}</span>`;
