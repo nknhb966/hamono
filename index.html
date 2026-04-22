@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>1越前打刃物 VR</title>
+<title>越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -1585,8 +1585,8 @@ bladeMesh.rotation.x = -Math.PI / 2;      // 表: 表面が上
 /* 表：+方向にオフセット
    裏：-方向にオフセット
    → 厚みを持った板として扱う */
-const BLADE_HALF   = 0.003 * 1.3;   // 片側オフセット = 0.0039（元0.003の1.3倍）
-const BLADE_DEPTH  = 0.006;          // bladeGeoのdepth（Z方向厚み）
+const BLADE_HALF   = 0.003 * 1.3;
+const BLADE_DEPTH  = 0.006;
 
 /* 接地補正
    - 表裏で接地面が変わるため高さ補正 */
@@ -1731,7 +1731,7 @@ stoneMesh.add(stoneSurf);
    - 刃の角度をリアルタイム表示
    - 右手コントローラーの横に追従 */
 const angleHudCanvas = document.createElement('canvas');
-angleHudCanvas.width = 272; angleHudCanvas.height = 200;  // メッシュ比(0.15:0.11=1.36:1)に合わせた解像度
+angleHudCanvas.width = 272; angleHudCanvas.height = 200;
 const angleHudTex = new THREE.CanvasTexture(angleHudCanvas);
 const angleHudMesh = new THREE.Mesh(
   new THREE.PlaneGeometry(0.15, 0.11),
@@ -1739,7 +1739,7 @@ const angleHudMesh = new THREE.Mesh(
 );
 // 初期位置（右手が取れるまでのデフォルト）
 angleHudMesh.position.set(0.4, workbenchPos.y + 0.20, -1.2);
-scene.add(angleHudMesh);  // groupSharpeningではなくsceneに追加（手に追従させるため）
+scene.add(angleHudMesh);
 
 /* 角度表示更新
    - OK/NG判定
@@ -1950,8 +1950,7 @@ function updateInfoPanel_INTRO0() {
      - 重複防止 */
   if (infoPanelMesh) infoPanel.remove(infoPanelMesh);
 
-  /* Canvas生成
-     - 高解像度（2048x1024） */
+  /* Canvas生成 */
   const cv  = document.createElement('canvas');
   const W = 2048, H = 1024;
   cv.width = W; cv.height = H;
@@ -2613,6 +2612,7 @@ function getBothGrips() {
    - 鍛造フェーズを初期状態に戻す
    - 温度・位置・スコアをリセット */
 function resetForging() {
+  shapeDistortion = 100;
   ironTemperature = 70; // スタート時70°
   ironOnWorkbench = false;
   ironInFurnace   = false;
@@ -2764,8 +2764,6 @@ function onEnterState(state, prev) {
   // ── FORGING ─────────────────────────
   if (state === State.FORGING) {
     resetForging();
-    shapeDistortion = 100;
-
     const d = TEXT_DATA.forging;
     updateInfoPanel(d.body, d.title);
   }
@@ -2773,9 +2771,6 @@ function onEnterState(state, prev) {
   // ── SHAPING ─────────────────────────
   else if (state === State.SHAPING) {
     resetShaping();
-    bladeState.shapeDistortion = shapeDistortion;
-    // bladeState.symmetryError   = 100;
-
     const d = TEXT_DATA.shaping;
     updateInfoPanel(d.body, d.title);
   }
@@ -2783,12 +2778,6 @@ function onEnterState(state, prev) {
   // ── SHARPENING ─────────────────────
   else if (state === State.SHARPENING) {
     resetSharpening();
-
-    if (shapingComplete) {
-      // bladeState.symmetryError =
-        // zones.reduce((s, z) => s + Math.abs(z.distortion), 0) / zones.length;
-    }
-
     const d = TEXT_DATA.sharpening;
     updateInfoPanel(d.body, d.title);
   }
@@ -3059,7 +3048,6 @@ function retryState() {
   updateScorePanel(null);
   const prev = currentState;
   if (currentState === State.FORGING) {
-    shapeDistortion = 100; // リトライ時も最悪値から再スタート
     resetForging();
   } else if (currentState === State.SHAPING) {
     resetShaping();
@@ -3188,6 +3176,7 @@ function handleGlobalInput() {
   wasBPressed = bPressed;
 }
 
+/* 鍛造フェーズ終了 */
 function finishForging(isComplete) {
   forgingComplete = true;
   _phaseScores.forging = Math.round(
@@ -3204,6 +3193,7 @@ Aボタン：次へ`,
   showingPhaseResult = true;
 }
 
+/* 成形フェーズ終了 */
 function finishShaping(isComplete) {
   shapingComplete = true;
   _sq0c = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
@@ -3212,7 +3202,6 @@ function finishShaping(isComplete) {
     _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0
   ));
   _phaseScores.shaping = Math.round(score);
-  // bladeState.symmetryError = Math.sqrt(_sqc / zones.length);
   updateInfoPanel(
 `成形結果
 均一度（成形）: ${_phaseScores.shaping}pt
@@ -3224,6 +3213,7 @@ Aボタン：次へ`,
   showingPhaseResult = true;
 }
 
+/* 研ぎフェーズ終了 */
 function finishSharpening(isComplete) {
   sharpenComplete = true;
   _phaseScores.sharpening = Math.min(100, Math.round(totalSharpness));
@@ -3580,15 +3570,6 @@ function updateShaping(delta) {
     - スコア保存・結果表示 */
   if (shapingHitCount >= CONFIG.SHAPING.MAX_HITS && !shapingComplete) {
     finishShaping(true);
-
-    // shapingComplete = true;
-
-    // const score = Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0));
-    // _phaseScores.shaping = Math.round(score);
-    // // bladeState.symmetryError = Math.sqrt(_sqc / zones.length);
-    // updateInfoPanel(`成形が完了しました！\nスコア: ${Math.round(score)}pt\n\nShaping complete!\nScore: ${Math.round(score)}pt\n\nAボタン：次のフェーズへ　A: Next Phase`, '② 成形完了 / Shaping Complete');
-    // playComplete();
-    // showingPhaseResult = true;
   }
 }
 
