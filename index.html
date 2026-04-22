@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -2774,7 +2774,7 @@ function onEnterState(state, prev) {
   else if (state === State.SHAPING) {
     resetShaping();
     bladeState.shapeDistortion = shapeDistortion;
-    bladeState.symmetryError   = 100;
+    // bladeState.symmetryError   = 100;
 
     const d = TEXT_DATA.shaping;
     updateInfoPanel(d.body, d.title);
@@ -3187,6 +3187,7 @@ function handleGlobalInput() {
 
   wasBPressed = bPressed;
 }
+
 function finishForging(isComplete) {
   forgingComplete = true;
   _phaseScores.forging = Math.round(
@@ -3403,7 +3404,7 @@ function updateForging(delta) {
     }
 
     /* スコア表示更新 */
-    updateScorePanel(`① 打撃 ${forgingHitCount}/${CONFIG.FORGING.TOTAL_HITS}\n${result}  歪み:${Math.round(shapeDistortion)}`, new THREE.Vector3(0, workbenchPos.y + 0.43, -1.1));
+    updateScorePanel(`① 打撃 ${forgingHitCount}/${CONFIG.FORGING.TOTAL_HITS}\n${result}  強化度:${Math.round(100 - shapeDistortion)}`, new THREE.Vector3(0, workbenchPos.y + 0.43, -1.1));
 
     /* フェーズ終了判定
       - 規定回数で完了 */
@@ -3570,7 +3571,7 @@ function updateShaping(delta) {
     _sq0c = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
     _sqc  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
     const score = Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0));
-    updateScorePanel(`② 打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS}\n${Math.round(score)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.43, -1.25));
+    updateScorePanel(`② 打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS}\n均一度:${Math.round(score)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.43, -1.25));
   }
   prevShapingTrigger = shapingTrig;
 
@@ -3737,7 +3738,7 @@ function updateSharpening(delta) {
           }
 
           /* スコア表示更新 */
-          updateScorePanel(`③ ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES}\n${grade} 合計:${Math.round(totalSharpness)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.43, -1.2));
+          updateScorePanel(`③ ストローク ${strokeCount}/${CONFIG.SHARPENING.TOTAL_STROKES}\n${grade} 鋭利度:${Math.round(totalSharpness)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.43, -1.2));
         }
       }
     }
@@ -3763,12 +3764,17 @@ function updateSharpening(delta) {
 }
 
 /* ================================================================
-   INTRO VISUALS
+   INTRO VISUALS（イントロ演出：パーティクル）
 ================================================================ */
-// Ambient particles — 真の球体（SphereGeometry + InstancedMesh）
-const particleCount    = 120;
+/* パーティクル設定（球体＋InstancedMesh）
+  - 軽量に大量表示するためInstancedMeshを使用
+  - 橙70％・黄色30％で見た目に変化をつける */
+const particleCount    = 120;  // パーティクル総数
 const particleSphereGeo = new THREE.SphereGeometry(0.018, 10, 10);
-// 橙と黄色を交互に2マテリアルで表現（70%橙 + 30%黄）
+
+/* マテリアル（色・見た目）
+  - 加算合成で光っぽい表現
+  - 半透明でふんわりした雰囲気 */
 const _ptOrangeMat = new THREE.MeshBasicMaterial({
   color: 0xff5500, transparent: true, opacity: 0.88,
   blending: THREE.AdditiveBlending, depthWrite: true, depthTest: true,
@@ -3777,7 +3783,10 @@ const _ptYellowMat = new THREE.MeshBasicMaterial({
   color: 0xffcc00, transparent: true, opacity: 0.80,
   blending: THREE.AdditiveBlending, depthWrite: true, depthTest: true,
 });
-// 2種のInstancedMesh（橙70%、黄30%）
+
+/* InstancedMesh生成
+  - 橙と黄色で別メッシュに分ける
+  - 描画負荷を抑えつつ色分け */
 const _ptCountOrange = Math.round(particleCount * 0.7);
 const _ptCountYellow = particleCount - _ptCountOrange;
 const _ptOrange = new THREE.InstancedMesh(particleSphereGeo, _ptOrangeMat, _ptCountOrange);
@@ -3786,15 +3795,18 @@ _ptOrange.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 _ptYellow.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 scene.add(_ptOrange);
 scene.add(_ptYellow);
-// particles は互換性のためエイリアス（更新はまとめて行う）
 
-// Perlinノイズ風：収束しないよう複数の異なる周波数サインを重ね合わせ
+/* ノイズ関数（Perlin風）
+  - サイン波を組み合わせて自然な動きを作る
+  - 完全な周期にならずランダムっぽく動く */
 function perlinLike(t, freqA, freqB, phaseA, phaseB) {
   // 2つの非整数比の周波数サインを重ねる → 準周期的で収束しない
   return Math.sin(t * freqA + phaseA) * 0.6 + Math.sin(t * freqB + phaseB) * 0.4;
 }
 
-// 各パーティクルの状態
+/* パーティクル状態データ
+  - 位置・時間・周波数・振幅を個別に持つ
+  - それぞれ違う動きをするための設定 */
 const _ptPos = Array.from({ length: particleCount }, (_, idx) => ({
   x:     (Math.random()-0.5)*8,
   y:     Math.random()*3,
@@ -3812,31 +3824,42 @@ const _ptPos = Array.from({ length: particleCount }, (_, idx) => ({
   pbz:   Math.random()*Math.PI*2,   // Z位相B
   amp:   0.8 + Math.random()*1.2,   // 振れ幅
 }));
+
+/* 初期配置
+  - ランダム位置に配置
+  - ダミーオブジェクトで行列を設定 */
 const _ptDummy = new THREE.Object3D();
-// 初期行列を設定
 for (let i = 0; i < particleCount; i++) {
   _ptDummy.position.set(_ptPos[i].x, _ptPos[i].y, _ptPos[i].z);
   _ptDummy.updateMatrix();
   if (i < _ptCountOrange) _ptOrange.setMatrixAt(i, _ptDummy.matrix);
   else _ptYellow.setMatrixAt(i - _ptCountOrange, _ptDummy.matrix);
 }
+/* インスタンス更新
+  - 各パーティクルの行列をGPUに反映
+  - 初期状態を描画に反映 */
 _ptOrange.instanceMatrix.needsUpdate = true;
 _ptYellow.instanceMatrix.needsUpdate = true;
 
 /* ================================================================
-   BROWSER UI PARTICLE SYSTEM
-   #ui-particle-canvas に粒子演出を描画（ブラウザ画面用）
+   BROWSER UI PARTICLE SYSTEM（ブラウザ用粒子演出）
 ================================================================ */
+/* 基本変数
+  - キャンバス・描画コンテキスト管理
+  - 粒子配列と動作フラグ */
+let _uiPts = [];           // 粒子データ配列
+let _uiPtActive = false;   // 再生中フラグ
+
 let _uiPtCtx    = null;
-// ── ブラウザUI粒子: 共通システム(_spawnPt/_tick/_draw)を使用 ──
 const _uiPtsCount = 140;
-let _uiPts      = [];           // 共通_spawnPtで生成
-let _uiPtActive = false;
 let _uiRafId    = null;
 let _uiLastTime = 0;
 let _uiCanvas   = null;
 let _uiCtx      = null;
 
+/* 初期化処理
+  - canvas取得＆サイズ設定
+  - 粒子を生成（画面全体にランダム配置） */
 function _initUiParticles() {
   _uiCanvas = document.getElementById('ui-particle-canvas');
   if (!_uiCanvas) return;
@@ -3847,6 +3870,9 @@ function _initUiParticles() {
   _uiPts = Array.from({ length: _uiPtsCount }, () => _spawnPt());
 }
 
+/* 描画処理
+  - 毎フレーム呼ばれる
+  - 粒子の更新（tick）＋描画（draw） */
 function _drawUiParticles(now) {
   if (!_uiCtx || !_uiCanvas) return;
   const delta = Math.min((now - _uiLastTime) / 1000, 0.05);
@@ -3859,12 +3885,18 @@ function _drawUiParticles(now) {
   _drawParticles(_uiCtx, _uiPts, W, H, 0.9);
 }
 
+/* ループ処理（requestAnimationFrame）
+  - アクティブ中は描画を繰り返す
+  - 停止時はループ終了 */
 function _uiParticleLoop(now) {
   if (!_uiPtActive) { _uiRafId = null; return; }
   _drawUiParticles(now);
   _uiRafId = requestAnimationFrame(_uiParticleLoop);
 }
 
+/* 再生開始
+  - 未初期化なら生成
+  - ループ開始 */
 function startUiParticles() {
   if (!_uiPts.length) _initUiParticles();
   if (_uiCanvas) {
@@ -3878,6 +3910,9 @@ function startUiParticles() {
   }
 }
 
+/* 再生停止
+  - ループ停止
+  - 画面クリア */
 function stopUiParticles() {
   _uiPtActive = false;
   if (_uiRafId) { cancelAnimationFrame(_uiRafId); _uiRafId = null; }
@@ -3885,6 +3920,8 @@ function stopUiParticles() {
     _uiCtx.clearRect(0, 0, _uiCanvas.width, _uiCanvas.height);
 }
 
+/* リサイズ対応
+  - 画面サイズ変更時にcanvasを更新 */
 window.addEventListener('resize', () => {
   if (_uiCanvas && _uiPtActive) {
     _uiCanvas.width  = window.innerWidth;
@@ -3893,18 +3930,27 @@ window.addEventListener('resize', () => {
 });
 
 /* ================================================================
-   XR & UI SETUP
+   XR & UI SETUP（XR初期化＋UI管理）
 ================================================================ */
+/* UI初期化
+  - VR / ARボタン設定
+  - モーダル・イベント登録
+  - 粒子エフェクト開始 */
 async function setupUI() {
   const btnVR    = document.getElementById('btn-vr');
   const btnAR    = document.getElementById('btn-ar');
   const uiPanel  = document.getElementById('uiPanel');
-  // const xrStatus = document.getElementById('xr-status');
 
+  /* XR対応チェック
+    - VR / ARが使えるか判定
+    - 対応していればボタン有効化 */
   if (navigator.xr) {
     const vrSupported = await navigator.xr.isSessionSupported('immersive-vr').catch(() => false);
     const arSupported = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
 
+    /* VR / AR開始処理
+      - セッション開始
+      - モード切替（VR or AR） */
     if (vrSupported) {
       btnVR.disabled    = false;
       btnVR.textContent = 'VR スタート / START VR';
@@ -3947,6 +3993,9 @@ async function setupUI() {
     btnAR.textContent = 'WebXR 非対応 / WebXR NOT SUPPORTED';
   }
 
+  /* XRセッション開始時
+    - UI非表示・粒子停止
+    - AR時は背景・床を非表示 */
   renderer.xr.addEventListener('sessionstart', () => {
     // uiPanel.style.display  = 'none';
     stopUiParticles();
@@ -3956,6 +4005,10 @@ async function setupUI() {
     scene.background       = isARMode ? null : new THREE.Color(0x0a0705);
     renderer.alpha         = isARMode;
   });
+
+  /* XRセッション終了時
+    - UI復帰・粒子再開
+    - 状態リセット */
   renderer.xr.addEventListener('sessionend', () => {
     // uiPanel.style.display  = '';
     startUiParticles();
@@ -3969,7 +4022,9 @@ async function setupUI() {
   // ブラウザUI粒子：初期状態でスタート
   startUiParticles();
 
-  // 操作方法モーダル
+  /* モーダルUI（ヘルプ・スコア）
+    - 開閉処理
+    - 背景クリックで閉じる */
   document.getElementById('helpBtn').addEventListener('click', () => {
     document.getElementById('modal').classList.add('open');
     startUiParticles(); // モーダル内でも継続
@@ -4004,6 +4059,9 @@ async function setupUI() {
   });
 }
 
+/* スコア表示
+  - ローカルストレージから取得
+  - ランキング形式で表示 */
 function renderScoreModal() {
   const scores  = loadScores();
   const entries = document.getElementById('rec-entries');
@@ -4024,12 +4082,20 @@ function renderScoreModal() {
   });
 }
 
+/* 初期実行
+  - UIセットアップ開始 */
 setupUI();
 
 /* ================================================================
-   PERF TOGGLE PANEL（ネイティブHTML）
+   PERF TOGGLE PANEL（設定UI）
 ================================================================ */
+/* 初期化処理
+  - パフォーマンス設定のON/OFF UI
+  - チェック状態を内部設定と同期 */
 (function initPerfGui() {
+  /* UI要素取得・初期設定
+    - チェックボックスと設定値を同期
+    - Canvas粒子OFF時は関連項目も無効化 */
   const panel   = document.getElementById('perfPanel');
   const chk1    = document.getElementById('tog-canvas-particles');
   const chk2    = document.getElementById('tog-canvas-throttle');
@@ -4047,6 +4113,9 @@ setupUI();
   }
   syncRow2Disabled();
 
+  /* トグル処理
+    - 粒子ON/OFF、転送間引き、描画間引きを切替
+    - 切替時にカウンタをリセット */
   // Toggle 1: Canvas Particles
   chk1.addEventListener('change', () => {
     PerfToggles.useCanvasParticles = chk1.checked;
@@ -4066,7 +4135,9 @@ setupUI();
     _instThrottleFrame = 0;
   });
 
-  // XRセッション中はパネル非表示
+  /* XR連動
+    - VR/AR中はパネル非表示
+    - 終了時に再表示 */
   renderer.xr.addEventListener('sessionstart', () => {
     panel.style.display = 'none';
   });
@@ -4076,27 +4147,45 @@ setupUI();
 })();
 
 /* ================================================================
-   INITIAL STATE
+   INITIAL STATE（初期状態設定）
 ================================================================ */
+/* 初期状態設定
+  - 最初はINTRO_0から開始
+  - 表示・状態を初期化 */
 currentState = State.INTRO_0;
+
+/* 初期表示更新
+  - 表示オブジェクト切替
+  - 初回ステート処理実行 */
 setVisibility();
 onEnterState(State.INTRO_0, null);
-// 初期フェードイン（2秒）完了後にスケールアニメ開始
 _fadeMat.opacity = 1.0;
+
+/* フェード開始
+  - 画面をフェードイン（2秒）
+  - ゲーム開始演出 */
 startFade(1, 2.0, null);
 
 /* ================================================================
-   ANIMATION LOOP
+   ANIMATION LOOP（毎フレーム更新）
 ================================================================ */
 let lastTime = 0;
 
+/* メインループ
+  - 毎フレームの時間計算（delta）
+  - 全体の更新処理をまとめて実行 */
 renderer.setAnimationLoop((t) => {
   if (lastTime === 0) lastTime = t;
+
+  /* 時間管理
+    - 前フレームとの差分を計算
+    - 最大値を制限して安定化 */
   const delta = Math.min((t - lastTime) / 1000, 0.033);
   lastTime = t;
 
-  // アンビエント球体パーティクル更新
-  // [Toggle 3] useInstanceThrottle: 体験中は2フレームに1回
+  /* 背景パーティクル更新
+    - ふわふわ動く粒子を更新
+    - ゲーム中は負荷軽減で間引き更新 */
   const _nowIsGame = (currentState === State.FORGING || currentState === State.SHAPING ||
                       currentState === State.SHARPENING);
   let _doInstUpdate = true;
@@ -4123,11 +4212,15 @@ renderer.setAnimationLoop((t) => {
     _ptYellow.instanceMatrix.needsUpdate = true;
   }
 
+  /* 共通更新処理
+    - 火花・フェード・UIパネルを毎フレーム更新 */
   updateSparks(delta);
-  updateFade(delta);   // フェードをすべてのフェーズで更新
-  updateCvPanel(delta); // 全フェーズでCanvasパネルを毎フレーム更新
+  updateFade(delta);
+  updateCvPanel(delta);
 
-  // シーン背景色（事前確保したColorオブジェクトを再利用）
+  /* 背景色切替
+    - INTROとゲームで色を変更
+    - Fogも同期 */
   const _nowIsIntro = isIntroState(currentState);
   const _bgColor = _nowIsIntro ? _bgColorIntro : _bgColorGame;
   if (scene.background !== _bgColor) {
@@ -4135,8 +4228,12 @@ renderer.setAnimationLoop((t) => {
     if (scene.fog) scene.fog.color.copy(_bgColor);
   }
 
+  /* 入力処理
+    - A/Bボタンなどの全体入力を処理 */
   handleGlobalInput();
 
+  /* フェーズごとの更新
+    - 状態に応じて処理を分岐 */
   switch(currentState) {
     case State.INTRO_0:
     case State.INTRO_1:
@@ -4149,6 +4246,8 @@ renderer.setAnimationLoop((t) => {
     case State.RESULT:     break;
   }
 
+  /* 描画
+    - シーンをレンダリング */
   renderer.render(scene, camera);
 });
 
