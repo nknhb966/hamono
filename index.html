@@ -183,58 +183,59 @@
   .modal-content ul { margin: 6px 0 12px; padding-left: 20px; }
   .modal-content li { margin: 3px 0; }
 
-  /* ═══ Perf Toggles パネル ═══ */
-  #perfPanel {
-    position: fixed; top: 12px; right: 12px; z-index: 200;
-    background:
-      linear-gradient(160deg, rgba(18,8,4,0.96) 0%, rgba(30,12,4,0.96) 100%);
-    border: 1px solid rgba(255,140,40,0.30);
-    border-radius: 10px;
-    padding: 10px 14px 12px;
-    width: 400px;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.55);
-    font-family: 'Helvetica Neue', Arial, sans-serif;
-    font-size: 13px;
-    color: rgba(255,200,130,0.85);
-    user-select: none;
+  /* ═══ 設定変更モーダル ═══ */
+  #settingsModal {
+    display: none; position: fixed; inset: 0; z-index: 100;
+    background: rgba(0,0,0,0.82);
+    align-items: center; justify-content: center;
   }
-  #perfPanel .perf-title {
-    font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
-    color: rgba(255,160,60,0.70);
-    text-transform: uppercase;
-    margin: 0 0 8px;
-    display: flex; align-items: center; gap: 6px;
+  #settingsModal.open { display: flex; }
+  .smodal-box {
+    width: min(520px, 94vw); max-height: 88vh; overflow-y: auto;
+    background: linear-gradient(150deg, #120a04, #0a0800);
+    border: 1px solid rgba(255,160,60,0.35);
+    border-radius: 16px; padding: 24px 24px 20px;
+    position: relative; color: #ffe0b0;
+    display: flex; flex-direction: column; gap: 0;
   }
-  #perfPanel .perf-title::before {
-    content: '⚙'; font-size: 14px; opacity: 0.8;
+  .smodal-close {
+    position: absolute; top: 12px; right: 16px;
+    background: none; border: none; color: rgba(255,180,80,0.6);
+    font-size: 26px; cursor: pointer; line-height: 1;
   }
+  .smodal-close:hover { color: #fff; }
+  .smodal-title {
+    font-size: clamp(16px,2.2vw,20px); font-weight: 900; text-align: center;
+    color: #ffb840; letter-spacing: 2px; padding-right: 30px; margin-bottom: 18px;
+  }
+  /* 設定行 */
   .perf-row {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 5px 0;
-    border-bottom: 1px solid rgba(255,140,40,0.10);
+    padding: 11px 0;
+    border-bottom: 1px solid rgba(255,140,40,0.12);
     transition: opacity 0.2s;
   }
   .perf-row:last-child { border-bottom: none; }
   .perf-row.disabled { opacity: 0.32; pointer-events: none; }
-  .perf-label { line-height: 1.3; }
+  .perf-label { line-height: 1.3; font-size: clamp(12px,1.6vw,14px); }
   .perf-label .perf-sub {
-    display: block; font-size: 12px;
-    color: rgba(255,160,60,0.45);
-    margin-top: 1px;
+    display: block; font-size: clamp(10px,1.2vw,12px);
+    color: rgba(255,160,60,0.50);
+    margin-top: 2px;
   }
   /* カスタムトグルスイッチ */
-  .perf-toggle { position: relative; flex-shrink: 0; }
+  .perf-toggle { position: relative; flex-shrink: 0; margin-left: 12px; }
   .perf-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
   .perf-toggle .track {
-    display: block; width: 36px; height: 20px;
+    display: block; width: 40px; height: 22px;
     background: rgba(80,30,10,0.6);
     border: 1px solid rgba(255,120,30,0.30);
-    border-radius: 10px; cursor: pointer;
+    border-radius: 11px; cursor: pointer;
     transition: background 0.2s, border-color 0.2s;
     position: relative;
   }
   .perf-toggle .thumb {
-    position: absolute; top: 2px; left: 2px;
+    position: absolute; top: 3px; left: 3px;
     width: 14px; height: 14px;
     background: rgba(200,100,40,0.7);
     border-radius: 50%;
@@ -242,13 +243,14 @@
     pointer-events: none;
   }
   .perf-toggle input:checked + .track {
-    background: rgba(184,69,0,0.75);
-    border-color: rgba(255,160,60,0.55);
+    background: rgba(184,69,0,0.80);
+    border-color: rgba(255,160,60,0.60);
   }
   .perf-toggle input:checked + .track .thumb {
-    transform: translateX(16px);
+    transform: translateX(18px);
     background: #ffb040;
   }
+  .btn-settings { background: linear-gradient(135deg, #2a3a50, #3a5070); color: #fff; }
 </style>
 </head>
 <body>
@@ -273,6 +275,9 @@
 
     <div class="divider"></div>
 
+    <div class="btn-row" style="margin-bottom:10px;">
+      <button class="action-btn btn-settings" id="settingsBtn">⚙ 設定変更 / Settings</button>
+    </div>
     <div class="btn-row">
       <button class="action-btn btn-help"    id="helpBtn">操作方法 / How to Play</button>
       <button class="action-btn btn-records" id="recordsBtn">スコア記録 / Score Record</button>
@@ -280,29 +285,42 @@
   </div>
 </div>
 
-<!-- ═══ Perf Toggles ═══ -->
-<div id="perfPanel">
-  <p class="perf-title">Perf Toggles</p>
-  <div class="perf-row" id="row-tog-canvas-particles">
-    <label class="perf-label" for="tog-canvas-particles">① ゲーム中パーティクル節約 / Save particles in-game<span class="perf-sub">ON：ゲーム中は非表示（軽量）/ OFF：常時表示</span></label>
-    <label class="perf-toggle">
-      <input type="checkbox" id="tog-canvas-particles" checked>
-      <span class="track"><span class="thumb"></span></span>
-    </label>
-  </div>
-  <div class="perf-row" id="row-tog-canvas-throttle">
-    <label class="perf-label" for="tog-canvas-throttle">② ゲーム中Canvas間引き / Throttle Canvas in-game<span class="perf-sub">ON：3フレームに1回転送（軽量）/ OFF：毎フレーム転送</span></label>
-    <label class="perf-toggle">
-      <input type="checkbox" id="tog-canvas-throttle">
-      <span class="track"><span class="thumb"></span></span>
-    </label>
-  </div>
-  <div class="perf-row" id="row-tog-instance-throttle">
-    <label class="perf-label" for="tog-instance-throttle">③ ゲーム中Instance間引き / Throttle Instances in-game<span class="perf-sub">ON：2フレームに1回更新（軽量）/ OFF：毎フレーム更新</span></label>
-    <label class="perf-toggle">
-      <input type="checkbox" id="tog-instance-throttle">
-      <span class="track"><span class="thumb"></span></span>
-    </label>
+
+<!-- ═══ 設定変更モーダル ═══ -->
+<div id="settingsModal">
+  <div class="smodal-box">
+    <button class="smodal-close" id="settingsModalClose">×</button>
+    <div class="smodal-title">⚙ 設定変更 / Settings</div>
+    <div id="row-tog-canvas-particles" class="perf-row">
+      <label class="perf-label" for="tog-canvas-particles">
+        ① ゲーム中パーティクル節約 / Save particles in-game
+        <span class="perf-sub">ON：ゲーム中は非表示（軽量）/ OFF：常時表示</span>
+      </label>
+      <label class="perf-toggle">
+        <input type="checkbox" id="tog-canvas-particles" checked>
+        <span class="track"><span class="thumb"></span></span>
+      </label>
+    </div>
+    <div id="row-tog-canvas-throttle" class="perf-row">
+      <label class="perf-label" for="tog-canvas-throttle">
+        ② ゲーム中Canvas間引き / Throttle Canvas in-game
+        <span class="perf-sub">ON：3フレームに1回転送（軽量）/ OFF：毎フレーム転送</span>
+      </label>
+      <label class="perf-toggle">
+        <input type="checkbox" id="tog-canvas-throttle">
+        <span class="track"><span class="thumb"></span></span>
+      </label>
+    </div>
+    <div id="row-tog-instance-throttle" class="perf-row">
+      <label class="perf-label" for="tog-instance-throttle">
+        ③ ゲーム中Instance間引き / Throttle Instances in-game
+        <span class="perf-sub">ON：2フレームに1回更新（軽量）/ OFF：毎フレーム更新</span>
+      </label>
+      <label class="perf-toggle">
+        <input type="checkbox" id="tog-instance-throttle">
+        <span class="track"><span class="thumb"></span></span>
+      </label>
+    </div>
   </div>
 </div>
 
@@ -324,38 +342,57 @@
     <button class="modal-close" id="modalClose">×</button>
     <div class="modal-title-h">操作方法 / How to Play</div>
     <div class="modal-content">
+
       <h3>🔥 フェーズ① 鍛造 / Forging</h3>
       <ul>
-        <li><span class="tag">左グリップ</span> 鉄を掴む／離す / Hold iron</li>
-        <li>炉に入れると加熱 / Heat iron in furnace</li>
-        <li>800〜900° <span class="tag">〇</span> 適正 / Optimal</li>
-        <li>900〜1000° <span class="tag">△</span> 熱すぎ / Too hot</li>
-        <li>800°未満 <span class="tag">×</span> 冷めすぎ / Too cold</li>
-        <li>作業台に置いて <span class="tag">右トリガー</span> で叩く / Hammer on bench</li>
-        <li>30回でフェーズ終了 / 30 hits to complete</li>
+        <li><span class="tag">左グリップ</span> 鉄を掴む／離す / Hold or release the iron</li>
+        <li>炉に入れると加熱、外に出すと冷却 / Heats in furnace, cools outside</li>
+        <li>800〜900° <span class="tag">〇 適温</span> 最も効果的 / Most effective</li>
+        <li>900°以上 <span class="tag">△ 熱すぎ</span> Perfect 判定なし / No Perfect rating</li>
+        <li>800°未満 <span class="tag">× 冷めすぎ</span> Miss のみ / Miss only</li>
+        <li>作業台の上で <span class="tag">右トリガー</span> を引いて叩く / Hammer on workbench</li>
+        <li>Perfect → 強度 +5 ／ Good → +1 ／ Miss → −3 / Strength score changes accordingly</li>
+        <li>30回叩くとフェーズ終了 / 30 hits to complete</li>
+        <li><span class="tag">右A</span> で途中終了も可 / Press A to finish early</li>
       </ul>
+
       <h3>🔨 フェーズ② 成形 / Shaping</h3>
       <ul>
-        <li><span class="tag">右トリガー</span> 赤いゾーンを叩く / Hammer red zones</li>
-        <li><span class="tag">左Xボタン</span> 刃物を表裏反転 / Flip blade</li>
-        <li>表(+)歪みは表から、裏(-)歪みは裏から / Hit matching side</li>
-        <li>歪み0→100点、未修正→0点 / 0 distortion = 100pts</li>
+        <li><span class="tag">右トリガー</span> ゾーンをハンマーで叩く / Hammer the zones</li>
+        <li><span class="tag">左Xボタン</span> 刃物を表裏反転 / Flip the blade</li>
+        <li>表（+）の歪みは表から、裏（−）の歪みは裏から叩く / Hit from the matching side</li>
+        <li>叩きすぎると逆方向に悪化するので注意 / Over-hitting warps the opposite direction</li>
+        <li>全ゾーンの歪みを 0 に近づけるほど高得点 / Closer to 0 = higher score</li>
+        <li>50回叩くとフェーズ終了 / 50 hits to complete</li>
+        <li><span class="tag">右A</span> で途中終了も可 / Press A to finish early</li>
       </ul>
+
       <h3>⚔️ フェーズ③ 研ぎ / Sharpening</h3>
       <ul>
-        <li><span class="tag">両手グリップ</span> 刃物を保持 / Hold with both grips</li>
-        <li>前後にスライド / Slide blade back & forth</li>
-        <li>目標角度 <strong>-15°</strong>（コントローラーを少し手前に傾ける）</li>
-        <li>Target <strong>-15°</strong> — tilt controller slightly toward you</li>
-        <li>両手の角度を揃えること / Keep both hands aligned</li>
-        <li>「シャーッ」音が正解 / Shhh sound = correct angle</li>
+        <li><span class="tag">両手グリップ</span> 刃物を両手で保持 / Hold blade with both grips</li>
+        <li>砥石の上で前後にスライド / Slide back & forth over the whetstone</li>
+        <li>目標角度 <strong>−15°</strong>（コントローラーを手前に少し傾ける）/ Target −15° — tilt slightly toward you</li>
+        <li>両手の角度を揃えないと HUD が <strong>NG</strong> 表示 / HUD shows NG if hands are misaligned</li>
+        <li>◎ −25°〜−5° → 3pt ／ ○ 隣接帯 → 2pt ／ △ → 1pt ／ × → 0pt</li>
+        <li>◎ を 10 回連続で <strong>+10pt ボーナス</strong> / 10 consecutive ◎ = +10pt bonus</li>
+        <li>「シャーッ」音と水しぶきが正解の合図 / Swishing sound & water sparks = correct angle</li>
         <li>30ストロークで完了 / 30 strokes to complete</li>
+        <li><span class="tag">右A</span> で途中終了も可 / Press A to finish early</li>
       </ul>
+
       <h3>🎮 共通 / Common</h3>
       <ul>
-        <li><span class="tag">右Aボタン</span> 次のフェーズへ / Next phase</li>
-        <li><span class="tag">右Bボタン</span> 現在フェーズをリトライ / Retry phase</li>
+        <li><span class="tag">右Aボタン</span> 次のフェーズへ進む（結果確認後） / Advance to next phase (after result)</li>
+        <li><span class="tag">右Bボタン</span> 現在フェーズをリトライ / Retry current phase</li>
       </ul>
+
+      <h3>📊 スコア計算 / Score Breakdown</h3>
+      <ul>
+        <li>鍛造 × 0.3 ＋ 成形 × 0.4 ＋ 研ぎ × 0.3 ＝ 最終スコア（100点満点）</li>
+        <li>Forging ×0.3 + Shaping ×0.4 + Sharpening ×0.3 = Final score (100pts max)</li>
+        <li>90点以上：名人 / Master ／ 70点以上：職人 / Craftsman ／ それ未満：見習い / Apprentice</li>
+      </ul>
+
     </div>
   </div>
 </div>
@@ -4008,9 +4045,21 @@ async function setupUI() {
   // ブラウザUI粒子：初期状態でスタート
   startUiParticles();
 
-  /* モーダルUI（ヘルプ・スコア）
+  /* モーダルUI（設定・ヘルプ・スコア）
     - 開閉処理
     - 背景クリックで閉じる */
+  document.getElementById('settingsBtn').addEventListener('click', () => {
+    document.getElementById('settingsModal').classList.add('open');
+    startUiParticles();
+  });
+  document.getElementById('settingsModalClose').addEventListener('click', () => {
+    document.getElementById('settingsModal').classList.remove('open');
+  });
+  document.getElementById('settingsModal').addEventListener('click', e => {
+    if (e.target === document.getElementById('settingsModal'))
+      document.getElementById('settingsModal').classList.remove('open');
+  });
+
   document.getElementById('helpBtn').addEventListener('click', () => {
     document.getElementById('modal').classList.add('open');
     startUiParticles(); // モーダル内でも継続
@@ -4073,21 +4122,20 @@ function renderScoreModal() {
 setupUI();
 
 /* ================================================================
-   PERF TOGGLE PANEL（設定UI）
+   SETTINGS MODAL（設定UI）
 ================================================================ */
 /* 初期化処理
-  - パフォーマンス設定のON/OFF UI
+  - 設定変更モーダルのトグルUI
   - チェック状態を内部設定と同期 */
 (function initPerfGui() {
   /* UI要素取得・初期設定
     - チェックボックスと設定値を同期
     - ①がONのとき②は動作対象外（ゲーム中パーティクルが既に非表示のため無効化） */
-  const panel   = document.getElementById('perfPanel');
-  const chk1    = document.getElementById('tog-canvas-particles');
-  const chk2    = document.getElementById('tog-canvas-throttle');
-  const chk3    = document.getElementById('tog-instance-throttle');
-  const row2    = document.getElementById('row-tog-canvas-throttle');
-  if (!panel || !chk1 || !chk2 || !chk3) return;
+  const chk1 = document.getElementById('tog-canvas-particles');
+  const chk2 = document.getElementById('tog-canvas-throttle');
+  const chk3 = document.getElementById('tog-instance-throttle');
+  const row2 = document.getElementById('row-tog-canvas-throttle');
+  if (!chk1 || !chk2 || !chk3) return;
 
   // 初期状態を PerfToggles と同期
   chk1.checked = PerfToggles.useCanvasParticles;
@@ -4122,16 +4170,6 @@ setupUI();
   chk3.addEventListener('change', () => {
     PerfToggles.useInstanceThrottle = chk3.checked;
     _instThrottleFrame = 0;
-  });
-
-  /* XR連動
-    - VR/AR中はパネル非表示
-    - 終了時に再表示 */
-  renderer.xr.addEventListener('sessionstart', () => {
-    panel.style.display = 'none';
-  });
-  renderer.xr.addEventListener('sessionend', () => {
-    panel.style.display = '';
   });
 })();
 
