@@ -393,7 +393,7 @@ const CONFIG = {
     SPARK_COUNT_MISS: 5,
   },
   /* 成形フェーズ設定
-     - 歪み補正・ヒット強度・ゾーン数を管理 */
+     - ヒット回数・強度・ゾーン数を管理 */
   SHAPING: {
     MAX_HITS: 50,
     ZONE_COUNT: 5,
@@ -435,8 +435,8 @@ function isIntroState(s) { return INTRO_STATES.includes(s); }
    - ゲーム進行の中心となる変数 */
 let currentState = State.INTRO_0;
 /* 刃の状態
-   - 歪み・左右差・鋭さを保持 */
-let bladeState = { shapeDistortion: 0, symmetryError: 0, sharpness: 0 };
+   - 強度・左右差・鋭さを保持 */
+let bladeState = { strength: 0, symmetryError: 0, sharpness: 0 };
 /* フェーズ別スコア */
 const _phaseScores = { forging: 0, shaping: 0, sharpening: 0 };
 
@@ -2445,7 +2445,7 @@ let ironHeld          = false; // 手で持っているか
 /* 進行管理
    - 鍛造の進み具合 */
 let forgingHitCount   = 0;   // 叩いた回数
-let shapeDistortion   = 0;   // 歪み
+let forgingStrength   = 0;   // 強度（0〜100、加点式）
 let forgingComplete   = false; // 完了フラグ
 
 /* 当たり判定（エリア）
@@ -2498,8 +2498,8 @@ let lastStrokeDir = 0;   // 前回の動き方向
 let prevSharpenZ  = 0;   // 前フレーム位置（Z）
 
 /* スコア管理
-   - 切れ味や加点 */
-let totalSharpness = 0;  // 累積スコア
+   - 研ぎポイントの累積 */
+let totalSharpness = 0;  // 累積ポイント
 
 /* コンボ管理
    - 連続成功のカウント */
@@ -2610,9 +2610,9 @@ function getBothGrips() {
 ================================================================ */
 /* resetForging
    - 鍛造フェーズを初期状態に戻す
-   - 温度・位置・スコアをリセット */
+   - 温度・位置・強度をリセット */
 function resetForging() {
-  shapeDistortion = 100;
+  forgingStrength = 0;
   ironTemperature = 70; // スタート時70°
   ironOnWorkbench = false;
   ironInFurnace   = false;
@@ -2747,7 +2747,7 @@ function onEnterState(state, prev) {
   if (isIntroState(state)) {
 
     if (state === State.INTRO_0) {
-      bladeState = { shapeDistortion: 0, symmetryError: 0, sharpness: 0 };
+      bladeState = { strength: 0, symmetryError: 0, sharpness: 0 };
       resetForging(); 
       resetShaping(); 
       resetSharpening();
@@ -2789,7 +2789,7 @@ function onEnterState(state, prev) {
     const hS = _phaseScores.sharpening;
 
     let finalScore = Math.max(0, Math.min(100,
-      fS * 0.4 + sS * 0.3 + hS * 0.3
+      fS * 0.3 + sS * 0.4 + hS * 0.3
     ));
 
     finalScore = Math.floor(finalScore);
@@ -3083,8 +3083,8 @@ function vibrate() {
   - 結果表示中かどうか
   - スコア計算用（成形） */
 let showingPhaseResult = true;
-let _sq0c;
-let _sqc;
+let _initSumSq;  // 初期歪みの二乗和
+let _curSumSq;   // 現在の歪みの二乗和
 
 /* 入力ロック処理
   - 一定時間ボタン操作を無効化 */
@@ -3137,7 +3137,7 @@ function handleGlobalInput() {
 
     /* 鍛造フェーズ
       - 途中でも終了可能
-      - スコア確定→結果表示 */
+      - 強度を確定→結果表示 */
     else if (currentState === State.FORGING) {
       if (!forgingComplete) {
         finishForging(false);
@@ -3180,11 +3180,11 @@ function handleGlobalInput() {
 function finishForging(isComplete) {
   forgingComplete = true;
   _phaseScores.forging = Math.round(
-    Math.max(0, Math.min(100, 100 - shapeDistortion))
+    Math.max(0, Math.min(100, forgingStrength))
   );
   updateInfoPanel(
 `鍛造結果
-強化度（鍛造）: ${Math.round(_phaseScores.forging)}
+強度（鍛造）: ${Math.round(_phaseScores.forging)}
 
 Aボタン：次へ`,
     isComplete ? '① 鍛造完了' : '① 鍛造（途中終了）'
@@ -3196,10 +3196,10 @@ Aボタン：次へ`,
 /* 成形フェーズ終了 */
 function finishShaping(isComplete) {
   shapingComplete = true;
-  _sq0c = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
-  _sqc  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
+  _initSumSq = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
+  _curSumSq  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
   const score = Math.max(0, Math.min(100,
-    _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0
+    _initSumSq > 0 ? 100 * (1 - _curSumSq / _initSumSq) : 0
   ));
   _phaseScores.shaping = Math.round(score);
   updateInfoPanel(
@@ -3230,6 +3230,7 @@ Aボタン：次へ`,
 /* ================================================================
    UPDATE FORGING（鍛造の更新処理）
    - 鉄の操作・加熱・打撃判定を毎フレーム更新
+   - Perfect/Good で強度加点、Miss で減点
 ================================================================ */
 /* 主要な状態変数
   - トリガーの前回状態（連打防止）
@@ -3239,7 +3240,7 @@ let forgingHitCooldown = 0;
 
 /* updateForging
   - 鍛造フェーズのメイン処理
-  - 掴む・加熱・打撃・スコア更新を行う */
+  - 掴む・加熱・打撃・強度更新を行う */
 function updateForging(delta) {
   hammerGroup.visible = true;
 
@@ -3342,7 +3343,7 @@ function updateForging(delta) {
   const hammerHitsIron = ironBB.containsPoint(hammerHeadWorld) ||
                          hammerHeadWorld.distanceTo(ironMesh.position) < 0.14;
   /* 打撃判定
-    - トリガー・速度・位置・温度で評価 */
+    - トリガー・クールタイム・残打数・結果表示中でないことを確認 */
   if (rightTrig && !prevRightTrigger && forgingHitCooldown <= 0 && forgingHitCount < CONFIG.FORGING.TOTAL_HITS && !showingPhaseResult) {
     forgingHitCooldown = 0.25;
     forgingHitCount++;
@@ -3353,7 +3354,7 @@ function updateForging(delta) {
     const tempZone   = getTempZone(ironTemperature);
 
     /* 打撃判定
-      - トリガー・速度・位置・温度で評価 */
+      - 温度・位置・速度を総合評価 */
     let result = 'Miss';
     if (tempZone.judge === 'cold') {
       // 冷めすぎ: Missのみ
@@ -3369,11 +3370,11 @@ function updateForging(delta) {
       else result = 'Miss';
     }
 
-    /* 歪み更新
-      - 成功で減少、失敗で増加 */
-    if (result === 'Perfect')      shapeDistortion = Math.max(0,   shapeDistortion - 5);
-    else if (result === 'Good')    shapeDistortion = Math.max(0,   shapeDistortion - 1);
-    else if (result === 'Miss')    shapeDistortion = Math.min(100, shapeDistortion + 3);
+    /* 強度更新
+      - Perfect/Good：加点、Miss：減点 */
+    if (result === 'Perfect')      forgingStrength = Math.min(100, forgingStrength + 5);
+    else if (result === 'Good')    forgingStrength = Math.min(100, forgingStrength + 1);
+    else if (result === 'Miss')    forgingStrength = Math.max(0,   forgingStrength - 3);
 
     /* エフェクト - 火花 */
     const sparkOrigin = hammerHeadWorld.clone().add(new THREE.Vector3(0, 0.02, 0));
@@ -3394,7 +3395,7 @@ function updateForging(delta) {
     }
 
     /* スコア表示更新 */
-    updateScorePanel(`① 打撃 ${forgingHitCount}/${CONFIG.FORGING.TOTAL_HITS}\n${result}  強化度:${Math.round(100 - shapeDistortion)}`, new THREE.Vector3(0, workbenchPos.y + 0.43, -1.1));
+    updateScorePanel(`① 打撃 ${forgingHitCount}/${CONFIG.FORGING.TOTAL_HITS}\n${result}  強度:${Math.round(forgingStrength)}`, new THREE.Vector3(0, workbenchPos.y + 0.43, -1.1));
 
     /* フェーズ終了判定
       - 規定回数で完了 */
@@ -3558,9 +3559,9 @@ function updateShaping(delta) {
 
     /* スコア計算
       - 歪みの二乗和から100点満点で評価 */
-    _sq0c = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
-    _sqc  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
-    const score = Math.max(0, Math.min(100, _sq0c > 0 ? 100 * (1 - _sqc / _sq0c) : 0));
+    _initSumSq = zones.reduce((s, z) => s + z.initialDistortion * z.initialDistortion, 0);
+    _curSumSq  = zones.reduce((s, z) => s + z.distortion * z.distortion, 0);
+    const score = Math.max(0, Math.min(100, _initSumSq > 0 ? 100 * (1 - _curSumSq / _initSumSq) : 0));
     updateScorePanel(`② 打撃 ${shapingHitCount}/${CONFIG.SHAPING.MAX_HITS}\n均一度:${Math.round(score)}pt`, new THREE.Vector3(0, workbenchPos.y + 0.43, -1.25));
   }
   prevShapingTrigger = shapingTrig;
