@@ -285,21 +285,21 @@
 <div id="perfPanel">
   <p class="perf-title">Perf Toggles</p>
   <div class="perf-row" id="row-tog-canvas-particles">
-    <label class="perf-label" for="tog-canvas-particles">① キャンバス粒子 / Canvas Particles<span class="perf-sub">パーティクル表示 / Shows particles</span></label>
+    <label class="perf-label" for="tog-canvas-particles">① ゲーム中パーティクル節約 / Save particles in-game<span class="perf-sub">ON：ゲーム中は非表示（軽量）/ OFF：常時表示</span></label>
     <label class="perf-toggle">
       <input type="checkbox" id="tog-canvas-particles" checked>
       <span class="track"><span class="thumb"></span></span>
     </label>
   </div>
   <div class="perf-row" id="row-tog-canvas-throttle">
-    <label class="perf-label" for="tog-canvas-throttle">② キャンバス更新 / Canvas Skip<span class="perf-sub">3フレームに1回 / 1 in 3 frames</span></label>
+    <label class="perf-label" for="tog-canvas-throttle">② ゲーム中Canvas間引き / Throttle Canvas in-game<span class="perf-sub">ON：3フレームに1回転送（軽量）/ OFF：毎フレーム転送</span></label>
     <label class="perf-toggle">
       <input type="checkbox" id="tog-canvas-throttle">
       <span class="track"><span class="thumb"></span></span>
     </label>
   </div>
   <div class="perf-row" id="row-tog-instance-throttle">
-    <label class="perf-label" for="tog-instance-throttle">③ インスタンス更新 / Instance Skip<span class="perf-sub">2フレームに1回 / 1 in 2 frames</span></label>
+    <label class="perf-label" for="tog-instance-throttle">③ ゲーム中Instance間引き / Throttle Instances in-game<span class="perf-sub">ON：2フレームに1回更新（軽量）/ OFF：毎フレーム更新</span></label>
     <label class="perf-toggle">
       <input type="checkbox" id="tog-instance-throttle">
       <span class="track"><span class="thumb"></span></span>
@@ -575,7 +575,7 @@ function _drawPanelBg(ctx, W, H, mode) {
 
 /* パネル更新（毎フレーム）
    - 背景描画
-   - 粒子の更新＆描画
+   - 粒子の更新＆描画（フェーズ・トグルに応じて制御）
    - テキストなど追加描画
    - 必要に応じてGPUへ転送 */
 function updateCvPanel(delta) {
@@ -587,25 +587,30 @@ function updateCvPanel(delta) {
   // 背景は常に描画
   _drawPanelBg(ctx, W, H, _cvPanelMode);
 
-  // [Toggle 1] useCanvasParticles: パーティクルtick/draw
-  if (PerfToggles.useCanvasParticles) {
+  // [Toggle 1] useCanvasParticles:
+  //   ON  → ゲーム中は非表示、intro/result は表示（軽量優先）
+  //   OFF → フェーズ問わず常時表示
+  const _isGameMode = (_cvPanelMode === 'game');
+  const _showParticles = PerfToggles.useCanvasParticles
+    ? !_isGameMode   // ON: ゲーム中だけ抑制
+    : true;          // OFF: 常時表示
+  if (_showParticles) {
     _tickParticles(_cvPanelPts, delta);
     _drawParticles(ctx, _cvPanelPts, W, H, _cvPanelBright);
   }
-  // OFF時: パーティクル非描画。背景描画でキャンバスはクリア。
+  // 非表示時: 背景描画でキャンバスはクリア済み。テキストは後続で描画。
 
-  // テキスト等の追加描画は常に実行（パーティクルOFF時もテキストを必ず表示）
+  // テキスト等の追加描画は常に実行（パーティクル非表示時もテキストを必ず表示）
   if (_cvPanelExtraFn) _cvPanelExtraFn(ctx, W, H);
 
-  // [Toggle 2] useCanvasTransferThrottle: 体験中かつパーティクルON時のみ間引き
-  if (PerfToggles.useCanvasParticles && PerfToggles.useCanvasTransferThrottle) {
-    const _isGameCv = (_cvPanelMode === 'game');
-    if (_isGameCv) {
+  // [Toggle 2] useCanvasTransferThrottle: ゲーム中かつパーティクル表示中のみ間引き
+  if (_showParticles && PerfToggles.useCanvasTransferThrottle) {
+    if (_isGameMode) {
       _cvTransferFrameCount++;
       if (_cvTransferFrameCount % 3 !== 0) return;
     }
   }
-  // GPU転送: 常に実行（パーティクルOFF時もテキスト更新のために必要）
+  // GPU転送: 常に実行（パーティクル非表示時もテキスト更新のために必要）
   if (_cvPtTex) _cvPtTex.needsUpdate = true;
 }
 
@@ -4077,7 +4082,7 @@ setupUI();
 (function initPerfGui() {
   /* UI要素取得・初期設定
     - チェックボックスと設定値を同期
-    - Canvas粒子OFF時は関連項目も無効化 */
+    - ①がONのとき②は動作対象外（ゲーム中パーティクルが既に非表示のため無効化） */
   const panel   = document.getElementById('perfPanel');
   const chk1    = document.getElementById('tog-canvas-particles');
   const chk2    = document.getElementById('tog-canvas-throttle');
@@ -4090,18 +4095,21 @@ setupUI();
   chk2.checked = PerfToggles.useCanvasTransferThrottle;
   chk3.checked = PerfToggles.useInstanceThrottle;
 
+  /* ①がONのとき②を無効化
+     - ゲーム中パーティクルが非表示のため、Canvas転送間引きの効果がなくなる */
   function syncRow2Disabled() {
-    row2.classList.toggle('disabled', !PerfToggles.useCanvasParticles);
+    row2.classList.toggle('disabled', PerfToggles.useCanvasParticles);
   }
   syncRow2Disabled();
 
   /* トグル処理
-    - 粒子ON/OFF、転送間引き、描画間引きを切替
-    - 切替時にカウンタをリセット */
-  // Toggle 1: Canvas Particles
+    - ①：ゲーム中パーティクル節約ON/OFF
+    - ②：Canvas転送間引きON/OFF
+    - ③：Instance更新間引きON/OFF */
+  // Toggle 1: ゲーム中パーティクル節約
   chk1.addEventListener('change', () => {
     PerfToggles.useCanvasParticles = chk1.checked;
-    if (chk1.checked) _cvTransferFrameCount = 0;
+    if (!chk1.checked) _cvTransferFrameCount = 0;
     syncRow2Disabled();
   });
 
