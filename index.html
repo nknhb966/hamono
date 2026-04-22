@@ -17,83 +17,127 @@
     position: fixed; inset: 0; z-index: 10;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     background:
-      radial-gradient(ellipse at 30% 20%, rgba(160,80,20,0.45) 0%, transparent 60%),
-      radial-gradient(ellipse at 70% 80%, rgba(80,40,10,0.40) 0%, transparent 60%),
-      linear-gradient(160deg, rgba(8,5,10,0.92) 0%, rgba(22,10,4,0.92) 50%, rgba(10,6,5,0.92) 100%);
+      radial-gradient(ellipse 80% 60% at 50% 30%, rgba(160,60,10,0.38) 0%, transparent 70%),
+      radial-gradient(ellipse 60% 40% at 20% 80%, rgba(80,30,5,0.30) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 50% at 80% 10%, rgba(120,50,10,0.25) 0%, transparent 60%),
+      linear-gradient(180deg, rgba(4,2,8,0.97) 0%, rgba(14,6,2,0.97) 45%, rgba(6,3,2,0.97) 100%);
     color: #fff;
     overflow-y: auto;
   }
   #uiPanel::before {
     content: ''; position: absolute; inset: 0; pointer-events: none;
     background:
-      radial-gradient(circle 1px at 15% 25%, rgba(255,180,80,0.4) 0%, transparent 100%),
-      radial-gradient(circle 1px at 80% 15%, rgba(255,200,100,0.35) 0%, transparent 100%),
-      radial-gradient(circle 1px at 60% 70%, rgba(255,160,60,0.3) 0%, transparent 100%),
-      radial-gradient(circle 2px at 40% 55%, rgba(255,140,40,0.3) 0%, transparent 100%);
+      radial-gradient(circle 1px at 12% 18%, rgba(255,180,80,0.5) 0%, transparent 100%),
+      radial-gradient(circle 1px at 88% 12%, rgba(255,200,100,0.4) 0%, transparent 100%),
+      radial-gradient(circle 1px at 55% 75%, rgba(255,160,60,0.35) 0%, transparent 100%),
+      radial-gradient(circle 2px at 35% 50%, rgba(255,140,40,0.25) 0%, transparent 100%),
+      radial-gradient(circle 1px at 75% 60%, rgba(255,180,80,0.3) 0%, transparent 100%);
+  }
+  /* タイトル上の装飾ライン */
+  #uiPanel::after {
+    content: ''; position: absolute;
+    top: 0; left: 0; right: 0; height: 3px; pointer-events: none;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,140,40,0.0) 10%, rgba(255,160,60,0.7) 50%, rgba(255,140,40,0.0) 90%, transparent 100%);
   }
 
   .panel-inner {
     position: relative; z-index: 1;
-    width: min(760px, 94vw);
+    width: min(680px, 92vw);
     display: flex; flex-direction: column; align-items: center; gap: 0;
-    padding: 40px 0 44px;
+    padding: 72px 0 80px;
   }
 
-  /* タイトル */
+  /* ── タイトルエリア ── */
+  .title-eyebrow {
+    font-size: clamp(9px,1.2vw,11px); font-weight: 700; letter-spacing: 5px;
+    color: rgba(255,160,60,0.55); text-transform: uppercase; text-align: center;
+    margin: 0 0 20px;
+  }
   .main-title {
-    font-size: clamp(36px,6.5vw,68px); font-weight: 900; letter-spacing: 6px;
-    text-align: center; margin: 0 0 12px;
-    background: linear-gradient(90deg, #ffe0a0 0%, #ffb040 40%, #ff8020 70%, #ffe0a0 100%);
+    font-size: clamp(40px,7.5vw,76px); font-weight: 900; letter-spacing: 8px;
+    text-align: center; margin: 0 0 10px; line-height: 1.0;
+    background: linear-gradient(170deg, #fff5e0 0%, #ffcf60 25%, #ff8c20 60%, #ffe0a0 100%);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-    filter: drop-shadow(0 0 18px rgba(255,140,40,0.7));
+    filter: drop-shadow(0 0 28px rgba(255,130,30,0.65));
     animation: titleGlow 3s ease-in-out infinite alternate;
   }
   @keyframes titleGlow {
-    from { filter: drop-shadow(0 0 14px rgba(255,120,30,0.5)); }
-    to   { filter: drop-shadow(0 0 30px rgba(255,180,60,0.95)); }
+    from { filter: drop-shadow(0 0 16px rgba(255,110,20,0.45)); }
+    to   { filter: drop-shadow(0 0 40px rgba(255,170,50,0.90)); }
   }
-  .sub-title {
-    font-size: clamp(14px,2.1vw,20px); color: rgba(255,200,130,0.75);
-    letter-spacing: 2px; margin: 0 0 36px; text-align: center; line-height: 1.9;
+  .title-en {
+    font-size: clamp(10px,1.4vw,13px); font-weight: 400; letter-spacing: 4px;
+    color: rgba(255,190,100,0.45); text-align: center; margin: 0 0 10px;
+    text-transform: uppercase;
+  }
+  /* タイトル下の装飾ライン（絵文字なし） */
+  .title-ornament {
+    width: 100%; height: 1px; margin: 22px 0 36px;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,150,50,0.50) 50%, transparent 100%);
   }
 
-  /* VR ボタンラッパー */
-  #vrButtonWrap { width: 100%; margin-bottom: 10px; }
-  #vrButtonWrap button {
-    display: block; width: 100%; padding: 20px 0;
-    font-size: clamp(17px,2.6vw,24px); font-weight: 800; letter-spacing: 1px;
-    background: linear-gradient(135deg, #b84500, #7a2800);
-    color: #fff; border: none; border-radius: 20px; cursor: pointer;
-    box-shadow: 0 0 32px rgba(200,80,20,0.7), inset 0 1px 0 rgba(255,255,255,0.15);
-    transition: box-shadow .2s, transform .1s;
+  /* ── VR/AR ボタン（縦並び） ── */
+  #vrButtonWrap {
+    width: 100%; display: flex; flex-direction: column; gap: 10px; margin-bottom: 0;
   }
-  #vrButtonWrap button:hover {
-    box-shadow: 0 0 48px rgba(220,100,30,0.95); transform: translateY(-1px);
+  #vrButtonWrap button {
+    display: block; width: 100%; padding: 13px 0;
+    font-size: clamp(13px,1.8vw,16px); font-weight: 800; letter-spacing: 1px;
+    color: #fff; border: none; border-radius: 20px; cursor: pointer;
+    transition: box-shadow .2s, transform .1s, opacity .15s;
+  }
+  #btn-vr {
+    background: linear-gradient(135deg, #c04a00, #7a2800);
+    box-shadow: 0 0 22px rgba(200,70,10,0.60), inset 0 1px 0 rgba(255,255,255,0.12);
+  }
+  #btn-ar {
+    background: linear-gradient(135deg, #006868, #003a3a);
+    box-shadow: 0 0 22px rgba(0,160,140,0.45), inset 0 1px 0 rgba(255,255,255,0.10);
+  }
+  #vrButtonWrap button:hover:not(:disabled) {
+    transform: translateY(-1px); opacity: 0.88;
   }
   #vrButtonWrap button:disabled {
-    background: linear-gradient(135deg, #3a2a1a, #2a1a0a);
-    color: rgba(255,255,255,0.4); cursor: not-allowed; box-shadow: none;
+    background: linear-gradient(135deg, #2a1e14, #1a0e08);
+    color: rgba(255,255,255,0.30); cursor: not-allowed; box-shadow: none;
   }
 
-  /* 区切り線 */
-  .divider {
-    width: 100%; height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255,160,60,0.4), transparent);
-    margin: 22px 0 24px;
+  /* VR/ARボタンとアクションボタンの区切り */
+  .btn-divider {
+    width: 100%; height: 1px; margin: 28px 0 20px;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,150,50,0.35) 50%, transparent 100%);
   }
 
-  /* ボタン行 */
+  /* ── アクションボタン ── */
   .btn-row {
-    width: 100%; display: flex; gap: 12px; margin-top: 4px;
+    width: 100%; display: flex; gap: 10px; margin-top: 0;
   }
+  .btn-row + .btn-row { margin-top: 10px; }
   .action-btn {
-    flex: 1; padding: 15px 0; font-size: clamp(14px,2vw,18px); font-weight: 700;
-    border: none; border-radius: 14px; cursor: pointer; transition: opacity .15s, transform .1s;
+    flex: 1; padding: 11px 0;
+    font-size: clamp(12px,1.6vw,14px); font-weight: 700;
+    border: none; border-radius: 14px; cursor: pointer;
+    transition: opacity .15s, transform .1s;
     letter-spacing: 0.5px;
   }
-  .action-btn:hover { opacity: .85; transform: translateY(-1px); }
-  .btn-help    { background: linear-gradient(135deg, #7a4500, #b86000); color: #fff; }
-  .btn-records { background: linear-gradient(135deg, #5a2000, #9a4010); color: #fff; }
+  .action-btn:hover { opacity: .82; transform: translateY(-1px); }
+  .btn-help {
+    background: linear-gradient(135deg, #6a3a00, #a85400);
+    color: rgba(255,230,180,0.95);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+  }
+  .btn-records {
+    background: linear-gradient(135deg, #4a1c00, #883810);
+    color: rgba(255,220,170,0.95);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+  }
+  .btn-settings {
+    background: transparent;
+    color: rgba(255,180,80,0.55);
+    border: 1px solid rgba(255,150,50,0.22);
+    font-size: clamp(11px,1.4vw,13px); letter-spacing: 1px;
+  }
+  .btn-settings:hover { color: rgba(255,200,120,0.85); border-color: rgba(255,160,60,0.45); background: rgba(255,140,40,0.06); }
 
   /* ═══ 記録モーダル ═══ */
   #recordsModal {
@@ -262,26 +306,33 @@
 <!-- ═══ タイトルパネル ═══ -->
 <div id="uiPanel">
   <div class="panel-inner">
+
+    <!-- タイトルエリア -->
+    <p class="title-eyebrow">Echizen Bladesmith VR Experience</p>
     <p class="main-title">越前打刃物 VR</p>
-    <p class="sub-title">Echizen UCHIHAMONO VR<br><br>
-      <span style="font-size:1.00em;letter-spacing:1px;"> — 打刃物職人 VR 体験 — <br></span>
-      <span style="font-size:0.85em;letter-spacing:1px;"> — VR Echizen Bladesmith Workshop — </span>
-    </p>
+    <p class="title-en">UCHIHAMONO — Traditional Blade Craft</p>
 
+    <!-- 装飾区切り -->
+    <div class="title-ornament"></div>
+
+    <!-- VR / AR ボタン縦並び -->
     <div id="vrButtonWrap">
-      <button id="btn-vr" disabled>VR スタート / START VR</button>
-      <button id="btn-ar" disabled style="margin-top:10px; background:linear-gradient(135deg,#006060,#003a3a) !important; box-shadow:0 0 28px rgba(0,180,160,0.5), inset 0 1px 0 rgba(255,255,255,0.12) !important;">AR スタート / START AR</button>
+      <button id="btn-vr" disabled>▶ VR スタート</button>
+      <button id="btn-ar" disabled>▶ AR スタート</button>
     </div>
 
-    <div class="divider"></div>
+    <!-- 区切り線 -->
+    <div class="btn-divider"></div>
 
+    <!-- アクションボタン -->
     <div class="btn-row">
-      <button class="action-btn btn-help"    id="helpBtn">操作方法 / How to Play</button>
-      <button class="action-btn btn-records" id="recordsBtn">スコア記録 / Score Record</button>
+      <button class="action-btn btn-help"    id="helpBtn">📖 操作方法</button>
+      <button class="action-btn btn-records" id="recordsBtn">🏆 スコア記録</button>
     </div>
-    <div class="btn-row" style="margin-top:12px;">
+    <div class="btn-row">
       <button class="action-btn btn-settings" id="settingsBtn">⚙ 設定変更 / Settings</button>
     </div>
+
   </div>
 </div>
 
@@ -3977,7 +4028,7 @@ async function setupUI() {
       - モード切替（VR or AR） */
     if (vrSupported) {
       btnVR.disabled    = false;
-      btnVR.textContent = 'VR スタート / START VR';
+      btnVR.textContent = '▶ VR スタート';
       btnVR.addEventListener('click', async () => {
         resumeAudio();
         if (renderer.xr.isPresenting) return;
@@ -3991,12 +4042,12 @@ async function setupUI() {
         } catch(e) { console.error(e); }
       });
     } else {
-      btnVR.textContent = 'VR 非対応 / VR NOT SUPPORTED';
+      btnVR.textContent = 'VR 非対応';
     }
 
     if (arSupported) {
       btnAR.disabled    = false;
-      btnAR.textContent = 'AR スタート / START AR';
+      btnAR.textContent = '▶ AR スタート';
       btnAR.addEventListener('click', async () => {
         resumeAudio();
         if (renderer.xr.isPresenting) return;
@@ -4010,11 +4061,11 @@ async function setupUI() {
         } catch(e) { console.error(e); }
       });
     } else {
-      btnAR.textContent = 'AR 非対応 / AR NOT SUPPORTED';
+      btnAR.textContent = 'AR 非対応';
     }
   } else {
-    btnVR.textContent = 'WebXR 非対応 / WebXR NOT SUPPORTED';
-    btnAR.textContent = 'WebXR 非対応 / WebXR NOT SUPPORTED';
+    btnVR.textContent = 'WebXR 非対応';
+    btnAR.textContent = 'WebXR 非対応';
   }
 
   /* XRセッション開始時
