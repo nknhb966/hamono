@@ -103,10 +103,10 @@
   }
   #recordsModal.open { display: flex; }
   .rmodal-box {
-    width: min(520px, 94vw); max-height: 88vh;
+    width: min(680px, 96vw); max-height: 88vh;
     background: linear-gradient(150deg, #120a04, #0a0800);
     border: 1px solid rgba(255,160,60,0.35);
-    border-radius: 16px; padding: 20px 22px 18px;
+    border-radius: 16px; padding: 20px 26px 18px;
     position: relative; color: #ffe0b0;
     display: flex; flex-direction: column; gap: 12px;
     overflow-y: auto;
@@ -134,7 +134,7 @@
   .rmodal-entry.bronze { border-left: 3px solid #cd7f32; }
   .rmodal-entry.other  { border-left: 3px solid rgba(255,160,60,0.4); }
   .entry-rank-score { font-weight: 800; font-size: clamp(14px,1.6vw,17px); color: #ffe0a0; }
-  .entry-date { font-size: clamp(10px,1vw,12px); color: rgba(255,180,80,0.6); }
+  .entry-date { font-size: clamp(11px,1.2vw,13px); color: rgba(255,180,80,0.6); text-align: right; }
   .rmodal-no-data { color: rgba(255,180,80,0.45); font-size: 13px; text-align: center; padding: 12px 0; }
   .rmodal-footer {
     display: flex; justify-content: center; padding-top: 4px;
@@ -156,10 +156,10 @@
   }
   #modal.open { display: flex; }
   .modal-box {
-    width: min(580px, 92vw); max-height: 82vh; overflow-y: auto;
+    width: min(754px, 96vw); max-height: 82vh; overflow-y: auto;
     background: linear-gradient(150deg, #120a04, #0a0800);
     border: 1px solid rgba(255,160,60,0.35);
-    border-radius: 16px; padding: 28px 28px 24px;
+    border-radius: 16px; padding: 28px 36px 24px;
     position: relative; color: #ffe0b0;
   }
   .modal-close {
@@ -172,8 +172,8 @@
     font-size: clamp(17px,2.2vw,22px); font-weight: 900; text-align: center;
     color: #ffb840; letter-spacing: 2px; margin-bottom: 20px; padding-right: 28px;
   }
-  .modal-content { font-size: 14px; line-height: 1.9; color: #ffe0b0; }
-  .modal-content h3 { font-size: 15px; color: #ffb840; margin: 14px 0 6px; font-weight: 800; }
+  .modal-content { font-size: clamp(13px,1.5vw,15px); line-height: 2.0; color: #ffe0b0; }
+  .modal-content h3 { font-size: clamp(14px,1.6vw,16px); color: #ffb840; margin: 16px 0 6px; font-weight: 800; }
   .modal-content .tag {
     display: inline-block; background: rgba(180,80,20,0.35);
     border: 1px solid rgba(255,140,60,0.45);
@@ -191,10 +191,10 @@
   }
   #settingsModal.open { display: flex; }
   .smodal-box {
-    width: min(520px, 94vw); max-height: 88vh; overflow-y: auto;
+    width: min(680px, 96vw); max-height: 88vh; overflow-y: auto;
     background: linear-gradient(150deg, #120a04, #0a0800);
     border: 1px solid rgba(255,160,60,0.35);
-    border-radius: 16px; padding: 24px 24px 20px;
+    border-radius: 16px; padding: 24px 28px 20px;
     position: relative; color: #ffe0b0;
     display: flex; flex-direction: column; gap: 0;
   }
@@ -2362,8 +2362,10 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
     ctx.fillText(`${medal}  ${Math.round(s.score)}pts`, W/2, y);
     ctx.textAlign = 'right';
     ctx.fillStyle = 'rgba(255,180,130,0.6)';
-    ctx.font = '24px monospace';
-    ctx.fillText(s.date, W - 80, y);
+    ctx.font = '22px monospace';
+    // clock が未保存の古いデータは日付のみ表示
+    const dateTime = s.clock ? `${s.date} ${s.clock}` : s.date;
+    ctx.fillText(dateTime, W - 60, y);
     if (isThisScore) {
       ctx.fillStyle = '#ffe066';
       ctx.font = 'bold 28px monospace';
@@ -4110,9 +4112,11 @@ function renderScoreModal() {
     const cls = medals[i] || 'other';
     const el  = document.createElement('div');
     el.className = `rmodal-entry ${cls}`;
+    // clock が未保存の古いデータは日付のみ表示
+    const dateTime = s.clock ? `${s.date} ${s.clock}` : s.date;
     el.innerHTML = `
       <span class="entry-rank-score">${['🥇','🥈','🥉','4位','5位'][i]||((i+1)+'位')} &nbsp; ${Math.round(s.score)} 点</span>
-      <span class="entry-date">${s.date}</span>`;
+      <span class="entry-date">${dateTime}</span>`;
     entries.appendChild(el);
   });
 }
