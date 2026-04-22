@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>越前打刃物 VR</title>
+<title>1越前打刃物 VR</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -191,7 +191,7 @@
     border: 1px solid rgba(255,140,40,0.30);
     border-radius: 10px;
     padding: 10px 14px 12px;
-    width: 300px;
+    width: 400px;
     box-shadow: 0 4px 24px rgba(0,0,0,0.55);
     font-family: 'Helvetica Neue', Arial, sans-serif;
     font-size: 13px;
@@ -279,7 +279,6 @@
     </div>
   </div>
 </div>
-
 
 <!-- ═══ Perf Toggles ═══ -->
 <div id="perfPanel">
@@ -1505,7 +1504,7 @@ const hammerHandle = new THREE.Mesh(
 );
 hammerHandle.position.set(0, 0, 0);
 const hammerHead = new THREE.Mesh(
-  new THREE.BoxGeometry(0.09, 0.065, 0.065),
+  new THREE.BoxGeometry(0.065, 0.09, 0.065),
   new THREE.MeshStandardMaterial({ color: 0x606060, roughness: 0.5, metalness: 0.85 })
 );
 hammerHead.position.set(0, -0.18, 0);
