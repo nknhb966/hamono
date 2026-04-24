@@ -3018,96 +3018,122 @@ Maintain the correct angle and polish the edge to finish it
   },
 
   forging: {
-    title: '① 鍛造 / Phase 1: Forging',
-    body: `鍛造は最初の工程です。
-炉の中で鉄を赤く熱し、
-適温になったら作業台に置き、
-ハンマーで打ちます。
+    title: '① 鍛造 --- Phase 1: Forging',
+    body: `鍛造は刃物づくりの最初の工程です。
+炉で鉄を加熱し、適温とハンマーの勢いで強度を高めます。
 
-Forging is the first step.
-Heat the iron red-hot in the furnace,
-then hammer it on the bench.
-This shapes the foundation of the blade.
+右トリガー：ハンマーで叩く（速さで判定が変化）
+左グリップ：鉄を掴む／離す
+炉に入れると加熱、外に出すと冷却
+
+800〜900°：〇 適温（最も効果的）
+900°以上：△ 熱すぎ（Perfectなし）
+800°未満：× 冷めすぎ（Missのみ）
+
+Perfect：+5 ／ Good：+1 ／ Miss：−3
+30回叩くと終了
+
+Aボタン：次の工程へ（途中終了も可）
+Bボタン：この工程をやり直す
 ---
-左グリップ：鉄を掴む
-Left Grip: Hold iron
+Forging is the first step of blade making.
+Heat the iron and increase its strength
+with proper temperature and hammer speed.
 
-右トリガー：打撃
-Right Trigger: Hammer
+Left Grip: Hold / Release the iron
+Heats in the furnace, cools outside
+Right Trigger: Hammer the iron (speed affects judgment)
 
-温度 800〜900° ○ 最も効果的
-Most effective
+800–900°: Ideal (Most effective)
+Above 900°: Too hot (No Perfect)
+Below 800°: Too cold (Miss only)
 
-温度 900°～ △ 熱すぎ
-Too hot
+Perfect: +5 / Good: +1 / Miss: −3
+30 hits to complete
 
-温度 800°未満 × 冷めすぎ
-Too cold
-
-Aボタン：次のフェーズへ
-A: Next Phase`
+A Button: Next phase (can finish early)
+B Button: Retry this phase`
   },
 
   shaping: {
-    title: '② 成形 / Phase 2: Shaping',
-    body: `二枚広げとは、2枚の刃を
-重ねたまま叩く越前の技です。
+    title: '② 成形 --- Phase 2: Shaping',
+    body: `二枚広げは、2枚の刃を重ねたまま叩く越前独自の技です。
+表と裏のバランスを整え、全体の均一度を高めましょう。
 
-表と裏のバランスを意識して、
-ゾーンの数値を0に近づけましょう。
+ゾーンの歪みを0に近づけるほど、均一で美しい刃になります。
 
-"Nimai-hiroge": two blades hammered
-together — Echizen's unique technique.
-Balance both sides to achieve
-a uniform blade.
----
 右トリガー：ゾーンを叩く
-Right Trigger: Hammer zone
+左Xボタン：表裏反転
 
-Xボタン：表裏反転
-X Button: Flip blade
+表（＋）の歪み → 表から叩く
+裏（−）の歪み → 裏から叩く
 
-表(+)歪み → 表から叩く
-Minus(-)歪み → 裏から叩く
+歪み＝0に近いほど高得点（均一度が高い）
+50回叩くと終了
 
-歪み＝0 → 100点
-Distortion=0 → 100pt
+Aボタン：次の工程へ（途中終了も可）
+Bボタン：この工程をやり直す
+---
+"Nimai-hiroge" is a unique Echizen technique
+where two blades are hammered together.
+Balance both sides to improve overall uniformity.
 
-Aボタン：終了
-A: Finish`
+The closer each zone is to zero distortion,
+the more uniform and refined the blade becomes.
+
+Right Trigger: Hammer zones
+X Button: Flip the blade
+
+Positive distortion (+): Hit from the front
+Negative distortion (−): Hit from the back
+
+Closer to zero distortion = higher score (better uniformity)
+50 hits to complete
+
+A Button: Next phase (can finish early)
+B Button: Retry this phase`
   },
 
   sharpening: {
-    title: '③ 研ぎ / Phase 3: Sharpening',
+    title: '③ 研ぎ --- Phase 3: Sharpening',
     body: `研ぎは刃を完成させる最後の工程です。
-砥石の角度を保つことで、
-鋭い刃が生まれます。
+角度を保ち、両手を揃えることで鋭さと精度が決まります。
 
-職人は長年の経験で
-その角度を体で覚えています。
+砥石の上で一定の角度を維持し、安定して研ぎましょう。
 
-Sharpening completes the blade.
-The correct angle creates a sharp edge.
-Craftsmen master this through years
-of practice.
----
 両グリップ：刃物を保持
-Both Grips: Hold blade
-
 前後にスライド
-Slide back & forth
 
 目標角度：-15°
-Target angle: -15°
-
-両手の角度を揃える
-HUD: NG = 不一致
+両手の角度を揃える（不一致＝NG）
 
 ◎=3pt ○=2pt △=1pt ×=0pt
-◎10回 → +10ptボーナス
+◎を10回連続 → +10ptボーナス
 
-Aボタン：次のフェーズへ
-A: Next Phase`
+30ストロークで終了
+
+Aボタン：結果へ
+Bボタン：この工程をやり直す
+---
+Sharpening is the final step that completes the blade.
+Sharpness and precision depend
+on maintaining angle and hand alignment.
+
+Keep a steady angle while sliding the blade across the whetstone.
+
+Both Grips: Hold the blade
+Slide back & forth
+
+Target angle: -15°
+Keep both hands aligned (NG if mismatched)
+
+◎ = 3pt / ○ = 2pt / △ = 1pt / × = 0pt
+10 consecutive ◎ = +10pt bonus
+
+30 strokes to complete
+
+A Button: View results
+B Button: Retry this phase`
   }
 
 };
@@ -3272,10 +3298,19 @@ function finishForging(isComplete) {
   );
   updateInfoPanel(
 `鍛造結果
-強度（鍛造）: ${Math.round(_phaseScores.forging)}
+強度（鍛造）：${Math.round(_phaseScores.forging)}pt
+叩きの精度が仕上がりに影響します
 
-Aボタン：次へ`,
-    isComplete ? '① 鍛造完了' : '① 鍛造（途中終了）'
+Aボタン：次へ
+Bボタン：リトライ
+---
+Forging Result
+Strength (Forging): ${Math.round(_phaseScores.forging)}pt
+Hammer accuracy shapes the result
+
+A Button: Next
+B Button: Retry`,
+  isComplete ? '① 鍛造完了 --- Phase 1 Complete' : '① 鍛造（途中終了） --- Phase 1 (Early Finish)'
   );
   playComplete();
   showingPhaseResult = true;
@@ -3292,10 +3327,19 @@ function finishShaping(isComplete) {
   _phaseScores.shaping = Math.round(score);
   updateInfoPanel(
 `成形結果
-均一度（成形）: ${_phaseScores.shaping}pt
+均一度（成形）：${_phaseScores.shaping}pt
+均一さが刃の美しさと精度を左右します
 
-Aボタン：次へ`,
-    isComplete ? '② 成形完了' : '② 成形（途中終了）'
+Aボタン：次へ
+Bボタン：リトライ
+---
+Shaping Result
+Uniformity (Shaping): ${_phaseScores.shaping}pt
+Uniformity defines the blade’s quality
+
+A Button: Next
+B Button: Retry`,
+  isComplete ? '② 成形完了 --- Phase 2 Complete' : '② 成形（途中終了） --- Phase 2 (Early Finish)'
   );
   playComplete();
   showingPhaseResult = true;
@@ -3306,11 +3350,20 @@ function finishSharpening(isComplete) {
   sharpenComplete = true;
   _phaseScores.sharpening = Math.min(100, Math.round(totalSharpness));
   updateInfoPanel(
-    `研ぎ結果
-鋭利度（研ぎ）: ${_phaseScores.sharpening}pt
+`研ぎ結果
+鋭利度（研ぎ）：${_phaseScores.sharpening}pt
+角度と安定性が刃の鋭さを決めます
 
-Aボタン：次へ`,
-    isComplete ? '③ 研ぎ完了' : '③ 研ぎ（途中終了）'
+Aボタン：次へ
+Bボタン：リトライ
+---
+Sharpening Result
+Sharpness (Sharpening): ${_phaseScores.sharpening}pt
+Angle and stability define sharpness
+
+A Button: Next
+B Button: Retry`,
+  isComplete ? '③ 研ぎ完了 --- Phase 3 Complete' : '③ 研ぎ（途中終了） --- Phase 3 (Early Finish)'
   );
   playComplete();
   showingPhaseResult = true;
