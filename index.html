@@ -318,6 +318,32 @@
   }
   .smodal-all-on-btn:hover  { opacity: .82; }
   .smodal-all-off-btn:hover { color: rgba(255,200,120,0.85); border-color: rgba(255,160,60,0.45); background: rgba(255,140,40,0.06); }
+
+  /* 3段階の切替（VR描画解像度・影の品質・タイトル/リザルトの火の粉） */
+  .perf-row-seg { flex-wrap: wrap; row-gap: 8px; column-gap: 12px; }
+  .perf-seg {
+    display: flex; flex-shrink: 0; margin-left: auto; /* 折り返した場合も右端にそろえる */
+    border: 1px solid rgba(255,120,30,0.30); border-radius: 11px; overflow: hidden;
+  }
+  .perf-seg input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+  .perf-seg label {
+    padding: 4px 10px; font-size: 12px; font-weight: 700; white-space: nowrap; cursor: pointer;
+    color: rgba(255,180,80,0.65); background: rgba(80,30,10,0.6);
+    transition: background 0.2s, color 0.2s;
+  }
+  .perf-seg label + input + label { border-left: 1px solid rgba(255,120,30,0.25); }
+  .perf-seg input:checked + label { background: rgba(184,69,0,0.80); color: #fff; }
+  .perf-seg input:focus-visible + label { outline: 2px solid #ffb040; outline-offset: -2px; }
+
+  /* 初期値に戻すボタン */
+  .smodal-footer { flex-wrap: wrap; }
+  .smodal-reset-btn {
+    flex: 1; padding: 9px 0; font-size: 13px; font-weight: 800; white-space: nowrap;
+    border: 1px solid rgba(255,150,50,0.22); border-radius: 9px;
+    cursor: pointer; transition: opacity .15s;
+    background: rgba(255,140,40,0.06); color: rgba(255,200,140,0.80);
+  }
+  .smodal-reset-btn:hover { color: rgba(255,220,160,0.95); border-color: rgba(255,160,60,0.45); background: rgba(255,140,40,0.12); }
 </style>
 </head>
 <body>
@@ -366,23 +392,35 @@
     <button class="smodal-close" id="settingsModalClose">×</button>
     <div class="smodal-title">⚙ 設定変更 / Settings</div>
 
-    <!-- ─── 描画解像度 ─── -->
-    <div id="row-tog-low-pixel-ratio" class="perf-row">
-      <label class="perf-label" for="tog-low-pixel-ratio">
-        ① 低解像度レンダリング / Low pixel ratio
-        <span class="perf-sub">OFF：1.5倍（既定）/ ON：1.0倍（軽量）</span>
-      </label>
-      <label class="perf-toggle">
-        <input type="checkbox" id="tog-low-pixel-ratio">
-        <span class="track"><span class="thumb"></span></span>
-      </label>
+    <!-- ─── 描画 ─── -->
+    <div id="row-set-vr-scale" class="perf-row perf-row-seg">
+      <div class="perf-label">
+        ① VR描画解像度 / VR render scale
+        <span class="perf-sub">100%：端末の標準（既定）/ 85%・70%：軽量　※次のVR/AR開始から反映</span>
+      </div>
+      <div class="perf-seg" role="radiogroup" aria-label="VR描画解像度">
+        <input type="radio" name="set-vr-scale" id="set-vr-scale-100" value="1"><label for="set-vr-scale-100">100%</label>
+        <input type="radio" name="set-vr-scale" id="set-vr-scale-85" value="0.85"><label for="set-vr-scale-85">85%</label>
+        <input type="radio" name="set-vr-scale" id="set-vr-scale-70" value="0.7"><label for="set-vr-scale-70">70%</label>
+      </div>
+    </div>
+    <div id="row-set-shadow" class="perf-row perf-row-seg">
+      <div class="perf-label">
+        ② 影の品質 / Shadow quality
+        <span class="perf-sub">高：精細な影（既定）/ 標準：やや粗い影 / オフ：影なし（軽量）</span>
+      </div>
+      <div class="perf-seg" role="radiogroup" aria-label="影の品質">
+        <input type="radio" name="set-shadow" id="set-shadow-high" value="high"><label for="set-shadow-high">高</label>
+        <input type="radio" name="set-shadow" id="set-shadow-standard" value="standard"><label for="set-shadow-standard">標準</label>
+        <input type="radio" name="set-shadow" id="set-shadow-off" value="off"><label for="set-shadow-off">オフ</label>
+      </div>
     </div>
 
     <!-- ─── Instanceパーティクル系 ─── -->
     <div id="row-tog-game-instance-stop" class="perf-row">
       <label class="perf-label" for="tog-game-instance-stop">
-        ② ゲーム中Instance停止 / Stop instances in-game
-        <span class="perf-sub">OFF：③の設定に従う / ON：ゲーム中は完全停止（軽量）</span>
+        ③ ゲーム中Instance停止 / Stop instances in-game
+        <span class="perf-sub">OFF：④の設定に従う / ON：ゲーム中は完全停止（軽量）</span>
       </label>
       <label class="perf-toggle">
         <input type="checkbox" id="tog-game-instance-stop">
@@ -391,7 +429,7 @@
     </div>
     <div id="row-tog-instance-throttle" class="perf-row">
       <label class="perf-label" for="tog-instance-throttle">
-        ③ ゲーム中Instance間引き / Throttle Instances in-game
+        ④ ゲーム中Instance間引き / Throttle Instances in-game
         <span class="perf-sub">OFF：毎フレーム更新 / ON：2フレームに1回更新（軽量）</span>
       </label>
       <label class="perf-toggle">
@@ -403,7 +441,7 @@
     <!-- ─── Canvasパーティクル系 ─── -->
     <div id="row-tog-canvas-particles" class="perf-row">
       <label class="perf-label" for="tog-canvas-particles">
-        ④ ゲーム中パーティクル節約 / Save particles in-game
+        ⑤ ゲーム中パーティクル節約 / Save particles in-game
         <span class="perf-sub">OFF：常時表示 / ON：ゲーム中は非表示（軽量）</span>
       </label>
       <label class="perf-toggle">
@@ -413,7 +451,7 @@
     </div>
     <div id="row-tog-canvas-throttle" class="perf-row">
       <label class="perf-label" for="tog-canvas-throttle">
-        ⑤ ゲーム中Canvas間引き / Throttle Canvas in-game
+        ⑥ ゲーム中Canvas間引き / Throttle Canvas in-game
         <span class="perf-sub">OFF：毎フレーム転送 / ON：3フレームに1回転送（軽量）</span>
       </label>
       <label class="perf-toggle">
@@ -421,11 +459,23 @@
         <span class="track"><span class="thumb"></span></span>
       </label>
     </div>
+    <div id="row-set-title-embers" class="perf-row perf-row-seg">
+      <div class="perf-label">
+        ⑦ タイトル・リザルトの火の粉 / Title &amp; result embers
+        <span class="perf-sub">通常（既定）/ 間引き：3フレームに1回 / 停止：静止（軽量）</span>
+      </div>
+      <div class="perf-seg" role="radiogroup" aria-label="タイトル・リザルトの火の粉">
+        <input type="radio" name="set-title-embers" id="set-title-embers-normal" value="normal"><label for="set-title-embers-normal">通常</label>
+        <input type="radio" name="set-title-embers" id="set-title-embers-thin" value="thin"><label for="set-title-embers-thin">間引き</label>
+        <input type="radio" name="set-title-embers" id="set-title-embers-stop" value="stop"><label for="set-title-embers-stop">停止</label>
+      </div>
+    </div>
 
-    <!-- ─── まとめて操作 ─── -->
+    <!-- ─── まとめて操作・初期値に戻す ─── -->
     <div class="smodal-footer">
       <button class="smodal-all-on-btn"  id="settingsAllOn" >⚡ 軽量化 まとめてON</button>
       <button class="smodal-all-off-btn" id="settingsAllOff">　軽量化 まとめてOFF</button>
+      <button class="smodal-reset-btn"   id="settingsReset" >↺ 初期値に戻す</button>
     </div>
 
   </div>
@@ -620,12 +670,79 @@ _fadePlane.position.set(0, 0, -0.5);
   - 各トグルは「ON=軽量化」方向に統一
 ================================================================ */
 const PerfToggles = {
-  useCanvasParticles:        true,   // ① ゲーム中パーティクル節約
-  useCanvasTransferThrottle: false,  // ② ゲーム中Canvas転送間引き
-  useInstanceThrottle:       false,  // ③ ゲーム中Instance更新を間引き
-  useLowPixelRatio:          false,  // ④ 低解像度レンダリング（1.0倍）
-  useGameInstanceStop:       false,  // ⑤ ゲーム中Instance更新を完全停止
+  useCanvasParticles:        true,   // ⑤ ゲーム中パーティクル節約
+  useCanvasTransferThrottle: false,  // ⑥ ゲーム中Canvas転送間引き
+  useInstanceThrottle:       false,  // ④ ゲーム中Instance更新を間引き
+  useGameInstanceStop:       false,  // ③ ゲーム中Instance更新を完全停止
+  // ※ 旧「低解像度レンダリング」はVR/AR中に効果がないため削除（ブラウザ表示の上限1.5倍は従来どおり）
 };
+
+/* [設定] 3段階の設定（描画品質と負荷の兼ね合い）
+   - vrScale      ：① VR描画解像度（XRの描画バッファ倍率。1 = 端末の標準）
+   - shadowQuality：② 影の品質（'high'=1024px / 'standard'=512px / 'off'=影なし・接触影なし）
+   - titleEmbers  ：⑦ タイトル・リザルトの火の粉（'normal'=毎フレーム / 'thin'=3フレームに1回 / 'stop'=静止） */
+const QualitySettings = {
+  vrScale:       1,
+  shadowQuality: 'high',
+  titleEmbers:   'normal',
+};
+
+/* [設定] 初期値（「初期値に戻す」で設定される値＝従来の既定値） */
+const DEFAULT_SETTINGS = Object.freeze({
+  useGameInstanceStop:       false,
+  useInstanceThrottle:       false,
+  useCanvasParticles:        true,
+  useCanvasTransferThrottle: false,
+  vrScale:                   1,
+  shadowQuality:             'high',
+  titleEmbers:               'normal',
+});
+/* [設定] まとめてON（最も軽い）／まとめてOFF（最も高画質） */
+const LIGHTEST_SETTINGS = Object.freeze({
+  useGameInstanceStop: true, useInstanceThrottle: true, useCanvasParticles: true, useCanvasTransferThrottle: true,
+  vrScale: 0.7, shadowQuality: 'off', titleEmbers: 'stop',
+});
+const HIGHEST_SETTINGS = Object.freeze({
+  useGameInstanceStop: false, useInstanceThrottle: false, useCanvasParticles: false, useCanvasTransferThrottle: false,
+  vrScale: 1, shadowQuality: 'high', titleEmbers: 'normal',
+});
+const SETTING_CHOICES = Object.freeze({
+  vrScale:       [1, 0.85, 0.7],
+  shadowQuality: ['high', 'standard', 'off'],
+  titleEmbers:   ['normal', 'thin', 'stop'],
+});
+
+/* [設定] 保存・読み込み（ブラウザの localStorage。使えない環境では保存せずに動作） */
+const SETTINGS_KEY = 'echizen_settings_v1';
+function _setSettingValues(src) {
+  for (const k of ['useGameInstanceStop', 'useInstanceThrottle', 'useCanvasParticles', 'useCanvasTransferThrottle']) {
+    if (typeof src[k] === 'boolean') PerfToggles[k] = src[k];
+  }
+  for (const k of Object.keys(SETTING_CHOICES)) {
+    if (SETTING_CHOICES[k].includes(src[k])) QualitySettings[k] = src[k];
+  }
+}
+function _currentSettings() {
+  return {
+    useGameInstanceStop:       PerfToggles.useGameInstanceStop,
+    useInstanceThrottle:       PerfToggles.useInstanceThrottle,
+    useCanvasParticles:        PerfToggles.useCanvasParticles,
+    useCanvasTransferThrottle: PerfToggles.useCanvasTransferThrottle,
+    vrScale:                   QualitySettings.vrScale,
+    shadowQuality:             QualitySettings.shadowQuality,
+    titleEmbers:               QualitySettings.titleEmbers,
+  };
+}
+function saveSettings() {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(_currentSettings())); } catch (e) { /* 保存できない環境 */ }
+}
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) _setSettingValues(JSON.parse(raw));
+  } catch (e) { /* 壊れた値は無視して初期値のまま */ }
+}
+loadSettings();
 
 /* フレームカウンター
    - 間引き制御に使用 */
@@ -740,6 +857,9 @@ function _drawPanelBg(ctx, W, H, mode) {
    - パーティクル非表示時（背景＋固定テキストのみ）は内容が毎フレーム同一になる
    - 同じ内容を描画・GPU転送済みなら、再描画と転送（2048×1024 ≒ 8MB/フレーム）を省く */
 let _cvStaticKey = null;
+/* [設定⑦] 間引き用のカウンタと、まとめて進める経過時間 */
+let _cvThinCount = 0;
+let _cvThinDelta = 0;
 
 /* パネル更新（毎フレーム）
    - 背景描画
@@ -760,17 +880,33 @@ function updateCvPanel(delta) {
     ? !_isGameMode   // ON: ゲーム中だけ抑制
     : true;          // OFF: 常時表示
 
-  // [負荷削減] パーティクル非表示（＝内容が前フレームと同一）で、描画・転送済みなら何もしない
-  if (!_showParticles && _cvStaticKey !== null &&
-      _cvStaticKey.canvas === _cvPtCanvas && _cvStaticKey.fn === _cvPanelExtraFn && _cvStaticKey.mode === _cvPanelMode) {
+  // [設定⑦] タイトル・リザルト（ゲーム中以外）の火の粉：'normal' / 'thin'（3フレームに1回）/ 'stop'（静止）
+  const _embers = _isGameMode ? 'normal' : QualitySettings.titleEmbers;
+  // 内容が前フレームと変わらない状態：パーティクル非表示、または火の粉「停止」
+  const _isStatic = !_showParticles || _embers === 'stop';
+  // タイトル文字はXR中だけ描くため、XR中かどうかも内容の一部として扱う
+  const _xrNow = renderer.xr.isPresenting;
+
+  // [負荷削減] 静止内容を描画・転送済みなら何もしない
+  if (_isStatic && _cvStaticKey !== null &&
+      _cvStaticKey.canvas === _cvPtCanvas && _cvStaticKey.fn === _cvPanelExtraFn && _cvStaticKey.mode === _cvPanelMode &&
+      _cvStaticKey.xr === _xrNow && _cvStaticKey.embers === _embers) {
     return;
+  }
+
+  // [設定⑦] 間引き：3フレームに1回だけ描画・転送（経過時間はまとめて進めるので火の粉の速さは変わらない）
+  if (_showParticles && _embers === 'thin') {
+    _cvThinDelta += delta;
+    if ((_cvThinCount++ % 3) !== 0) return;
+    delta = _cvThinDelta;
+    _cvThinDelta = 0;
   }
 
   // 背景は常に描画
   _drawPanelBg(ctx, W, H, _cvPanelMode);
 
   if (_showParticles) {
-    _tickParticles(_cvPanelPts, delta);
+    if (_embers !== 'stop') _tickParticles(_cvPanelPts, delta); // 停止中は動かさず、その場で描く
     _drawParticles(ctx, _cvPanelPts, W, H, _cvPanelBright);
   }
   // 非表示時: 背景描画でキャンバスはクリア済み。テキストは後続で描画。
@@ -778,8 +914,10 @@ function updateCvPanel(delta) {
   // テキスト等の追加描画は常に実行（パーティクル非表示時もテキストを必ず表示）
   if (_cvPanelExtraFn) _cvPanelExtraFn(ctx, W, H);
 
-  // [負荷削減] 静止内容を描いたことを記録（パーティクル表示中は毎フレーム内容が変わるため記録しない）
-  _cvStaticKey = _showParticles ? null : { canvas: _cvPtCanvas, fn: _cvPanelExtraFn, mode: _cvPanelMode };
+  // [負荷削減] 静止内容を描いたことを記録（パーティクルが動いている間は毎フレーム内容が変わるため記録しない）
+  _cvStaticKey = _isStatic
+    ? { canvas: _cvPtCanvas, fn: _cvPanelExtraFn, mode: _cvPanelMode, xr: _xrNow, embers: _embers }
+    : null;
 
   // [Toggle 2] useCanvasTransferThrottle: ゲーム中かつパーティクル表示中のみ間引き
   if (_showParticles && PerfToggles.useCanvasTransferThrottle) {
@@ -802,6 +940,8 @@ function activateCvPanel(canvas, tex, mode, pts, bright, extraFn) {
   _cvPanelBright = bright;
   _cvPanelExtraFn = extraFn || null;
   _cvStaticKey   = null; // [負荷削減] 内容が切り替わったので次フレームは必ず描画・転送
+  _cvThinCount   = 0;    // [設定⑦] 間引き中でも切り替え直後のフレームは必ず描画
+  _cvThinDelta   = 0;
 }
 
 /* 粒子の状態更新（毎フレーム）
@@ -1028,13 +1168,21 @@ const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 
 // 解像度制限（パフォーマンス対策）
-// ④ useLowPixelRatio ON → 1.0倍（軽量）、OFF → 1.5倍上限（既定）
+// ブラウザ表示は 1.5倍上限（既定）。※旧設定「低解像度レンダリング」はVR/AR中に効果がないため削除
 function applyPixelRatio() {
-  const cap = PerfToggles.useLowPixelRatio ? 1.0 : 1.5;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, cap));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 }
 applyPixelRatio();
 renderer.xr.enabled = true; // VR対応
+
+/* [設定①] VR描画解像度
+   - XRの描画バッファ倍率（1 = 端末の標準）。VR/ARセッション開始時に適用されるため、
+     タイトル画面（設定画面）で変更した値が次のVR/AR開始から反映される */
+function applyVrScale() {
+  if (renderer.xr.isPresenting) return; // セッション中は変更できない（次回開始時に反映）
+  renderer.xr.setFramebufferScaleFactor(QualitySettings.vrScale);
+}
+applyVrScale();
 
 // 影設定
 renderer.shadowMap.enabled = true;
@@ -4209,8 +4357,39 @@ function addShadowProxy(parent, meshes, inset = 0.003) {
   return proxy;
 }
 // 作業台（3フェーズ分）: 影を落とさない設定になっているレンガ部分
+//   （レンガの一覧は、影専用メッシュや接触影を足す前の時点で取得しておく）
+const _benchBricks = new Map();
 for (const bench of [forgingBench, shapingBench, sharpenBench]) {
-  addShadowProxy(bench, bench.children.filter(o => o.isMesh && !o.castShadow));
+  _benchBricks.set(bench, bench.children.filter(o => o.isMesh && !o.castShadow));
+}
+for (const [bench, bricks] of _benchBricks) {
+  addShadowProxy(bench, bricks);
+}
+
+/* ---------- 1b. [負荷削減] 作業台レンガの描画呼び出しを削減（常時適用・見た目は同一） ----------
+   - 作業台1台につきレンガ42個が個別に描かれていた（VRでは両目分で2倍）
+   - 同じ材質（色）・同じ影設定のレンガを1つの形状にまとめる（42回 → 14回）
+   - 各レンガの形・位置・色・材質・影の受け方は元のまま（頂点を元の位置に固定して結合するだけ） */
+function mergeStaticMeshes(parent, meshes) {
+  const groups = new Map();
+  for (const m of meshes) {
+    const key = m.material.uuid + '|' + m.castShadow + '|' + m.receiveShadow;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(m);
+  }
+  for (const list of groups.values()) {
+    const geos = list.map(m => { m.updateMatrix(); return m.geometry.clone().applyMatrix4(m.matrix); });
+    const merged = new THREE.Mesh(mergeGeometries(geos, false), list[0].material);
+    merged.name = 'mergedStatic';
+    merged.castShadow    = list[0].castShadow;
+    merged.receiveShadow = list[0].receiveShadow;
+    parent.add(merged);
+    geos.forEach(g => g.dispose());
+    for (const m of list) { parent.remove(m); m.geometry.dispose(); }
+  }
+}
+for (const [bench, bricks] of _benchBricks) {
+  mergeStaticMeshes(bench, bricks);
 }
 // 炉: 下段・中段・煙突（開口部は発光面のため対象外）
 addShadowProxy(furnaceGroup, [fBase, fMid, chimney]);
@@ -4254,29 +4433,37 @@ function addContactShadow(parent, x, y, z, w, d, falloff, opacity) {
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(x, y, z);
   mesh.renderOrder = -1; // 他の半透明物より先に、下地として描く
+  mesh.name = 'contactShadow';
   mesh.userData.baseOpacity = opacity;
   parent.add(mesh);
   return mesh;
 }
 const CONTACT_Y_FLOOR = 0.0015;                 // 床からわずかに浮かせる（ちらつき防止）
 const CONTACT_Y_TABLE = TABLE_SURFACE_Y + 0.0008; // 天板からわずかに浮かせる
+// 位置が動かない接触影（[設定②] 影の品質「オフ」のときにまとめて非表示にするため一覧で持つ）
+const _staticContactShadows = [];
 // 作業台の土台まわり（各フェーズ）
 for (const bench of [forgingBench, shapingBench, sharpenBench]) {
-  addContactShadow(bench, 0, CONTACT_Y_FLOOR, 0, 0.92, 0.52, 0.16, 0.55);
+  _staticContactShadows.push(addContactShadow(bench, 0, CONTACT_Y_FLOOR, 0, 0.92, 0.52, 0.16, 0.55));
 }
 // 炉の土台まわり
-addContactShadow(furnaceGroup, 0, CONTACT_Y_FLOOR, 0, 0.72, 0.62, 0.18, 0.55);
+_staticContactShadows.push(addContactShadow(furnaceGroup, 0, CONTACT_Y_FLOOR, 0, 0.72, 0.62, 0.18, 0.55));
 // 砥石の下（研ぎ）
-addContactShadow(groupSharpening, stoneMesh.position.x, CONTACT_Y_TABLE, stoneMesh.position.z, 0.13, 0.36, 0.03, 0.45);
+_staticContactShadows.push(addContactShadow(groupSharpening, stoneMesh.position.x, CONTACT_Y_TABLE, stoneMesh.position.z, 0.13, 0.36, 0.03, 0.45));
 // 刃物の下（成形）: 本体＋なかご（なかごは表裏で反対側に来るため2枚を切り替える）
 const _bladeContact   = addContactShadow(groupShaping,  0,      CONTACT_Y_TABLE, BLADE_WORLD_Z,          0.411, 0.070, 0.018, 0.40);
 const _nakagoContactA = addContactShadow(groupShaping, -0.255,  CONTACT_Y_TABLE, BLADE_WORLD_Z - 0.0245, 0.102, 0.021, 0.012, 0.40); // 表
 const _nakagoContactB = addContactShadow(groupShaping, -0.255,  CONTACT_Y_TABLE, BLADE_WORLD_Z + 0.0245, 0.102, 0.021, 0.012, 0.40); // 裏
 // 鉄の下（鍛造）: 鉄の位置に追従し、持ち上げると薄くなって消える
 const _ironContact    = addContactShadow(groupForging,  0,      CONTACT_Y_TABLE, workbenchPos.z,         0.25,  0.06,  0.03,  0.50);
+// 位置・濃さが毎フレーム変わる接触影
+const _dynamicContactShadows = [_ironContact, _bladeContact, _nakagoContactA, _nakagoContactB];
+for (const m of _dynamicContactShadows) m.name = 'contactShadowDynamic';
 
 /* 動く物の接触影を更新（位置と濃さの書き換えのみ・毎フレーム数回の四則演算） */
+let _contactShadowsEnabled = true; // [設定②] 影の品質「オフ」で false
 function _updateContactShadows() {
+  if (!_contactShadowsEnabled) return; // [設定②] 影オフ：非表示のまま（applyShadowQuality で非表示にしている）
   if (currentState === State.FORGING) {
     const ip  = ironMesh.position;
     const gap = (ip.y - 0.03) - TABLE_SURFACE_Y;                     // 鉄の底面と天板の距離
@@ -4354,7 +4541,7 @@ arShadowCatcher.rotation.x = -Math.PI / 2;
 arShadowCatcher.receiveShadow = true;
 arShadowCatcher.visible = false;
 scene.add(arShadowCatcher);
-renderer.xr.addEventListener('sessionstart', () => { arShadowCatcher.visible = isARMode; });
+renderer.xr.addEventListener('sessionstart', () => { arShadowCatcher.visible = isARMode && QualitySettings.shadowQuality !== 'off'; });
 renderer.xr.addEventListener('sessionend',   () => { arShadowCatcher.visible = false; });
 
 /* ---------- 5. 影の再計算を必要なときだけに限定 ----------
@@ -4377,6 +4564,7 @@ function _isShownInScene(o) {
   return false;
 }
 function _updateShadowMapIfNeeded() {
+  if (!sunLight.castShadow) return; // [設定②] 影オフ：影マップは使わない（再びオンにした時は強制更新）
   let changed = _shadowForceUpdate;
   for (let i = 0; i < _shadowCasters.length; i++) {
     const c = _shadowCasters[i];
@@ -4393,6 +4581,35 @@ function _updateShadowMapIfNeeded() {
   _shadowForceUpdate = false;
   if (changed) renderer.shadowMap.needsUpdate = true;
 }
+
+/* ---------- 6. [設定②] 影の品質 ----------
+   - 'high'    ：影マップ 1024px（既定）
+   - 'standard'：影マップ 512px（影の範囲は作業エリアのまま。従来の10m四方・512pxよりは精細）
+   - 'off'     ：太陽光の影を使わない。接触影・AR時の床の影も非表示
+   - 影のオン／オフはシェーダーの種類が変わるため、変更後に事前準備（コンパイル）をやり直す
+     （設定画面はタイトル画面でのみ開けるため、体験中に再コンパイルは起きない） */
+let _pendingWarmUp = false;
+function applyShadowQuality() {
+  const q = QualitySettings.shadowQuality;
+  const enabled = q !== 'off';
+  const size = (q === 'standard') ? 512 : 1024;
+  if (sunLight.castShadow !== enabled) {
+    sunLight.castShadow = enabled;  // 光源の構成が変わり、影を受ける材質は次回描画時に自動で切り替わる
+    _pendingWarmUp = true;          // 新しい組み合わせのシェーダーを体験前に準備する
+  }
+  if (sunLight.shadow.mapSize.x !== size) {
+    sunLight.shadow.mapSize.set(size, size);
+    if (sunLight.shadow.map) { sunLight.shadow.map.dispose(); sunLight.shadow.map = null; } // 次回描画時に新しいサイズで確保
+  }
+  _contactShadowsEnabled = enabled;
+  for (const m of _staticContactShadows) m.visible = enabled;
+  if (!enabled) for (const m of _dynamicContactShadows) m.visible = false; // オンに戻すと次のフレームで位置と濃さを再計算
+  if (!enabled) arShadowCatcher.visible = false;
+  else if (renderer.xr.isPresenting) arShadowCatcher.visible = isARMode;
+  _shadowForceUpdate = true;
+}
+applyShadowQuality();
+_pendingWarmUp = false; // 起動時は下の事前準備で行うため不要
 
 /* ================================================================
    PRELOAD（体験開始前の事前準備）
@@ -4447,11 +4664,17 @@ function _warmUpGpu() {
   // 視野の外にある物も準備されるよう、一時的に視錐台カリングを無効化
   const culled = [];
   scene.traverse(o => { if (o.frustumCulled) { culled.push(o); o.frustumCulled = false; } });
+  // 事前準備の描画中はフェード板を不透明にして、画面には何も映らないようにする
+  const fadeOpacity = _fadeMat.opacity, fadeVisible = _fadePlane.visible;
+  _fadeMat.opacity = 1.0;
+  _fadePlane.visible = true;
   try {
     renderer.compile(scene, camera);
     renderer.shadowMap.needsUpdate = true;
-    renderer.render(scene, camera); // フェード板が不透明（暗転中）なので画面には何も映らない
+    renderer.render(scene, camera);
   } finally {
+    _fadeMat.opacity = fadeOpacity;
+    _fadePlane.visible = fadeVisible;
     culled.forEach(o => { o.frustumCulled = true; });
     tempAdded.forEach(o => { if (o.parent) o.parent.remove(o); });
     for (let i = restoreVis.length - 1; i >= 0; i--) restoreVis[i][0].visible = restoreVis[i][1];
@@ -4773,89 +4996,79 @@ setupUI();
   - 設定変更モーダルのトグルUI
   - チェック状態を内部設定と同期 */
 (function initPerfGui() {
-  /* UI要素取得・初期設定
-    - チェックボックスと設定値を同期
-    - ②がONのとき③は動作対象外（完全停止が優先されるため間引きの効果が出ない）
-    - ④がONのとき⑤は動作対象外（ゲーム中パーティクルが既に非表示のため無効化） */
-  const chk1 = document.getElementById('tog-canvas-particles');
-  const chk2 = document.getElementById('tog-canvas-throttle');
-  const chk3 = document.getElementById('tog-instance-throttle');
-  const chk4 = document.getElementById('tog-low-pixel-ratio');
-  const chk5 = document.getElementById('tog-game-instance-stop');
-  const row2 = document.getElementById('row-tog-canvas-throttle');
-  const row3 = document.getElementById('row-tog-instance-throttle');
-  if (!chk1 || !chk2 || !chk3 || !chk4 || !chk5) return;
+  /* UI要素取得
+    - ③（Instance停止）がONのとき④（Instance間引き）は動作対象外（完全停止が優先されるため）
+    - ⑤（パーティクル節約）がONのとき⑥（Canvas間引き）は動作対象外（ゲーム中パーティクルが既に非表示のため） */
+  const chkInstStop     = document.getElementById('tog-game-instance-stop');  // ③
+  const chkInstThrottle = document.getElementById('tog-instance-throttle');   // ④
+  const chkCvParticles  = document.getElementById('tog-canvas-particles');    // ⑤
+  const chkCvThrottle   = document.getElementById('tog-canvas-throttle');     // ⑥
+  const rowInstThrottle = document.getElementById('row-tog-instance-throttle');
+  const rowCvThrottle   = document.getElementById('row-tog-canvas-throttle');
+  if (!chkInstStop || !chkInstThrottle || !chkCvParticles || !chkCvThrottle) return;
+  const radios    = (name) => Array.from(document.querySelectorAll(`input[name="${name}"]`));
+  const segVr     = radios('set-vr-scale');      // ①
+  const segShadow = radios('set-shadow');        // ②
+  const segEmbers = radios('set-title-embers');  // ⑦
 
-  // 初期状態を PerfToggles と同期
-  chk1.checked = PerfToggles.useCanvasParticles;
-  chk2.checked = PerfToggles.useCanvasTransferThrottle;
-  chk3.checked = PerfToggles.useInstanceThrottle;
-  chk4.checked = PerfToggles.useLowPixelRatio;
-  chk5.checked = PerfToggles.useGameInstanceStop;
-
-  /* 依存関係の無効化制御
-     - ②（Instance停止）がONのとき③（間引き）を無効化
-     - ④（パーティクル節約）がONのとき⑤（Canvas間引き）を無効化 */
-  function syncDisabledRows() {
-    row3.classList.toggle('disabled', PerfToggles.useGameInstanceStop);
-    row2.classList.toggle('disabled', PerfToggles.useCanvasParticles);
+  /* 設定値 → 画面表示（保存済みの設定を読み込んだ状態で開く） */
+  function syncUI() {
+    chkInstStop.checked     = PerfToggles.useGameInstanceStop;
+    chkInstThrottle.checked = PerfToggles.useInstanceThrottle;
+    chkCvParticles.checked  = PerfToggles.useCanvasParticles;
+    chkCvThrottle.checked   = PerfToggles.useCanvasTransferThrottle;
+    for (const r of segVr)     r.checked = (Number(r.value) === QualitySettings.vrScale);
+    for (const r of segShadow) r.checked = (r.value === QualitySettings.shadowQuality);
+    for (const r of segEmbers) r.checked = (r.value === QualitySettings.titleEmbers);
+    rowInstThrottle.classList.toggle('disabled', PerfToggles.useGameInstanceStop);
+    rowCvThrottle.classList.toggle('disabled', PerfToggles.useCanvasParticles);
   }
-  syncDisabledRows();
+  /* 設定値 → 動作へ反映し、保存する */
+  function commit() {
+    applyVrScale();
+    applyShadowQuality();
+    saveSettings();
+    syncUI();
+  }
+  syncUI();
 
-  /* トグル処理
-    - ①：低解像度レンダリングON/OFF（pixelRatioを即時反映）
-    - ②：ゲーム中Instance停止ON/OFF
-    - ③：Instance更新間引きON/OFF
-    - ④：ゲーム中パーティクル節約ON/OFF
-    - ⑤：Canvas転送間引きON/OFF */
-  // Toggle ①: 低解像度レンダリング（切替と同時にpixelRatio適用）
-  chk4.addEventListener('change', () => {
-    PerfToggles.useLowPixelRatio = chk4.checked;
-    applyPixelRatio();
-  });
-
-  // Toggle ②: ゲーム中Instance停止
-  chk5.addEventListener('change', () => {
-    PerfToggles.useGameInstanceStop = chk5.checked;
+  /* ON/OFF の設定（③〜⑥） */
+  chkInstStop.addEventListener('change', () => {       // ③ ゲーム中Instance停止
+    PerfToggles.useGameInstanceStop = chkInstStop.checked;
     _instThrottleFrame = 0;
-    syncDisabledRows();
+    commit();
   });
-
-  // Toggle ③: Instance間引き
-  chk3.addEventListener('change', () => {
-    PerfToggles.useInstanceThrottle = chk3.checked;
+  chkInstThrottle.addEventListener('change', () => {   // ④ ゲーム中Instance間引き
+    PerfToggles.useInstanceThrottle = chkInstThrottle.checked;
     _instThrottleFrame = 0;
+    commit();
   });
-
-  // Toggle ④: ゲーム中パーティクル節約
-  chk1.addEventListener('change', () => {
-    PerfToggles.useCanvasParticles = chk1.checked;
-    if (!chk1.checked) _cvTransferFrameCount = 0;
-    syncDisabledRows();
+  chkCvParticles.addEventListener('change', () => {    // ⑤ ゲーム中パーティクル節約
+    PerfToggles.useCanvasParticles = chkCvParticles.checked;
+    if (!chkCvParticles.checked) _cvTransferFrameCount = 0;
+    commit();
   });
-
-  // Toggle ⑤: Canvas転送間引き
-  chk2.addEventListener('change', () => {
-    PerfToggles.useCanvasTransferThrottle = chk2.checked;
+  chkCvThrottle.addEventListener('change', () => {     // ⑥ ゲーム中Canvas間引き
+    PerfToggles.useCanvasTransferThrottle = chkCvThrottle.checked;
     _cvTransferFrameCount = 0;
+    commit();
   });
 
-  /* まとめてON/OFFボタン
-     - ONボタン：全トグルをONにしてUI・ロジックを同期
-     - OFFボタン：全トグルをOFFにしてUI・ロジックを同期 */
-  function applyAllToggles(value) {
-    chk1.checked = value; PerfToggles.useCanvasParticles        = value;
-    chk2.checked = value; PerfToggles.useCanvasTransferThrottle = value;
-    chk3.checked = value; PerfToggles.useInstanceThrottle       = value;
-    chk4.checked = value; PerfToggles.useLowPixelRatio          = value;
-    chk5.checked = value; PerfToggles.useGameInstanceStop       = value;
-    applyPixelRatio();
+  /* 3段階の設定（①②⑦） */
+  for (const r of segVr)     r.addEventListener('change', () => { if (r.checked) { QualitySettings.vrScale       = Number(r.value); commit(); } });
+  for (const r of segShadow) r.addEventListener('change', () => { if (r.checked) { QualitySettings.shadowQuality = r.value;         commit(); } });
+  for (const r of segEmbers) r.addEventListener('change', () => { if (r.checked) { QualitySettings.titleEmbers   = r.value;         commit(); } });
+
+  /* まとめてON（最も軽い）／まとめてOFF（最も高画質）／初期値に戻す */
+  function applyPreset(preset) {
+    _setSettingValues(preset);
     _cvTransferFrameCount = 0;
     _instThrottleFrame    = 0;
-    syncDisabledRows();
+    commit();
   }
-  document.getElementById('settingsAllOn').addEventListener('click',  () => applyAllToggles(true));
-  document.getElementById('settingsAllOff').addEventListener('click', () => applyAllToggles(false));
+  document.getElementById('settingsAllOn').addEventListener('click',  () => applyPreset(LIGHTEST_SETTINGS));
+  document.getElementById('settingsAllOff').addEventListener('click', () => applyPreset(HIGHEST_SETTINGS));
+  document.getElementById('settingsReset').addEventListener('click',  () => applyPreset(DEFAULT_SETTINGS));
 })();
 
 /* ================================================================
@@ -4978,9 +5191,18 @@ renderer.setAnimationLoop((t) => {
     case State.RESULT:     break;
   }
 
+  /* [設定②] 影のオン／オフを切り替えた後は、XR外（タイトル画面）でシェーダーの準備をやり直す */
+  if (_pendingWarmUp && !renderer.xr.isPresenting) {
+    _pendingWarmUp = false;
+    _warmUpGpu();
+  }
+
   /* [描画品質] 動く物の接触影を更新 → 影は変化があったフレームだけ再計算 */
   _updateContactShadows();
   _updateShadowMapIfNeeded();
+
+  /* [負荷削減] 透明度0のフェード板は描かない（全画面の半透明合成を省く・見た目は同一） */
+  _fadePlane.visible = _fadeMat.opacity > 0;
 
   /* 描画
     - シーンをレンダリング */
