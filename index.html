@@ -327,6 +327,15 @@
     color: #ffd9a0; background: rgba(184,69,0,0.45); border: 1px solid rgba(255,160,60,0.45);
   }
   .gfx-mode-row.is-custom .gfx-custom-badge { display: inline-block; }
+  /* スタート画面の画質モード（設定画面の画質モードと連動） */
+  .title-gfx {
+    width: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    row-gap: 8px; column-gap: 12px; margin: 0 0 14px; padding: 10px 14px; border-radius: 14px;
+    background: rgba(255,140,40,0.06); border: 1px solid rgba(255,150,50,0.22); box-sizing: border-box;
+  }
+  .title-gfx-label { font-size: clamp(12px,1.6vw,14px); font-weight: 800; color: #ffcf80; letter-spacing: 0.5px; }
+  .title-gfx .perf-seg label { padding: 7px 16px; font-size: clamp(12px,1.5vw,13px); }
+  .title-gfx.is-custom .gfx-custom-badge { display: inline-block; }
   /* 個別設定（①〜⑦）の見出し */
   .smodal-subhead {
     margin: 12px 0 2px; font-size: 12px; font-weight: 700; letter-spacing: 1px;
@@ -361,13 +370,23 @@
     <!-- 区切り線 -->
     <div class="btn-divider"></div>
 
+    <!-- 画質モード（設定画面の画質モードと連動） -->
+    <div id="title-gfx-mode" class="title-gfx">
+      <div class="title-gfx-label">画質モード / Graphics mode<span class="gfx-custom-badge">個別設定中 / Custom</span></div>
+      <div class="perf-seg" role="radiogroup" aria-label="画質モード">
+        <input type="radio" name="title-gfx-mode" id="title-gfx-mode-high" value="high"><label for="title-gfx-mode-high">高画質</label>
+        <input type="radio" name="title-gfx-mode" id="title-gfx-mode-standard" value="standard"><label for="title-gfx-mode-standard">標準</label>
+        <input type="radio" name="title-gfx-mode" id="title-gfx-mode-light" value="light"><label for="title-gfx-mode-light">軽量</label>
+      </div>
+    </div>
+
     <!-- アクションボタン -->
     <div class="btn-row">
       <button class="action-btn btn-help"    id="helpBtn">📖 操作方法</button>
       <button class="action-btn btn-records" id="recordsBtn">🏆 スコア記録</button>
     </div>
     <div class="btn-row">
-      <button class="action-btn btn-settings" id="settingsBtn">⚙ 設定変更 / Settings</button>
+      <button class="action-btn btn-settings" id="settingsBtn">⚙ 個別設定 / Settings</button>
     </div>
 
   </div>
@@ -384,7 +403,7 @@
     <div id="row-gfx-mode" class="perf-row perf-row-seg gfx-mode-row">
       <div class="perf-label">
         画質モード / Graphics mode<span class="gfx-custom-badge" id="gfx-custom-badge">個別設定中 / Custom</span>
-        <span class="perf-sub">標準：初期設定 / 高画質：すべての演出を表示 / 軽量：負荷を最小に<br>※下の①〜⑦を個別に変えると「個別設定中」になります</span>
+        <span class="perf-sub">高画質：最も精細 / 標準：中間（初期設定）/ 軽量：負荷を最小に<br>※下の①〜⑦を個別に変えると「個別設定中」になります</span>
       </div>
       <div class="perf-seg" role="radiogroup" aria-label="画質モード">
         <input type="radio" name="set-gfx-mode" id="set-gfx-mode-high" value="high"><label for="set-gfx-mode-high">高画質</label>
@@ -399,7 +418,7 @@
     <div id="row-set-vr-scale" class="perf-row perf-row-seg">
       <div class="perf-label">
         ① VR描画解像度 / VR render scale
-        <span class="perf-sub">100%：端末の標準（既定）/ 85%・70%：軽量　※次のVR/AR開始から反映</span>
+        <span class="perf-sub">100%：最も精細 / 85%（既定）/ 70%：軽量　※次のVR/AR開始から反映</span>
       </div>
       <div class="perf-seg" role="radiogroup" aria-label="VR描画解像度">
         <input type="radio" name="set-vr-scale" id="set-vr-scale-100" value="1"><label for="set-vr-scale-100">100%</label>
@@ -410,7 +429,7 @@
     <div id="row-set-shadow" class="perf-row perf-row-seg">
       <div class="perf-label">
         ② 影の品質 / Shadow quality
-        <span class="perf-sub">高：精細な影（既定）/ 標準：やや粗い影 / オフ：影なし（軽量）</span>
+        <span class="perf-sub">高：精細な影 / 標準：やや粗い影（既定）/ オフ：影なし（軽量）</span>
       </div>
       <div class="perf-seg" role="radiogroup" aria-label="影の品質">
         <input type="radio" name="set-shadow" id="set-shadow-high" value="high"><label for="set-shadow-high">高</label>
@@ -433,10 +452,10 @@
     <div id="row-tog-instance-throttle" class="perf-row">
       <label class="perf-label" for="tog-instance-throttle">
         ④ ゲーム中Instance間引き / Throttle Instances in-game
-        <span class="perf-sub">OFF：毎フレーム更新 / ON：2フレームに1回更新（軽量）</span>
+        <span class="perf-sub">OFF：毎フレーム更新 / ON：2フレームに1回更新（既定）</span>
       </label>
       <label class="perf-toggle">
-        <input type="checkbox" id="tog-instance-throttle">
+        <input type="checkbox" id="tog-instance-throttle" checked>
         <span class="track"><span class="thumb"></span></span>
       </label>
     </div>
@@ -445,7 +464,7 @@
     <div id="row-tog-canvas-particles" class="perf-row">
       <label class="perf-label" for="tog-canvas-particles">
         ⑤ ゲーム中パーティクル節約 / Save particles in-game
-        <span class="perf-sub">OFF：常時表示 / ON：ゲーム中は非表示（軽量）</span>
+        <span class="perf-sub">OFF：常時表示 / ON：ゲーム中は非表示（既定）</span>
       </label>
       <label class="perf-toggle">
         <input type="checkbox" id="tog-canvas-particles" checked>
@@ -465,7 +484,7 @@
     <div id="row-set-title-embers" class="perf-row perf-row-seg">
       <div class="perf-label">
         ⑦ タイトル・リザルトの火の粉 / Title &amp; result embers
-        <span class="perf-sub">通常（既定）/ 間引き：3フレームに1回 / 停止：静止（軽量）</span>
+        <span class="perf-sub">通常 / 間引き：3フレームに1回（既定）/ 停止：静止（軽量）</span>
       </div>
       <div class="perf-seg" role="radiogroup" aria-label="タイトル・リザルトの火の粉">
         <input type="radio" name="set-title-embers" id="set-title-embers-normal" value="normal"><label for="set-title-embers-normal">通常</label>
@@ -666,10 +685,10 @@ _fadePlane.position.set(0, 0, -0.5);
   - 描画負荷を調整するためのスイッチ
   - 各トグルは「ON=軽量化」方向に統一
 ================================================================ */
-const PerfToggles = {
+const PerfToggles = {               // ※起動時の値は下の DEFAULT_SETTINGS（画質モード「標準」）で上書きされる
   useCanvasParticles:        true,   // ⑤ ゲーム中パーティクル節約
   useCanvasTransferThrottle: false,  // ⑥ ゲーム中Canvas転送間引き
-  useInstanceThrottle:       false,  // ④ ゲーム中Instance更新を間引き
+  useInstanceThrottle:       true,   // ④ ゲーム中Instance更新を間引き
   useGameInstanceStop:       false,  // ③ ゲーム中Instance更新を完全停止
   // ※ 旧「低解像度レンダリング」はVR/AR中に効果がないため削除（ブラウザ表示の上限1.5倍は従来どおり）
 };
@@ -678,25 +697,28 @@ const PerfToggles = {
    - vrScale      ：① VR描画解像度（XRの描画バッファ倍率。1 = 端末の標準）
    - shadowQuality：② 影の品質（'high'=1024px / 'standard'=512px / 'off'=影なし・接触影なし）
    - titleEmbers  ：⑦ タイトル・リザルトの火の粉（'normal'=毎フレーム / 'thin'=3フレームに1回 / 'stop'=静止） */
-const QualitySettings = {
-  vrScale:       1,
-  shadowQuality: 'high',
-  titleEmbers:   'normal',
+const QualitySettings = {            // ※起動時の値は下の DEFAULT_SETTINGS（画質モード「標準」）で上書きされる
+  vrScale:       0.85,
+  shadowQuality: 'standard',
+  titleEmbers:   'thin',
 };
 
 /* [設定] 画質モード（設定画面の先頭の一括切替）
-   - 'standard'（標準）：初期値＝従来の既定値（初めて起動したとき・保存データが無いときはこの状態）
-   - 'high'    （高画質）：すべての演出を表示（ゲーム中の説明パネルの火の粉も表示）
+   - 'high'    （高画質）：すべての演出を最高の段階で表示（ゲーム中の説明パネルの火の粉も表示）
+   - 'standard'（標準）　：各項目を中間の段階に（初めて起動したとき・保存データが無いときはこの状態）
+                          ① VR描画解像度 85% / ② 影 標準（512px）/ ④ 背景の粒子を2フレームに1回更新
+                          ⑤ ゲーム中の説明パネルの火の粉は非表示 / ⑦ タイトル・リザルトの火の粉を間引き
    - 'light'   （軽量）　：負荷を最小に
-   - 個別設定（①〜⑦）がどのモードとも一致しない場合は「個別設定中」と表示する */
+   - 個別設定（①〜⑦）がどのモードとも一致しない場合は「個別設定中」と表示する
+   - 参考：元の index001 の既定値は「高画質」から⑤だけONにした状態（個別設定で再現できる） */
 const GRAPHICS_PRESETS = Object.freeze({
   high: Object.freeze({
     useGameInstanceStop: false, useInstanceThrottle: false, useCanvasParticles: false, useCanvasTransferThrottle: false,
     vrScale: 1, shadowQuality: 'high', titleEmbers: 'normal',
   }),
   standard: Object.freeze({
-    useGameInstanceStop: false, useInstanceThrottle: false, useCanvasParticles: true, useCanvasTransferThrottle: false,
-    vrScale: 1, shadowQuality: 'high', titleEmbers: 'normal',
+    useGameInstanceStop: false, useInstanceThrottle: true, useCanvasParticles: true, useCanvasTransferThrottle: false,
+    vrScale: 0.85, shadowQuality: 'standard', titleEmbers: 'thin',
   }),
   light: Object.freeze({
     useGameInstanceStop: true, useInstanceThrottle: true, useCanvasParticles: true, useCanvasTransferThrottle: true,
@@ -748,12 +770,14 @@ function loadSettings() {
     if (raw) _setSettingValues(JSON.parse(raw));
   } catch (e) { /* 壊れた値は無視して初期値のまま */ }
 }
+_setSettingValues(DEFAULT_SETTINGS); // 初期値＝画質モード「標準」
 loadSettings();
 
 /* フレームカウンター
    - 間引き制御に使用 */
 let _cvTransferFrameCount = 0;
 let _instThrottleFrame    = 0;
+let _instSkippedDelta     = 0; // [設定④] 間引きで更新を飛ばしたフレームの経過時間（次の更新でまとめて進める）
 
 /* ================================================================
    CANVASパーティクルシステム（背景演出）
@@ -4589,8 +4613,8 @@ function _updateShadowMapIfNeeded() {
 }
 
 /* ---------- 6. [設定②] 影の品質 ----------
-   - 'high'    ：影マップ 1024px（既定）
-   - 'standard'：影マップ 512px（影の範囲は作業エリアのまま。従来の10m四方・512pxよりは精細）
+   - 'high'    ：影マップ 1024px
+   - 'standard'：影マップ 512px（既定。影の範囲は作業エリアのまま。従来の10m四方・512pxよりは精細）
    - 'off'     ：太陽光の影を使わない。接触影・AR時の床の影も非表示
    - 影のオン／オフはシェーダーの種類が変わるため、変更後に事前準備（コンパイル）をやり直す
      （設定画面はタイトル画面でのみ開けるため、体験中に再コンパイルは起きない） */
@@ -5016,8 +5040,8 @@ setupUI();
   const segVr     = radios('set-vr-scale');      // ①
   const segShadow = radios('set-shadow');        // ②
   const segEmbers = radios('set-title-embers');  // ⑦
-  const segMode   = radios('set-gfx-mode');      // 画質モード
-  const rowMode   = document.getElementById('row-gfx-mode');
+  const segMode   = radios('set-gfx-mode').concat(radios('title-gfx-mode'));  // 画質モード（設定画面＋スタート画面）
+  const rowsMode  = [document.getElementById('row-gfx-mode'), document.getElementById('title-gfx-mode')].filter(Boolean);
 
   /* 設定値 → 画面表示（保存済みの設定を読み込んだ状態で開く） */
   function syncUI() {
@@ -5033,7 +5057,7 @@ setupUI();
     // 画質モード：一致するモードを選択表示。どれとも一致しなければ選択なし＋「個別設定中」
     const mode = currentGraphicsMode();
     for (const r of segMode) r.checked = (r.value === mode);
-    if (rowMode) rowMode.classList.toggle('is-custom', mode === null);
+    for (const row of rowsMode) row.classList.toggle('is-custom', mode === null);
   }
   /* 設定値 → 動作へ反映し、保存する */
   function commit() {
@@ -5071,7 +5095,8 @@ setupUI();
   for (const r of segShadow) r.addEventListener('change', () => { if (r.checked) { QualitySettings.shadowQuality = r.value;         commit(); } });
   for (const r of segEmbers) r.addEventListener('change', () => { if (r.checked) { QualitySettings.titleEmbers   = r.value;         commit(); } });
 
-  /* 画質モード（高画質／標準／軽量）：①〜⑦をまとめて設定する */
+  /* 画質モード（高画質／標準／軽量）：①〜⑦をまとめて設定する
+     - スタート画面と設定画面のどちらで選んでも同じ動作。もう一方の表示も syncUI で更新される */
   function applyPreset(preset) {
     _setSettingValues(preset);
     _cvTransferFrameCount = 0;
@@ -5131,30 +5156,38 @@ renderer.setAnimationLoop((t) => {
 
   /* 背景パーティクル更新
     - ふわふわ動く粒子を更新
-    - ⑤ useGameInstanceStop：ゲーム中は完全停止（最も軽量）
-    - ③ useInstanceThrottle：ゲーム中は2フレームに1回に間引き
-    - どちらもOFFなら毎フレーム更新 */
+    - ③ useGameInstanceStop：ゲーム中は完全停止（最も軽量）
+    - ④ useInstanceThrottle：ゲーム中は2フレームに1回に間引き
+    - どちらもOFFなら毎フレーム更新
+    - [修正] 間引き中は飛ばしたフレームの経過時間をまとめて進める（以前は動く速さが半分になっていた）
+      ※停止中の経過時間は進めない（再開時に粒子が飛ばないように）。間引きOFF時の計算は従来と同一 */
   const _nowIsGame = (currentState === State.FORGING || currentState === State.SHAPING ||
                       currentState === State.SHARPENING);
   let _doInstUpdate = true;
+  let _instStopped = false;
   if (_nowIsGame) {
     if (PerfToggles.useGameInstanceStop) {
       _doInstUpdate = false;
+      _instStopped = true;
     } else if (PerfToggles.useInstanceThrottle) {
       _instThrottleFrame++;
       _doInstUpdate = (_instThrottleFrame % 2 === 0);
     }
   }
-  if (_doInstUpdate) {
+  if (!_doInstUpdate) {
+    _instSkippedDelta = _instStopped ? 0 : _instSkippedDelta + delta;
+  } else {
+    const _instDelta = delta + _instSkippedDelta;
+    _instSkippedDelta = 0;
     for (let i = 0; i < particleCount; i++) {
       const p = _ptPos[i];
-      p.t += delta * 0.25;
-      p.y += delta * (0.08 + Math.sin(p.t * 0.7 + p.pax)*0.02);
+      p.t += _instDelta * 0.25;
+      p.y += _instDelta * (0.08 + Math.sin(p.t * 0.7 + p.pax)*0.02);
       if (p.y > 3.5) p.y = 0;
       const wx = p.baseX + perlinLike(p.t, p.fax, p.fbx, p.pax, p.pbx) * p.amp;
       const wz = p.baseZ + perlinLike(p.t, p.faz, p.fbz, p.paz, p.pbz) * p.amp;
-      p.x += (wx - p.x) * Math.min(delta * 1.2, 0.08);
-      p.z += (wz - p.z) * Math.min(delta * 1.2, 0.08);
+      p.x += (wx - p.x) * Math.min(_instDelta * 1.2, 0.08);
+      p.z += (wz - p.z) * Math.min(_instDelta * 1.2, 0.08);
       _ptDummy.position.set(p.x, p.y, p.z);
       _ptDummy.updateMatrix();
       if (i < _ptCountOrange) _ptOrange.setMatrixAt(i, _ptDummy.matrix);
