@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>越前打刃物 VR</title>
+<!-- [プリロード] CDNへの接続（DNS/TLS）を先に確立して、モジュール取得の待ち時間を短縮 -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; background: #000; }
@@ -510,9 +512,18 @@
   }
 }
 </script>
+<!-- [プリロード] 依存モジュールを並列に先読み（import の連鎖による逐次ダウンロード待ちを解消）
+     ※ importmap より後に置く（importmap 確定前のモジュール読込を避けるため） -->
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js">
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/webxr/XRControllerModelFactory.js">
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/loaders/GLTFLoader.js">
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/libs/motion-controllers.module.js">
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/utils/BufferGeometryUtils.js">
 <script type="module">
 import * as THREE from 'three';
 import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
+// [描画品質] 影専用メッシュの結合に使用（GLTFLoader が既に読み込む同一ファイルのため追加ダウンロードなし）
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /* ================================================================
 ゲーム設定（バランス調整用）
@@ -694,29 +705,41 @@ let _cvPanelExtraFn  = null;
 /* 背景描画（モード別）
    - game: ほぼ黒（集中）
    - intro/result: 赤黒グラデーション（雰囲気重視） */
+/* [負荷削減] グラデーションはCanvasごとに一度だけ生成して再利用（毎フレームの生成を省く・描画結果は同一） */
+const _panelBgGradCache = new WeakMap();
 function _drawPanelBg(ctx, W, H, mode) {
   if (mode === 'game') {
     // 体験中：ほぼ完全な黒
     ctx.fillStyle = '#050505';
     ctx.fillRect(0, 0, W, H);
   } else {
-    // intro / result: 赤黒グラデーション
-    const bg = ctx.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0.0, '#080101');
-    bg.addColorStop(0.45,'#160203');
-    bg.addColorStop(0.8, '#1e0405');
-    bg.addColorStop(1.0, '#0c0202');
-    ctx.fillStyle = bg;
+    let g = _panelBgGradCache.get(ctx);
+    if (!g || g.W !== W || g.H !== H) {
+      // intro / result: 赤黒グラデーション
+      const bg = ctx.createLinearGradient(0, 0, 0, H);
+      bg.addColorStop(0.0, '#080101');
+      bg.addColorStop(0.45,'#160203');
+      bg.addColorStop(0.8, '#1e0405');
+      bg.addColorStop(1.0, '#0c0202');
+      // 放射状グラデーション
+      const rg = ctx.createRadialGradient(W*0.5, H*0.9, 0, W*0.5, H*0.5, W*0.5);
+      rg.addColorStop(0,   'rgba(100,8,4,0.30)');
+      rg.addColorStop(0.5, 'rgba(60,4,2,0.12)');
+      rg.addColorStop(1,   'rgba(0,0,0,0)');
+      g = { W, H, bg, rg };
+      _panelBgGradCache.set(ctx, g);
+    }
+    ctx.fillStyle = g.bg;
     ctx.fillRect(0, 0, W, H);
-    // 放射状グラデーション
-    const rg = ctx.createRadialGradient(W*0.5, H*0.9, 0, W*0.5, H*0.5, W*0.5);
-    rg.addColorStop(0,   'rgba(100,8,4,0.30)');
-    rg.addColorStop(0.5, 'rgba(60,4,2,0.12)');
-    rg.addColorStop(1,   'rgba(0,0,0,0)');
-    ctx.fillStyle = rg;
+    ctx.fillStyle = g.rg;
     ctx.fillRect(0, 0, W, H);
   }
 }
+
+/* [負荷削減] 静止内容の描画済み記録
+   - パーティクル非表示時（背景＋固定テキストのみ）は内容が毎フレーム同一になる
+   - 同じ内容を描画・GPU転送済みなら、再描画と転送（2048×1024 ≒ 8MB/フレーム）を省く */
+let _cvStaticKey = null;
 
 /* パネル更新（毎フレーム）
    - 背景描画
@@ -729,9 +752,6 @@ function updateCvPanel(delta) {
   if (!_cvPtCanvas._ctx2d) _cvPtCanvas._ctx2d = _cvPtCanvas.getContext('2d');
   const ctx = _cvPtCanvas._ctx2d;
 
-  // 背景は常に描画
-  _drawPanelBg(ctx, W, H, _cvPanelMode);
-
   // [Toggle 1] useCanvasParticles:
   //   ON  → ゲーム中は非表示、intro/result は表示（軽量優先）
   //   OFF → フェーズ問わず常時表示
@@ -739,6 +759,16 @@ function updateCvPanel(delta) {
   const _showParticles = PerfToggles.useCanvasParticles
     ? !_isGameMode   // ON: ゲーム中だけ抑制
     : true;          // OFF: 常時表示
+
+  // [負荷削減] パーティクル非表示（＝内容が前フレームと同一）で、描画・転送済みなら何もしない
+  if (!_showParticles && _cvStaticKey !== null &&
+      _cvStaticKey.canvas === _cvPtCanvas && _cvStaticKey.fn === _cvPanelExtraFn && _cvStaticKey.mode === _cvPanelMode) {
+    return;
+  }
+
+  // 背景は常に描画
+  _drawPanelBg(ctx, W, H, _cvPanelMode);
+
   if (_showParticles) {
     _tickParticles(_cvPanelPts, delta);
     _drawParticles(ctx, _cvPanelPts, W, H, _cvPanelBright);
@@ -748,6 +778,9 @@ function updateCvPanel(delta) {
   // テキスト等の追加描画は常に実行（パーティクル非表示時もテキストを必ず表示）
   if (_cvPanelExtraFn) _cvPanelExtraFn(ctx, W, H);
 
+  // [負荷削減] 静止内容を描いたことを記録（パーティクル表示中は毎フレーム内容が変わるため記録しない）
+  _cvStaticKey = _showParticles ? null : { canvas: _cvPtCanvas, fn: _cvPanelExtraFn, mode: _cvPanelMode };
+
   // [Toggle 2] useCanvasTransferThrottle: ゲーム中かつパーティクル表示中のみ間引き
   if (_showParticles && PerfToggles.useCanvasTransferThrottle) {
     if (_isGameMode) {
@@ -755,7 +788,7 @@ function updateCvPanel(delta) {
       if (_cvTransferFrameCount % 3 !== 0) return;
     }
   }
-  // GPU転送: 常に実行（パーティクル非表示時もテキスト更新のために必要）
+  // GPU転送: 内容を描き直したフレームでは常に実行（静止内容の再転送のみ上で省略）
   if (_cvPtTex) _cvPtTex.needsUpdate = true;
 }
 
@@ -768,6 +801,7 @@ function activateCvPanel(canvas, tex, mode, pts, bright, extraFn) {
   _cvPanelPts    = pts;
   _cvPanelBright = bright;
   _cvPanelExtraFn = extraFn || null;
+  _cvStaticKey   = null; // [負荷削減] 内容が切り替わったので次フレームは必ず描画・転送
 }
 
 /* 粒子の状態更新（毎フレーム）
@@ -1167,10 +1201,53 @@ scene.add(new THREE.AmbientLight(0x304050, 2.5));
 const sunLight = new THREE.DirectionalLight(0xfff8f0, 2.2);
 sunLight.position.set(2, 6, 2);
 sunLight.castShadow = true;
-sunLight.shadow.mapSize.set(512, 512);
+// [描画品質] 影マップ 512 → 1024。下の影カメラ範囲の最適化と合わせ、約19.5mm/画素 → 約4.5mm/画素
+sunLight.shadow.mapSize.set(1024, 1024);
 sunLight.shadow.camera.near = 0.1;
 sunLight.shadow.camera.far = 8;
 scene.add(sunLight);
+
+/* [描画品質] 影カメラを作業エリアに合わせる
+   - 光の向き (2,6,2)・色・強さは従来と同一（ターゲットと位置を同じだけ平行移動するのみ）
+   - 従来は原点中心の約10m四方を512pxで覆っていたため、鉄や刃物など小物の影が潰れていた
+   - 作業台・炉・プレイヤー周辺（手に持つ物の高さまで）だけを覆う最小範囲に絞る
+   - 計算は起動時に1回だけ（以後は固定） */
+const SHADOW_REGION = new THREE.Box3(
+  new THREE.Vector3(-1.9, 0.0, -2.1),
+  new THREE.Vector3( 1.3, 2.0,  0.5)
+);
+(function fitSunShadowToRegion() {
+  const center = SHADOW_REGION.getCenter(new THREE.Vector3());
+  const dir    = new THREE.Vector3(2, 6, 2); // 従来の光の向き（position - target）
+  sunLight.target.position.copy(center);
+  sunLight.position.copy(center).add(dir);
+  scene.add(sunLight.target);
+  // 影カメラと同じ姿勢で範囲の8頂点を投影し、必要最小限の正射影範囲を求める
+  const cam = sunLight.shadow.camera;
+  cam.position.copy(sunLight.position);
+  cam.lookAt(center);
+  cam.updateMatrixWorld(true);
+  const inv = cam.matrixWorldInverse;
+  const mn = new THREE.Vector3( Infinity,  Infinity,  Infinity);
+  const mx = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+  const p  = new THREE.Vector3();
+  const a = SHADOW_REGION.min, b = SHADOW_REGION.max;
+  for (let i = 0; i < 8; i++) {
+    p.set(i & 1 ? b.x : a.x, i & 2 ? b.y : a.y, i & 4 ? b.z : a.z).applyMatrix4(inv);
+    mn.min(p); mx.max(p);
+  }
+  const margin = 0.05;
+  cam.left   = mn.x - margin; cam.right = mx.x + margin;
+  cam.bottom = mn.y - margin; cam.top   = mx.y + margin;
+  cam.near   = Math.max(0.1, -mx.z - 0.5);
+  cam.far    = -mn.z + 0.5;
+  cam.updateProjectionMatrix();
+})();
+// [描画品質] 影の深度バイアス
+//   影は物体の裏面で計算されるため、解像度を上げてもバイアス 0 のままで自己影ノイズ（シャドウアクネ）が
+//   出ないことを確認済み。接地部の影の浮き（ピーターパン現象）を避けるため 0 を維持する
+sunLight.shadow.bias       = 0;
+sunLight.shadow.normalBias = 0;
 
 /* 刃物専用ライト
    - 真上から当ててハイライトを強調 */
@@ -1423,7 +1500,9 @@ function updateSparks(delta) {
   for (let i = 0; i < SPARK_MAX; i++) {
     if (_spk[i].active) _activeCount++;
   }
-  spkGeo.drawRange = { start: 0, count: _activeCount > 0 ? SPARK_MAX : 0 };
+  // [負荷削減] 毎フレームのオブジェクト生成をやめ、既存の drawRange を書き換える（値は同一）
+  spkGeo.drawRange.start = 0;
+  spkGeo.drawRange.count = _activeCount > 0 ? SPARK_MAX : 0;
   // アクティブ粒子がある場合のみ GPU転送
   _spkPosBuf.needsUpdate = _activeCount > 0;
   _spkColBuf.needsUpdate = _activeCount > 0;
@@ -1614,7 +1693,14 @@ function getTempZone(temp) {
 /* 温度UI更新
    - 数値＋色＋ラベルを描画
    - テクスチャ更新で反映 */
+/* [負荷削減] 表示内容（温度の表示値と区分）が前回と同じなら、再描画とGPU転送を省く
+   - 区分（色・ラベル）は hue と同じ閾値（60/80）で決まるため、表示値と hue の組で内容が一意に決まる */
+let _tempSpriteKey = NaN;
 function updateTempSprite(temp) {
+  const _hueKey = temp < 60 ? 210 : temp < 80 ? 30 : 12;
+  const _key = Math.round(temp * 5 + 500) * 1000 + _hueKey;
+  if (_key === _tempSpriteKey) return;
+  _tempSpriteKey = _key;
   const zone = getTempZone(temp);
   tempCtx.clearRect(0, 0, 330, 80);
   tempCtx.fillStyle = 'rgba(0,0,0,0.80)';
@@ -1874,44 +1960,65 @@ scene.add(angleHudMesh);
    - OK/NG判定
    - 角度数値＋評価記号（◎○△×）
    - 色で精度をフィードバック */
+/* [負荷削減] HUDの表示内容（NG / 角度の表示値・色・記号）が前回と同じなら、再描画とGPU転送を省く
+   - 追従（位置・回転の更新）は従来どおり毎フレーム行う */
+let _angleHudKey = NaN;
+const _hudRhWorld = new THREE.Vector3();
+const _hudRhRight = new THREE.Vector3();
+function _angleHudContentKey(isAligned, bladeAngleDeg) {
+  if (!isAligned) return -1;
+  const err = bladeAngleDeg - CONFIG.SHARPENING.IDEAL_ANGLE;
+  const colIdx = Math.abs(err) < 10 ? 0 : Math.abs(err) < 20 ? 1 : 2;
+  let g = 3; // ×
+  if      (bladeAngleDeg >= -25 && bladeAngleDeg <= -5)  g = 0; // ◎
+  else if ((bladeAngleDeg > -5 && bladeAngleDeg < 5) || (bladeAngleDeg >= -35 && bladeAngleDeg < -25)) g = 1; // ○
+  else if ((bladeAngleDeg >= 5 && bladeAngleDeg <= 15) || (bladeAngleDeg >= -45 && bladeAngleDeg < -35))  g = 2; // △
+  const signIdx = bladeAngleDeg >= 0 ? 1 : 0;
+  return ((Math.round(bladeAngleDeg) + 1000) * 2 + signIdx) * 100 + colIdx * 10 + g;
+}
 function updateAngleHud(leftDeg, rightDeg, isAligned, bladeAngleDeg) {
-  const ctx = angleHudCanvas.getContext('2d');
-  ctx.clearRect(0, 0, 272, 200);
-  ctx.fillStyle = 'rgba(0,0,0,0.85)';
-  ctx.beginPath(); ctx.roundRect(3, 3, 266, 194, 10); ctx.fill();
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  /* 表示ロジック
-     - isAligned=false → NG表示
-     - isAligned=true  → 角度＋評価 */
-  if (!isAligned) {
-    ctx.fillStyle = '#ff4411';
-    ctx.font = 'bold 80px monospace';
-    ctx.fillText('NG', 136, 100);
-  } else {
-    /* 色フィードバック
-       - 緑：理想に近い
-       - 黄：ややズレ
-       - 赤：ズレ大 */
-    const err = bladeAngleDeg - CONFIG.SHARPENING.IDEAL_ANGLE;
-    const col = Math.abs(err) < 10 ? '#66ff88' : Math.abs(err) < 20 ? '#ffee44' : '#ff6644';
-    // グレード判定（updateSharpeningと同じ範囲）
-    let gradeSymbol = '×';
-    if      (bladeAngleDeg >= -25 && bladeAngleDeg <= -5)  gradeSymbol = '◎';
-    else if ((bladeAngleDeg > -5 && bladeAngleDeg < 5) || (bladeAngleDeg >= -35 && bladeAngleDeg < -25)) gradeSymbol = '○';
-    else if ((bladeAngleDeg >= 5 && bladeAngleDeg <= 15) || (bladeAngleDeg >= -45 && bladeAngleDeg < -35))  gradeSymbol = '△';
-    ctx.fillStyle = col;
-    ctx.font = 'bold 54px monospace';
-    const sign = bladeAngleDeg >= 0 ? '+' : '';
-    ctx.fillText(`${sign}${Math.round(bladeAngleDeg)}° ${gradeSymbol}`, 136, 100);
+  const _key = _angleHudContentKey(isAligned, bladeAngleDeg);
+  if (_key !== _angleHudKey) {
+    _angleHudKey = _key;
+    const ctx = angleHudCanvas.getContext('2d');
+    ctx.clearRect(0, 0, 272, 200);
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.beginPath(); ctx.roundRect(3, 3, 266, 194, 10); ctx.fill();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    /* 表示ロジック
+       - isAligned=false → NG表示
+       - isAligned=true  → 角度＋評価 */
+    if (!isAligned) {
+      ctx.fillStyle = '#ff4411';
+      ctx.font = 'bold 80px monospace';
+      ctx.fillText('NG', 136, 100);
+    } else {
+      /* 色フィードバック
+         - 緑：理想に近い
+         - 黄：ややズレ
+         - 赤：ズレ大 */
+      const err = bladeAngleDeg - CONFIG.SHARPENING.IDEAL_ANGLE;
+      const col = Math.abs(err) < 10 ? '#66ff88' : Math.abs(err) < 20 ? '#ffee44' : '#ff6644';
+      // グレード判定（updateSharpeningと同じ範囲）
+      let gradeSymbol = '×';
+      if      (bladeAngleDeg >= -25 && bladeAngleDeg <= -5)  gradeSymbol = '◎';
+      else if ((bladeAngleDeg > -5 && bladeAngleDeg < 5) || (bladeAngleDeg >= -35 && bladeAngleDeg < -25)) gradeSymbol = '○';
+      else if ((bladeAngleDeg >= 5 && bladeAngleDeg <= 15) || (bladeAngleDeg >= -45 && bladeAngleDeg < -35))  gradeSymbol = '△';
+      ctx.fillStyle = col;
+      ctx.font = 'bold 54px monospace';
+      const sign = bladeAngleDeg >= 0 ? '+' : '';
+      ctx.fillText(`${sign}${Math.round(bladeAngleDeg)}° ${gradeSymbol}`, 136, 100);
+    }
+    angleHudTex.needsUpdate = true;
   }
-  angleHudTex.needsUpdate = true;
   /* HUD追従
      - 右手位置＋右方向にオフセット
-     - 回転もコントローラーに同期 */
+     - 回転もコントローラーに同期
+     - [負荷削減] 一時ベクトルは使い回し（計算内容は同一） */
   if (rightController) {
-    const rhWorld = new THREE.Vector3();
+    const rhWorld = _hudRhWorld;
     rightController.getWorldPosition(rhWorld);
-    const rhRight = new THREE.Vector3(1, 0, 0).applyQuaternion(rightController.quaternion);
+    const rhRight = _hudRhRight.set(1, 0, 0).applyQuaternion(rightController.quaternion);
     angleHudMesh.position.copy(rhWorld).addScaledVector(rhRight, 0.15);
     angleHudMesh.quaternion.copy(rightController.quaternion);
   }
@@ -1945,6 +2052,30 @@ let scorePanelMesh = null;
    - 行数に応じてサイズ自動調整
    - 表示位置は任意指定（未指定ならデフォルト位置）
    - Canvas → Texture → Planeに貼付して表示 */
+/* [プリロード／負荷削減] スコアパネルの再利用
+   - 従来は打撃のたびに Canvas・テクスチャ・ジオメトリ・マテリアルを新規作成し、破棄（dispose）していなかった
+     → 打撃時の生成負荷と、長時間運用でのGPUメモリ増加の原因
+   - 行数ごとに1組だけ作り、以後は同じCanvasに描き直してテクスチャを更新する（見た目は同一）
+   - 2行パネル（全フェーズで使用）は起動時に事前生成する */
+const _scorePanelCache = new Map();
+function _getScorePanel(lineCount) {
+  let e = _scorePanelCache.get(lineCount);
+  if (!e) {
+    const cw = 512, ch = 56 + lineCount * 52;
+    const cv = document.createElement('canvas');
+    cv.width = cw; cv.height = ch;
+    const ctx = cv.getContext('2d');
+    const tex = new THREE.CanvasTexture(cv);
+    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide });
+    const panelH = 0.07 * lineCount + 0.04;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.60, panelH), mat);
+    e = { cv, ctx, tex, mesh };
+    _scorePanelCache.set(lineCount, e);
+  }
+  return e;
+}
+
 function updateScorePanel(text, worldPos) {
   /* 既存パネル削除
      - 毎回作り直すことで状態管理を単純化 */
@@ -1953,11 +2084,11 @@ function updateScorePanel(text, worldPos) {
   const lines = text.split('\n');
   const cw = 512, ch = 56 + lines.length * 52;
 
-  /* Canvas生成
-     - 表示内容を画像として描画 */
-  const cv = document.createElement('canvas');
-  cv.width = cw; cv.height = ch;
-  const ctx = cv.getContext('2d');
+  /* Canvas取得（再利用）
+     - 表示内容を画像として描画（新規Canvasと同じく全消去してから描く） */
+  const _panel = _getScorePanel(lines.length);
+  const ctx = _panel.ctx;
+  ctx.clearRect(0, 0, cw, ch);
   ctx.fillStyle = 'rgba(10,0,0,0.82)';
   ctx.beginPath(); ctx.roundRect(3, 3, cw-6, ch-6, 12); ctx.fill();
   ctx.strokeStyle = 'rgba(255,100,60,0.65)';
@@ -1970,16 +2101,12 @@ function updateScorePanel(text, worldPos) {
   lines.forEach((line, i) => {
     ctx.fillText(line, cw/2, 28 + 28 + i * 52);
   });
-  /* Texture化
-     - Canvasを3Dに貼るため変換 */
-  const tex = new THREE.CanvasTexture(cv);
-  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide });
-  const panelH = 0.07 * lines.length + 0.04;
+  /* Texture更新
+     - 再利用中のテクスチャへ描き直した内容を転送 */
+  _panel.tex.needsUpdate = true;
 
-  /* パネル生成
-     - 平面にテクスチャを貼る */
-  scorePanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.60, panelH), mat);
+  /* パネル（再利用） */
+  scorePanelMesh = _panel.mesh;
   const pos = worldPos || new THREE.Vector3(0, workbenchPos.y + 0.23, -1.25);
   /* 位置設定
      - 指定 or デフォルト位置 */
@@ -2006,12 +2133,27 @@ let infoPanelMesh = null;
 /* タイトル描画関数
    - VR/AR時のみタイトルを表示（ブラウザでは非表示）
    - メインタイトル＋サブタイトル＋開始ガイドを描画 */
+/* [プリロード／負荷削減] タイトル文字は内容が固定のため、起動時に専用レイヤーへ一度だけ描画し、
+   毎フレームはそのレイヤーを重ねるだけにする（毎フレームの大きな文字描画を省く・見た目は同一） */
+let _intro0TitleLayer = null;
+function _renderIntro0TitleLayer(W, H) {
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  _drawIntro0TitleInto(cv.getContext('2d'), W, H);
+  return cv;
+}
 function _drawIntro0Text(ctx, W, H) {
   /* XR判定
      - VR/AR時のみ描画 */
   const isImmersive = renderer && renderer.xr && renderer.xr.isPresenting;
   if (!isImmersive) return;
-
+  if (!_intro0TitleLayer || _intro0TitleLayer.width !== W || _intro0TitleLayer.height !== H) {
+    _intro0TitleLayer = _renderIntro0TitleLayer(W, H);
+  }
+  ctx.drawImage(_intro0TitleLayer, 0, 0);
+}
+/* タイトル文字の描画本体（従来の描画内容そのまま） */
+function _drawIntro0TitleInto(ctx, W, H) {
   /* メインタイトル
      - 縁取り＋グラデーション文字 */
   const fontSize = 220;
@@ -2050,30 +2192,48 @@ function _drawIntro0Text(ctx, W, H) {
 /* INTRO_0 パネル生成
    - Canvasをテクスチャにして3Dパネルを作成
    - 背景・粒子・タイトルを毎フレーム合成 */
+/* [プリロード／負荷削減] INTRO_0 パネルの再利用
+   - 従来は INTRO_0 に入るたび（＝1周ごと）に 2048×1024 の Canvas・テクスチャ・メッシュを新規作成し、
+     古いものを破棄していなかった → 長時間運用でGPUメモリが増え続ける原因
+   - 1組だけ作って使い回す。入るたびに Canvas を初期化（幅の再設定＝全消去＋描画状態リセット）するので
+     新規作成した場合と同じ状態から描画される */
+let _intro0Panel = null;
+function _getIntro0Panel() {
+  if (!_intro0Panel) {
+    /* Canvas生成 */
+    const cv  = document.createElement('canvas');
+    const W = 2048, H = 1024;
+    cv.width = W; cv.height = H;
+
+    /* テクスチャ化
+       - Canvas → THREE.CanvasTexture */
+    const tex = new THREE.CanvasTexture(cv);
+    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide });
+
+    /* 3Dパネル生成
+       - PlaneGeometryに貼り付けて空間に配置 */
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 1.4), mat);
+    mesh.position.set(0, 1.38, -2.2);
+    _intro0Panel = { cv, tex, mesh };
+  }
+  return _intro0Panel;
+}
 function updateInfoPanel_INTRO0() {
   /* 既存パネル削除
      - 重複防止 */
   if (infoPanelMesh) infoPanel.remove(infoPanelMesh);
 
-  /* Canvas生成 */
-  const cv  = document.createElement('canvas');
-  const W = 2048, H = 1024;
-  cv.width = W; cv.height = H;
+  /* パネル取得（再利用）＋ Canvas 初期化（新規 Canvas と同じ状態にする） */
+  const p = _getIntro0Panel();
+  p.cv.width = p.cv.width;
 
-  /* テクスチャ化
-     - Canvas → THREE.CanvasTexture */
-  const tex = new THREE.CanvasTexture(cv);
-  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide });
-
-  /* 3Dパネル生成
-     - PlaneGeometryに貼り付けて空間に配置 */
-  infoPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 1.4), mat);
+  infoPanelMesh = p.mesh;
   infoPanelMesh.position.set(0, 1.38, -2.2);
   infoPanel.add(infoPanelMesh);
   /* 毎フレーム描画
      - 背景＋粒子＋タイトルを合成 */
-  activateCvPanel(cv, tex, 'intro0', _cvPtsIntro, 1.0, _drawIntro0Text);
+  activateCvPanel(p.cv, p.tex, 'intro0', _cvPtsIntro, 1.0, _drawIntro0Text);
 }
 
 /* ================================================================
@@ -2083,10 +2243,17 @@ function updateInfoPanel_INTRO0() {
 ================================================================ */
 /* 描画関数を返す（クロージャ）
    - modeでレイアウト切替（intro / game） */
+/* [負荷削減] 文字レイヤーのキャッシュ
+   - 説明文は表示中ずっと同じ内容なのに、従来は毎フレーム全行を描き直していた（行ごとの正規表現処理を含む）
+   - 内容が切り替わったときに1回だけ専用レイヤーへ描き、毎フレームはレイヤーを重ねるだけにする
+   - レイヤーは1枚を使い回す（同時に表示される説明パネルは1枚のため） */
+const _textLayer = document.createElement('canvas');
+let _textLayerOwner = null;
+
 function _makeTextExtraFn(titleText, bodyText, mode) {
   const isGame = mode === 'game';
 
-  return function(ctx, W, H) {
+  const drawText = function(ctx, W, H) {
 
     /* 枠線（introのみ）
        - 画面外枠を描画 */
@@ -2191,6 +2358,18 @@ function _makeTextExtraFn(titleText, bodyText, mode) {
        - 左右に本文を表示 */
     drawCol(leftText,  COL_L, alignLeft,  baseY);
     drawCol(rightText, COL_R, alignRight, baseY);
+  };
+
+  /* 毎フレーム呼ばれる関数
+     - レイヤーが別の内容・別サイズなら描き直し（幅の再設定で全消去＋描画状態リセット）
+     - その後レイヤーを重ねる */
+  return function(ctx, W, H) {
+    if (_textLayerOwner !== drawText || _textLayer.width !== W || _textLayer.height !== H) {
+      _textLayer.width = W; _textLayer.height = H;
+      drawText(_textLayer.getContext('2d'), W, H);
+      _textLayerOwner = drawText;
+    }
+    ctx.drawImage(_textLayer, 0, 0);
   };
 }
 
@@ -2446,23 +2625,40 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
 /* showResultPanel
    - リザルトパネルを3D空間に表示
    - 背景＋粒子＋テキストを合成 */
+/* [プリロード／負荷削減] リザルトパネルの再利用
+   - 従来は RESULT に入るたびに 1200×1400 の Canvas・テクスチャ・メッシュを新規作成し、破棄していなかった
+   - 起動時に1組作成（GPU側の領域も事前確保）し、以後は Canvas を初期化して使い回す */
+let _resultPanelCache = null;
+function _getResultPanel() {
+  if (!_resultPanelCache) {
+    const cv  = document.createElement('canvas');
+    const W = 1200, H = 1400;
+    cv.width = W; cv.height = H;
+
+    const tex = new THREE.CanvasTexture(cv);
+    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide
+    });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.1), mat);
+    _resultPanelCache = { cv, tex, mesh };
+  }
+  return _resultPanelCache;
+}
+
 function showResultPanel(score, bladeStateSnap, scores, savedId) {
   if (resultPanelMesh) resultPanel.remove(resultPanelMesh);
 
-  const cv  = document.createElement('canvas');
-  const W = 1200, H = 1400;
-  cv.width = W; cv.height = H;
-
-  const tex = new THREE.CanvasTexture(cv);
-  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-
-  const mat = new THREE.MeshBasicMaterial({
-    map: tex, transparent: true, depthTest: true, depthWrite: true, alphaTest: 0.01, side: THREE.DoubleSide
-  });
+  /* パネル取得（再利用）＋ Canvas 初期化（新規 Canvas と同じ状態にする） */
+  const _rp = _getResultPanel();
+  const cv  = _rp.cv;
+  cv.width = cv.width;
+  const tex = _rp.tex;
 
   /* パネル生成
      - CanvasをテクスチャにしてMesh化 */
-  resultPanelMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.1), mat);
+  resultPanelMesh = _rp.mesh;
   resultPanelMesh.position.set(0, 1.55, -2.5);
   resultPanelMesh.rotation.set(0, 0, 0);
   resultPanel.add(resultPanelMesh);
@@ -2566,10 +2762,13 @@ const furnaceBB = new THREE.Box3().setFromCenterAndSize(
 /* tempToColor
    - 温度に応じて色を変える
    - 冷→暗色 / 熱→赤色 */
+/* [負荷削減] 毎フレーム呼ばれるため、戻り値の Color は使い回す
+   （呼び出し側はすべて直後に .copy() するので、新規生成と結果は同一） */
+const _tempColorScratch = new THREE.Color();
 function tempToColor(t) {
-  if (t < 30) return new THREE.Color(0x555555);
-  if (t < 60) return new THREE.Color().setHSL(0.08, 0.6, 0.2 + t * 0.003);
-  return new THREE.Color().setHSL(0.04, 1.0, 0.3 + (t - 60) * 0.005);
+  if (t < 30) return _tempColorScratch.set(0x555555);
+  if (t < 60) return _tempColorScratch.setHSL(0.08, 0.6, 0.2 + t * 0.003);
+  return _tempColorScratch.setHSL(0.04, 1.0, 0.3 + (t - 60) * 0.005);
 }
 
 /* ================================================================
@@ -3378,6 +3577,9 @@ B Button: Retry`,
   - 打撃のクールタイム */
 let prevRightTrigger = false;
 let forgingHitCooldown = 0;
+/* [負荷削減] 毎フレーム使う一時オブジェクトを使い回す（値・計算は従来と同一） */
+const _IRON_BB_SIZE         = new THREE.Vector3(0.28, 0.09, 0.09);
+const _forgeHammerHeadWorld = new THREE.Vector3();
 
 /* updateForging
   - 鍛造フェーズのメイン処理
@@ -3394,7 +3596,7 @@ function updateForging(delta) {
 
   /* 当たり判定（鉄の位置）
     - BoundingBoxを更新 */
-  ironBB.setFromCenterAndSize(ironMesh.position, new THREE.Vector3(0.28, 0.09, 0.09));
+  ironBB.setFromCenterAndSize(ironMesh.position, _IRON_BB_SIZE);
 
   /* 炉・作業台の判定
     - 鉄がどこにあるか判定 */
@@ -3432,7 +3634,7 @@ function updateForging(delta) {
 
   /* ハンマー位置取得
     - 当たり判定用 */
-  const hammerHeadWorld = new THREE.Vector3();
+  const hammerHeadWorld = _forgeHammerHeadWorld;
   hammerHead.getWorldPosition(hammerHeadWorld);
 
   /* 温度処理
@@ -3465,9 +3667,9 @@ function updateForging(delta) {
   /* 見た目更新
     - 色・発光・温度表示 */
   ironMesh.material.color.copy(tempToColor(ironTemperature));
-  ironMesh.material.emissive = ironTemperature > 50
-    ? new THREE.Color().setHSL(0.04, 1, (ironTemperature - 50) * 0.006)
-    : new THREE.Color(0x000000);
+  // [負荷削減] 毎フレームの Color 新規生成をやめ、既存の emissive を同じ値に書き換える
+  if (ironTemperature > 50) ironMesh.material.emissive.setHSL(0.04, 1, (ironTemperature - 50) * 0.006);
+  else                      ironMesh.material.emissive.set(0x000000);
   ironMesh.material.emissiveIntensity = ironTemperature > 50 ? 1 : 0;
 
   updateTempSprite(ironTemperature);
@@ -3556,6 +3758,7 @@ let shapingHitCooldown = 0;
 let prevShapingTrigger = false;
 let prevXButton = false;
 const bladeWorldPos = new THREE.Vector3();
+const _shapingHammerHeadWorld = new THREE.Vector3();
 
 /* メイン更新処理
   - ハンマー操作・打撃判定
@@ -3616,7 +3819,7 @@ function updateShaping(delta) {
   /* 打撃判定
     - トリガー入力＋クールタイム管理
     - 最も近いゾーンを判定 */
-  const shapingHammerHeadWorld = new THREE.Vector3();
+  const shapingHammerHeadWorld = _shapingHammerHeadWorld; // [負荷削減] 一時ベクトルを使い回す
   hammerHead.getWorldPosition(shapingHammerHeadWorld);
 
   const shapingTrig = getRightTrigger();
@@ -3718,6 +3921,8 @@ function updateShaping(delta) {
   - 両手操作で刃物を動かす
   - 角度判定・ストローク判定
   - スコア加算・完了判定 */
+const _sharpenLFwd = new THREE.Vector3();
+const _sharpenRFwd = new THREE.Vector3();
 function updateSharpening(delta) {
   hammerGroup.visible = false;
 
@@ -3744,8 +3949,9 @@ function updateSharpening(delta) {
   let leftTiltDeg  = 0;
   let rightTiltDeg = 0;
   if (leftController && rightController) {
-    const lFwd = new THREE.Vector3(0, 0, -1).applyQuaternion(leftController.quaternion);
-    const rFwd = new THREE.Vector3(0, 0, -1).applyQuaternion(rightController.quaternion);
+    // [負荷削減] 一時ベクトルを使い回す（計算は同一）
+    const lFwd = _sharpenLFwd.set(0, 0, -1).applyQuaternion(leftController.quaternion);
+    const rFwd = _sharpenRFwd.set(0, 0, -1).applyQuaternion(rightController.quaternion);
     leftTiltDeg  = Math.asin(THREE.MathUtils.clamp(lFwd.y, -1, 1)) * (180 / Math.PI);
     rightTiltDeg = Math.asin(THREE.MathUtils.clamp(rFwd.y, -1, 1)) * (180 / Math.PI);
   }
@@ -3961,6 +4167,344 @@ _ptOrange.instanceMatrix.needsUpdate = true;
 _ptYellow.instanceMatrix.needsUpdate = true;
 
 /* ================================================================
+   描画品質の向上（影・接触影・金属の映り込み）
+   - 体験内容・既存モデル・色・形状・配置・アニメーションは変更しない
+   - 追加するのは「影だけを落とす不可視メッシュ」「接触影（床・台への柔らかい陰り）」
+     「刃物・ハンマーの環境マップ」「AR時の影受け面」のみ
+   - すべて起動時に生成し、体験中に新たな生成・重い計算は行わない
+================================================================ */
+
+/* ---------- 1. 途切れた影の補完（影専用メッシュ） ----------
+   - 作業台のレンガ部分と、炉の下段・中段・煙突は影を落とさない設定のため、
+     床の影が途中で途切れて物が浮いて見えていた
+   - 既存メッシュの設定は変えず、同じ形の「影だけを落とすメッシュ」を1つに結合して追加する
+     （影計算の描画呼び出しは レンガ42個分 → 1回）
+   - 画面には描画されない（色・深度を書き込まない） */
+const _shadowProxyMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
+function addShadowProxy(parent, meshes, inset = 0.003) {
+  const geos = [];
+  const c = new THREE.Vector3(), s = new THREE.Vector3();
+  for (const m of meshes) {
+    const g = m.geometry.clone();
+    for (const name of Object.keys(g.attributes)) if (name !== 'position') g.deleteAttribute(name);
+    // 元の形よりわずかに内側へ縮め、元のメッシュ表面に自己影のノイズが出ないようにする
+    g.computeBoundingBox();
+    g.boundingBox.getCenter(c); g.boundingBox.getSize(s);
+    g.translate(-c.x, -c.y, -c.z);
+    g.scale(Math.max(s.x - inset * 2, s.x * 0.5) / s.x,
+            Math.max(s.y - inset * 2, s.y * 0.5) / s.y,
+            Math.max(s.z - inset * 2, s.z * 0.5) / s.z);
+    g.translate(c.x, c.y, c.z);
+    m.updateMatrix();
+    g.applyMatrix4(m.matrix); // parent 直下のメッシュなのでローカル行列で配置
+    geos.push(g);
+  }
+  const merged = mergeGeometries(geos, false);
+  geos.forEach(g => g.dispose());
+  const proxy = new THREE.Mesh(merged, _shadowProxyMat);
+  proxy.name = 'shadowProxy';
+  proxy.castShadow = true;
+  proxy.receiveShadow = false;
+  parent.add(proxy);
+  return proxy;
+}
+// 作業台（3フェーズ分）: 影を落とさない設定になっているレンガ部分
+for (const bench of [forgingBench, shapingBench, sharpenBench]) {
+  addShadowProxy(bench, bench.children.filter(o => o.isMesh && !o.castShadow));
+}
+// 炉: 下段・中段・煙突（開口部は発光面のため対象外）
+addShadowProxy(furnaceGroup, [fBase, fMid, chimney]);
+
+/* ---------- 2. 接触影（床・作業台への柔らかい陰り） ----------
+   - 物が床や台に接する部分の陰り（周囲光が遮られる効果）を、起動時に生成した陰影テクスチャで表現
+   - テクスチャは起動時に1回だけ計算（体験中の計算なし）。描画は半透明の板1枚ずつ
+   - 動く物（鉄、刃物の表裏反転）は位置と濃さを書き換えるだけ */
+function makeContactShadowTexture(w, d, falloff, px = 256) {
+  const W = w + falloff * 2, D = d + falloff * 2;
+  const k = px / Math.max(W, D);
+  const cw = Math.max(16, Math.round(W * k)), ch = Math.max(16, Math.round(D * k));
+  const cv = document.createElement('canvas');
+  cv.width = cw; cv.height = ch;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(cw, ch); // RGB=黒、Aのみ設定
+  for (let y = 0; y < ch; y++) {
+    const pz = ((y + 0.5) / ch - 0.5) * D;
+    const dz = Math.max(Math.abs(pz) - d / 2, 0);
+    for (let x = 0; x < cw; x++) {
+      const pxw = ((x + 0.5) / cw - 0.5) * W;
+      const dx = Math.max(Math.abs(pxw) - w / 2, 0);
+      const t = Math.min(Math.hypot(dx, dz) / falloff, 1);
+      const a = (1 - t) * (1 - t); // 接地部で最も濃く、離れるほど滑らかに消える
+      img.data[(y * cw + x) * 4 + 3] = Math.round(a * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return tex;
+}
+function addContactShadow(parent, x, y, z, w, d, falloff, opacity) {
+  const mat = new THREE.MeshBasicMaterial({
+    map: makeContactShadowTexture(w, d, falloff),
+    transparent: true, opacity, depthWrite: false,
+    // 深度オフセットは使わない（物体側面の下端まで暗くしてしまうため）。面から僅かに浮かせるだけで十分
+  });
+  const geo = new THREE.PlaneGeometry(w + falloff * 2, d + falloff * 2);
+  geo.rotateX(-Math.PI / 2);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, y, z);
+  mesh.renderOrder = -1; // 他の半透明物より先に、下地として描く
+  mesh.userData.baseOpacity = opacity;
+  parent.add(mesh);
+  return mesh;
+}
+const CONTACT_Y_FLOOR = 0.0015;                 // 床からわずかに浮かせる（ちらつき防止）
+const CONTACT_Y_TABLE = TABLE_SURFACE_Y + 0.0008; // 天板からわずかに浮かせる
+// 作業台の土台まわり（各フェーズ）
+for (const bench of [forgingBench, shapingBench, sharpenBench]) {
+  addContactShadow(bench, 0, CONTACT_Y_FLOOR, 0, 0.92, 0.52, 0.16, 0.55);
+}
+// 炉の土台まわり
+addContactShadow(furnaceGroup, 0, CONTACT_Y_FLOOR, 0, 0.72, 0.62, 0.18, 0.55);
+// 砥石の下（研ぎ）
+addContactShadow(groupSharpening, stoneMesh.position.x, CONTACT_Y_TABLE, stoneMesh.position.z, 0.13, 0.36, 0.03, 0.45);
+// 刃物の下（成形）: 本体＋なかご（なかごは表裏で反対側に来るため2枚を切り替える）
+const _bladeContact   = addContactShadow(groupShaping,  0,      CONTACT_Y_TABLE, BLADE_WORLD_Z,          0.411, 0.070, 0.018, 0.40);
+const _nakagoContactA = addContactShadow(groupShaping, -0.255,  CONTACT_Y_TABLE, BLADE_WORLD_Z - 0.0245, 0.102, 0.021, 0.012, 0.40); // 表
+const _nakagoContactB = addContactShadow(groupShaping, -0.255,  CONTACT_Y_TABLE, BLADE_WORLD_Z + 0.0245, 0.102, 0.021, 0.012, 0.40); // 裏
+// 鉄の下（鍛造）: 鉄の位置に追従し、持ち上げると薄くなって消える
+const _ironContact    = addContactShadow(groupForging,  0,      CONTACT_Y_TABLE, workbenchPos.z,         0.25,  0.06,  0.03,  0.50);
+
+/* 動く物の接触影を更新（位置と濃さの書き換えのみ・毎フレーム数回の四則演算） */
+function _updateContactShadows() {
+  if (currentState === State.FORGING) {
+    const ip  = ironMesh.position;
+    const gap = (ip.y - 0.03) - TABLE_SURFACE_Y;                     // 鉄の底面と天板の距離
+    const near = 1 - THREE.MathUtils.clamp(gap / 0.06, 0, 1);        // 6cm 持ち上げると消える
+    const margin = Math.min(0.45 - (Math.abs(ip.x - workbenchPos.x) + 0.155),
+                            0.25 - (Math.abs(ip.z - workbenchPos.z) + 0.06)); // 天板の縁までの余白
+    const onTable = THREE.MathUtils.clamp(1 + margin / 0.03, 0, 1);  // 縁からはみ出す位置では消す
+    const op = _ironContact.userData.baseOpacity * near * onTable;
+    _ironContact.position.x = ip.x;
+    _ironContact.position.z = ip.z;
+    _ironContact.material.opacity = op;
+    _ironContact.visible = op > 0.003;
+  } else if (currentState === State.SHAPING) {
+    const r    = bladeMesh.rotation.x;                                 // 表 -π/2 ／ 裏 +π/2（反転中は途中）
+    const flat = Math.abs(Math.sin(r));                                // 寝ている度合い
+    const side = THREE.MathUtils.clamp((r + Math.PI / 2) / Math.PI, 0, 1); // 0=表, 1=裏
+    const base = _bladeContact.userData.baseOpacity * flat;
+    _bladeContact.material.opacity   = base;
+    _nakagoContactA.material.opacity = base * (1 - side);
+    _nakagoContactB.material.opacity = base * side;
+    _bladeContact.visible   = base > 0.003;
+    _nakagoContactA.visible = base * (1 - side) > 0.003;
+    _nakagoContactB.visible = base * side > 0.003;
+  }
+}
+
+/* ---------- 3. 刃物・ハンマーの映り込み（環境マップ） ----------
+   - 作業場の照明配置（主光源・刃物上部光・補助光・炉の灯り）に合わせた簡易環境を
+     起動時に1回だけ生成する（PMREM：粗さに応じたぼかし済みの環境テクスチャ）
+   - 適用対象は刃物（本体・なかご）とハンマーの頭のみ。他のマテリアルは従来どおり */
+function buildForgeEnvironmentMap() {
+  const env = new THREE.Scene();
+  const disposables = [];
+  const add = (mesh) => { env.add(mesh); disposables.push(mesh); return mesh; };
+  // 暗い作業場（壁・天井）と床
+  const room = add(new THREE.Mesh(new THREE.BoxGeometry(14, 7, 14), new THREE.MeshBasicMaterial({ color: 0x120c08, side: THREE.BackSide })));
+  room.position.y = 2.5;
+  const envFloor = add(new THREE.Mesh(new THREE.PlaneGeometry(14, 14), new THREE.MeshBasicMaterial({ color: 0x1a120a })));
+  envFloor.rotation.x = -Math.PI / 2;
+  envFloor.position.y = -0.9;
+  // 天井のやわらかい明かり（金属の上面に鈍い映り込みを与え、鋼らしい灰色に見せる）
+  const ceiling = add(new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.MeshBasicMaterial({ color: 0xfff4e8, side: THREE.DoubleSide })));
+  ceiling.material.color.multiplyScalar(0.35);
+  ceiling.rotation.x = Math.PI / 2;
+  ceiling.position.y = 3.3;
+  // 光源パネル（シーンのライトと同じ方向・色）
+  const panel = (dir, dist, w, h, color, intensity) => {
+    const m = add(new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide })));
+    m.material.color.multiplyScalar(intensity);
+    m.position.copy(dir).normalize().multiplyScalar(dist);
+    m.lookAt(0, 0, 0);
+  };
+  panel(new THREE.Vector3( 2, 6,  2),      5, 3.4, 3.4, 0xfff8f0, 4.0); // 主光源（sunLight と同じ向き）
+  panel(new THREE.Vector3( 0, 4, -1),      5, 2.8, 1.7, 0xe8f0ff, 3.5); // 刃物上部光（bladeTopLight）
+  panel(new THREE.Vector3(-3, 2, -1),      5, 2.2, 1.4, 0xb0c8e0, 1.4); // 補助光（fillLight）
+  panel(new THREE.Vector3(-1, 0.05, -0.1), 4, 1.3, 0.8, 0xff5a1a, 2.5); // 炉の灯り（作業台から見た炉の方向）
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const rt = pmrem.fromScene(env, 0.02);
+  pmrem.dispose();
+  disposables.forEach(m => { m.geometry.dispose(); m.material.dispose(); });
+  return rt.texture;
+}
+const forgeEnvMap = buildForgeEnvironmentMap();
+for (const mat of [bladeMat, nakagoMat, hammerHead.material]) {
+  mat.envMap = forgeEnvMap;
+  mat.envMapIntensity = 1.0;
+  mat.needsUpdate = true;
+}
+
+/* ---------- 4. AR時の影受け面（現実の床に影を落とす） ----------
+   - ARでは仮想の床を消してカメラ映像を見せるため、床に落ちていた影も一緒に消えてしまう
+   - 影だけを描く透明な面を床の位置に置き、AR中のみ表示する */
+const arShadowCatcher = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.ShadowMaterial({ opacity: 0.45 }));
+arShadowCatcher.rotation.x = -Math.PI / 2;
+arShadowCatcher.receiveShadow = true;
+arShadowCatcher.visible = false;
+scene.add(arShadowCatcher);
+renderer.xr.addEventListener('sessionstart', () => { arShadowCatcher.visible = isARMode; });
+renderer.xr.addEventListener('sessionend',   () => { arShadowCatcher.visible = false; });
+
+/* ---------- 5. 影の再計算を必要なときだけに限定 ----------
+   - 従来は毎フレーム影マップを再計算していた（静止中や、影を落とす物がないイントロ・リザルトでも）
+   - 影を落とす物の「表示状態・位置・向き」が変わったフレームだけ再計算する
+   - 変化した同じフレームの描画前に更新するため、動く物への影の追従は遅れない */
+renderer.shadowMap.autoUpdate = false;
+let _shadowForceUpdate = true;
+const _shadowCasters = [];
+scene.traverse(o => {
+  if ((o.isMesh || o.isLine || o.isPoints) && o.castShadow) {
+    _shadowCasters.push({ obj: o, vis: false, m: new Float64Array(16) });
+  }
+});
+function _isShownInScene(o) {
+  for (let p = o; p; p = p.parent) {
+    if (!p.visible) return false;
+    if (p === scene) return true;
+  }
+  return false;
+}
+function _updateShadowMapIfNeeded() {
+  let changed = _shadowForceUpdate;
+  for (let i = 0; i < _shadowCasters.length; i++) {
+    const c = _shadowCasters[i];
+    const vis = _isShownInScene(c.obj);
+    if (vis !== c.vis) { c.vis = vis; changed = true; }
+    if (vis) {
+      c.obj.updateWorldMatrix(true, false);
+      const e = c.obj.matrixWorld.elements, m = c.m;
+      for (let k = 0; k < 16; k++) {
+        if (m[k] !== e[k]) { m[k] = e[k]; changed = true; }
+      }
+    }
+  }
+  _shadowForceUpdate = false;
+  if (changed) renderer.shadowMap.needsUpdate = true;
+}
+
+/* ================================================================
+   PRELOAD（体験開始前の事前準備）
+   - タイトル画面の表示中（3D画面は暗転中）に、体験中に初めて必要になる処理を済ませておく
+   - 実行は起動直後の1回のみ。体験の流れ・操作・演出には影響しない
+================================================================ */
+let _preloadPromise = null;
+function _waitPreload() { return _preloadPromise || Promise.resolve(); }
+
+/* 1. フォントの事前読み込み
+   - パネル文字に使う日本語・記号・絵文字のフォントは初回使用時に読み込まれ、一瞬止まることがある
+   - 使用する書体ごとに全文字を一度計測して、読み込みを起動時に済ませる */
+function _warmUpFonts() {
+  try {
+    const extra = '完成 ─ 越前打刃物 Echizen Blades Complete 点 / pts 【 名人 / Master 職人 Craftsman 見習い Apprentice 】' +
+      '🥇🥈🥉★ NEW RECORD! TOP ① 鍛造 Forging ② 成形 Shaping ③ 研ぎ Sharpen ×0.3 pt ─ ランキング / Ranking ─ ' +
+      'Aボタンで再プレイ / Press A to Replay 打撃 強度: 均一度: ストローク 鋭利度: Perfect Good Miss ◎○△× NG +-° ' +
+      '△ 高温/HOT 〇 適温/GOOD × 低温/COLD 鍛造結果 成形結果 研ぎ結果（途中終了）完了 Phase Complete Early Finish ' +
+      '強度（鍛造）均一度（成形）鋭利度（研ぎ）叩きの精度が仕上がりに影響します 均一さが刃の美しさと精度を左右します ' +
+      '角度と安定性が刃の鋭さを決めます Strength Uniformity Sharpness Hammer accuracy shapes the result ' +
+      'Uniformity defines the blade’s quality Angle and stability define sharpness A Button: Next B Button: Retry ' +
+      'Aボタン：次へ Bボタン：リトライ 0123456789 Echizen Hamono — Blacksmith VR A ▶ Start';
+    const chars = Array.from(new Set(Array.from(JSON.stringify(TEXT_DATA) + extra))).join('');
+    const cv = document.createElement('canvas');
+    cv.width = 8; cv.height = 8;
+    const ctx = cv.getContext('2d');
+    for (const f of ['40px serif', 'bold 40px serif', '40px sans-serif', '40px monospace', 'bold 40px monospace']) {
+      ctx.font = f;
+      ctx.measureText(chars);
+    }
+  } catch (e) { /* 失敗しても体験には影響しない */ }
+}
+
+/* 2. GPU側の事前準備
+   - 全フェーズの物体・パネル・接触影・AR影受け面を一時的に表示し、暗転中に1回だけ描画する
+     → シェーダーのコンパイル（影用を含む）、影マップの確保、テクスチャ・頂点データの転送を済ませる
+   - XR中も同じシェーダーが使われる（トーンマッピング・色空間が同一のため）
+   - 終了後は表示状態などをすべて元に戻す */
+function _warmUpGpu() {
+  const restoreVis = [];
+  const show = (o) => { restoreVis.push([o, o.visible]); o.visible = true; };
+  [groupForging, groupShaping, groupSharpening, resultPanel, infoPanel, scorePanelGroup, angleHudMesh,
+   arShadowCatcher, floor, hammerGroup, _ironContact, _bladeContact, _nakagoContactA, _nakagoContactB].forEach(show);
+  // まだシーンに無いもの（手持ちハンマー・コントローラーのレーザー・スコア/リザルトパネル）を一時的に追加
+  const tempAdded = [];
+  const addTemp = (parent, obj) => { if (!obj.parent) { parent.add(obj); tempAdded.push(obj); } };
+  addTemp(scene, hammerGroup);
+  addTemp(scene, ctrl0);
+  addTemp(scene, ctrl1);
+  addTemp(scorePanelGroup, _getScorePanel(2).mesh);
+  addTemp(resultPanel, _getResultPanel().mesh);
+  // 視野の外にある物も準備されるよう、一時的に視錐台カリングを無効化
+  const culled = [];
+  scene.traverse(o => { if (o.frustumCulled) { culled.push(o); o.frustumCulled = false; } });
+  try {
+    renderer.compile(scene, camera);
+    renderer.shadowMap.needsUpdate = true;
+    renderer.render(scene, camera); // フェード板が不透明（暗転中）なので画面には何も映らない
+  } finally {
+    culled.forEach(o => { o.frustumCulled = true; });
+    tempAdded.forEach(o => { if (o.parent) o.parent.remove(o); });
+    for (let i = restoreVis.length - 1; i >= 0; i--) restoreVis[i][0].visible = restoreVis[i][1];
+    _shadowForceUpdate = true; // 実際の表示状態で影を描き直す
+  }
+}
+
+/* 3. コントローラーモデルの事前読み込み（対象端末: Meta Quest 3 / 3S）
+   - 従来はXR開始時にネットワークから取得・解析・シェーダー準備をしていた
+   - 対象端末では起動時に取得し、モデル生成器のキャッシュに登録しておく（XR開始時は複製するだけ）
+   - 端末が異なる・取得に失敗した場合は、従来どおりXR開始時に読み込まれる */
+function _warmUpObject(obj) {
+  try {
+    renderer.compile(obj, camera, scene);
+    obj.traverse(o => {
+      if (!o.material) return;
+      for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
+        for (const k of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'aoMap']) {
+          if (m[k]) renderer.initTexture(m[k]);
+        }
+      }
+    });
+  } catch (e) { /* 失敗しても従来どおりの読み込みになるだけ */ }
+}
+function _preloadControllerModels() {
+  const ua = navigator.userAgent || '';
+  if (!navigator.xr || !/Quest 3/.test(ua)) return Promise.resolve();
+  const base = ctrlModelFactory.path;
+  const profileId = 'meta-quest-touch-plus';
+  const getJson = (url) => fetch(url).then(r => (r.ok ? r.json() : null)).catch(() => null);
+  return getJson(`${base}/profilesList.json`).then(list => {
+    if (!list || !list[profileId]) return null;
+    const profilePath = `${base}/${list[profileId].path}`;
+    return getJson(profilePath).then(profile => {
+      if (!profile || !profile.layouts) return null;
+      const loads = Object.values(profile.layouts).map(layout => {
+        if (!layout.assetPath) return null;
+        const url = profilePath.replace('profile.json', layout.assetPath); // モデル生成器と同じURL
+        if (ctrlModelFactory._assetCache[url]) return null;
+        return new Promise(resolve => {
+          ctrlModelFactory.gltfLoader.load(url, (gltf) => {
+            if (!ctrlModelFactory._assetCache[url]) ctrlModelFactory._assetCache[url] = gltf;
+            _warmUpObject(gltf.scene);
+            resolve();
+          }, undefined, () => resolve());
+        });
+      });
+      return Promise.all(loads);
+    });
+  }).catch(() => null);
+}
+
+/* ================================================================
    BROWSER UI PARTICLE SYSTEM（ブラウザ用粒子演出）
 ================================================================ */
 /* 基本変数
@@ -4058,6 +4602,9 @@ async function setupUI() {
   const btnVR    = document.getElementById('btn-vr');
   const btnAR    = document.getElementById('btn-ar');
   const uiPanel  = document.getElementById('uiPanel');
+  // [不具合修正] 従来は未定義の変数を参照してXR開始/終了時の処理が途中で止まっていた
+  //   （要素が存在しない場合は表示切替を行わない）
+  const xrStatus = document.getElementById('xrStatus');
 
   /* XR対応チェック
     - VR / ARが使えるか判定
@@ -4070,7 +4617,9 @@ async function setupUI() {
       - セッション開始
       - モード切替（VR or AR） */
     if (vrSupported) {
-      btnVR.disabled    = false;
+      // [プリロード] 事前読み込みが終わるまで開始ボタンだけを無効のままにする（最長4秒で打ち切り）
+      //   ※ 他のボタン（操作方法・記録・設定）は従来どおりすぐ使える
+      _waitPreload().then(() => { btnVR.disabled = false; });
       btnVR.textContent = '▶ VR スタート';
       btnVR.addEventListener('click', async () => {
         resumeAudio();
@@ -4089,7 +4638,7 @@ async function setupUI() {
     }
 
     if (arSupported) {
-      btnAR.disabled    = false;
+      _waitPreload().then(() => { btnAR.disabled = false; }); // [プリロード] 同上
       btnAR.textContent = '▶ AR スタート';
       btnAR.addEventListener('click', async () => {
         resumeAudio();
@@ -4117,7 +4666,7 @@ async function setupUI() {
   renderer.xr.addEventListener('sessionstart', () => {
     // uiPanel.style.display  = 'none';
     stopUiParticles();
-    xrStatus.style.display = 'block';
+    if (xrStatus) xrStatus.style.display = 'block';
     // AR時は床・背景を非表示
     floor.visible          = !isARMode;
     scene.background       = isARMode ? null : new THREE.Color(0x0a0705);
@@ -4130,7 +4679,7 @@ async function setupUI() {
   renderer.xr.addEventListener('sessionend', () => {
     // uiPanel.style.display  = '';
     startUiParticles();
-    xrStatus.style.display = 'none';
+    if (xrStatus) xrStatus.style.display = 'none';
     floor.visible          = true;
     scene.background       = new THREE.Color(0x0a0705);
     isARMode               = false;
@@ -4324,6 +4873,17 @@ setVisibility();
 onEnterState(State.INTRO_0, null);
 _fadeMat.opacity = 1.0;
 
+/* [プリロード] 体験開始前の事前準備（3D画面が暗転している起動直後に1回だけ実行）
+  - フォント読み込み、タイトル文字レイヤーの作成、シェーダー・影・GPUリソースの準備
+  - 対象端末ではコントローラーモデルも取得（完了まで開始ボタンは無効のまま・最長4秒） */
+_warmUpFonts();
+_intro0TitleLayer = _renderIntro0TitleLayer(2048, 1024);
+_warmUpGpu();
+_preloadPromise = Promise.race([
+  _preloadControllerModels(),
+  new Promise(resolve => setTimeout(resolve, 4000)),
+]);
+
 /* フェード開始
   - 画面をフェードイン（2秒）
   - ゲーム開始演出 */
@@ -4392,7 +4952,10 @@ renderer.setAnimationLoop((t) => {
     - Fogも同期 */
   const _nowIsIntro = isIntroState(currentState);
   const _bgColor = _nowIsIntro ? _bgColorIntro : _bgColorGame;
-  if (scene.background !== _bgColor) {
+  if (isARMode && renderer.xr.isPresenting) {
+    // [不具合修正] AR中は背景色で塗りつぶさず、カメラ映像（パススルー）を見せる
+    if (scene.background !== null) scene.background = null;
+  } else if (scene.background !== _bgColor) {
     scene.background = _bgColor;
     if (scene.fog) scene.fog.color.copy(_bgColor);
   }
@@ -4414,6 +4977,10 @@ renderer.setAnimationLoop((t) => {
     case State.SHARPENING: updateSharpening(delta); break;
     case State.RESULT:     break;
   }
+
+  /* [描画品質] 動く物の接触影を更新 → 影は変化があったフレームだけ再計算 */
+  _updateContactShadows();
+  _updateShadowMapIfNeeded();
 
   /* 描画
     - シーンをレンダリング */
