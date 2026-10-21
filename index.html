@@ -417,10 +417,10 @@
     <!-- ─── 描画 ─── -->
     <div id="row-set-vr-scale" class="perf-row perf-row-seg">
       <div class="perf-label">
-        ① VR描画解像度 / VR render scale
-        <span class="perf-sub">100%：最も精細 / 85%（既定）/ 70%：軽量　※次のVR/AR開始から反映</span>
+        ① VRの解像度 / VR resolution
+        <span class="perf-sub">小さいほど負荷が下がり、映像は粗くなる　※次のVR/AR開始から反映</span>
       </div>
-      <div class="perf-seg" role="radiogroup" aria-label="VR描画解像度">
+      <div class="perf-seg" role="radiogroup" aria-label="VRの解像度">
         <input type="radio" name="set-vr-scale" id="set-vr-scale-100" value="1"><label for="set-vr-scale-100">100%</label>
         <input type="radio" name="set-vr-scale" id="set-vr-scale-85" value="0.85"><label for="set-vr-scale-85">85%</label>
         <input type="radio" name="set-vr-scale" id="set-vr-scale-70" value="0.7"><label for="set-vr-scale-70">70%</label>
@@ -429,7 +429,7 @@
     <div id="row-set-shadow" class="perf-row perf-row-seg">
       <div class="perf-label">
         ② 影の品質 / Shadow quality
-        <span class="perf-sub">高：精細な影 / 標準：やや粗い影（既定）/ オフ：影なし（軽量）</span>
+        <span class="perf-sub">高：精細な影 / 標準：やや粗い影 / オフ：影なし</span>
       </div>
       <div class="perf-seg" role="radiogroup" aria-label="影の品質">
         <input type="radio" name="set-shadow" id="set-shadow-high" value="high"><label for="set-shadow-high">高</label>
@@ -441,8 +441,8 @@
     <!-- ─── Instanceパーティクル系 ─── -->
     <div id="row-tog-game-instance-stop" class="perf-row">
       <label class="perf-label" for="tog-game-instance-stop">
-        ③ ゲーム中Instance停止 / Stop instances in-game
-        <span class="perf-sub">OFF：④の設定に従う / ON：ゲーム中は完全停止（軽量）</span>
+        ③ 周りに漂う火の粉：ゲーム中は止める / Freeze floating embers in-game
+        <span class="perf-sub">OFF：④の設定に従う / ON：ゲーム中は動きを止める</span>
       </label>
       <label class="perf-toggle">
         <input type="checkbox" id="tog-game-instance-stop">
@@ -451,8 +451,8 @@
     </div>
     <div id="row-tog-instance-throttle" class="perf-row">
       <label class="perf-label" for="tog-instance-throttle">
-        ④ ゲーム中Instance間引き / Throttle Instances in-game
-        <span class="perf-sub">OFF：毎フレーム更新 / ON：2フレームに1回更新（既定）</span>
+        ④ 周りに漂う火の粉：ゲーム中は間引く / Throttle floating embers in-game
+        <span class="perf-sub">OFF：毎フレーム更新 / ON：2フレームに1回更新（動く速さは同じ）</span>
       </label>
       <label class="perf-toggle">
         <input type="checkbox" id="tog-instance-throttle" checked>
@@ -463,8 +463,8 @@
     <!-- ─── Canvasパーティクル系 ─── -->
     <div id="row-tog-canvas-particles" class="perf-row">
       <label class="perf-label" for="tog-canvas-particles">
-        ⑤ ゲーム中パーティクル節約 / Save particles in-game
-        <span class="perf-sub">OFF：常時表示 / ON：ゲーム中は非表示（既定）</span>
+        ⑤ 説明パネルの火の粉：ゲーム中は消す / Hide panel embers in-game
+        <span class="perf-sub">OFF：常に表示 / ON：ゲーム中は表示しない</span>
       </label>
       <label class="perf-toggle">
         <input type="checkbox" id="tog-canvas-particles" checked>
@@ -473,8 +473,8 @@
     </div>
     <div id="row-tog-canvas-throttle" class="perf-row">
       <label class="perf-label" for="tog-canvas-throttle">
-        ⑥ ゲーム中Canvas間引き / Throttle Canvas in-game
-        <span class="perf-sub">OFF：毎フレーム転送 / ON：3フレームに1回転送（軽量）</span>
+        ⑥ 説明パネルの火の粉：ゲーム中は間引く / Throttle panel embers in-game
+        <span class="perf-sub">OFF：毎フレーム更新 / ON：3フレームに1回更新（⑤がOFFのときに有効）</span>
       </label>
       <label class="perf-toggle">
         <input type="checkbox" id="tog-canvas-throttle">
@@ -483,10 +483,10 @@
     </div>
     <div id="row-set-title-embers" class="perf-row perf-row-seg">
       <div class="perf-label">
-        ⑦ タイトル・リザルトの火の粉 / Title &amp; result embers
-        <span class="perf-sub">通常 / 間引き：3フレームに1回（既定）/ 停止：静止（軽量）</span>
+        ⑦ 説明パネルの火の粉：タイトル・結果 / Title &amp; result embers
+        <span class="perf-sub">通常：毎フレーム / 間引き：3フレームに1回 / 停止：動かさない</span>
       </div>
-      <div class="perf-seg" role="radiogroup" aria-label="タイトル・リザルトの火の粉">
+      <div class="perf-seg" role="radiogroup" aria-label="説明パネルの火の粉：タイトル・結果">
         <input type="radio" name="set-title-embers" id="set-title-embers-normal" value="normal"><label for="set-title-embers-normal">通常</label>
         <input type="radio" name="set-title-embers" id="set-title-embers-thin" value="thin"><label for="set-title-embers-thin">間引き</label>
         <input type="radio" name="set-title-embers" id="set-title-embers-stop" value="stop"><label for="set-title-embers-stop">停止</label>
@@ -890,13 +890,15 @@ let _cvStaticKey = null;
 /* [設定⑦] 間引き用のカウンタと、まとめて進める経過時間 */
 let _cvThinCount = 0;
 let _cvThinDelta = 0;
+/* [負荷削減] スタート画面の表示中にパネルの描画を止めていたか（再開時の描き直し用） */
+let _cvIdleSkipped = false;
 
 /* パネル更新（毎フレーム）
    - 背景描画
    - 粒子の更新＆描画（フェーズ・トグルに応じて制御）
    - テキストなど追加描画
    - 必要に応じてGPUへ転送 */
-function updateCvPanel(delta) {
+function updateCvPanel(delta, idleOutsideXR = false) {
   if (!_cvPtCanvas || !_cvPanelPts) return;
   const W   = _cvPtCanvas.width, H = _cvPtCanvas.height;
   if (!_cvPtCanvas._ctx2d) _cvPtCanvas._ctx2d = _cvPtCanvas.getContext('2d');
@@ -922,6 +924,25 @@ function updateCvPanel(delta) {
       _cvStaticKey.canvas === _cvPtCanvas && _cvStaticKey.fn === _cvPanelExtraFn && _cvStaticKey.mode === _cvPanelMode &&
       _cvStaticKey.xr === _xrNow && _cvStaticKey.embers === _embers) {
     return;
+  }
+
+  // [負荷削減] スタート画面の表示中（XR外）はパネルが見えないため、描画とGPU転送を止める
+  //   - 火の粉の動き（位置の更新）だけは従来どおり進める。XR開始の最初のフレームで必ず描き直す
+  if (idleOutsideXR) {
+    _cvIdleSkipped = true;
+    if (_showParticles && _embers === 'thin') {
+      _cvThinDelta += delta;
+      if ((_cvThinCount++ % 3) !== 0) return;
+      delta = _cvThinDelta;
+      _cvThinDelta = 0;
+    }
+    if (_showParticles && _embers !== 'stop') _tickParticles(_cvPanelPts, delta);
+    _cvStaticKey = null;
+    return;
+  }
+  if (_cvIdleSkipped) {   // 描画再開の最初のフレームは間引かずに描く
+    _cvIdleSkipped = false;
+    _cvThinCount = 0;
   }
 
   // [設定⑦] 間引き：3フレームに1回だけ描画・転送（経過時間はまとめて進めるので火の粉の速さは変わらない）
@@ -5201,7 +5222,12 @@ renderer.setAnimationLoop((t) => {
     - 火花・フェード・UIパネルを毎フレーム更新 */
   updateSparks(delta);
   updateFade(delta);
-  updateCvPanel(delta);
+  /* [負荷削減] スタート画面の表示中（XRセッション外）かどうか
+     - XR外では常にスタート画面（または操作方法・スコア記録・個別設定の画面）が3D画面の全体を覆っている
+     - その間は、見えない3D画面の描画・パネルの描画とGPU転送・影の計算を止める
+     - 体験の進行（フェード・粒子の動き・状態の更新）はこれまでどおり毎フレーム進める */
+  const _idleOutsideXR = !renderer.xr.isPresenting;
+  updateCvPanel(delta, _idleOutsideXR);
 
   /* 背景色切替
     - INTROとゲームで色を変更
@@ -5239,6 +5265,11 @@ renderer.setAnimationLoop((t) => {
     _pendingWarmUp = false;
     _warmUpGpu();
   }
+
+  /* [負荷削減] スタート画面の表示中はここまで（描画しない）
+     - 物の位置・向き（ワールド行列）の更新だけは描画時と同じく行う
+       （刃の接地補正など、位置計算に使う処理が描画の有無で変わらないように） */
+  if (_idleOutsideXR) { scene.updateMatrixWorld(); return; }
 
   /* [描画品質] 動く物の接触影を更新 → 影は変化があったフレームだけ再計算 */
   _updateContactShadows();
