@@ -341,6 +341,87 @@
     margin: 12px 0 2px; font-size: 12px; font-weight: 700; letter-spacing: 1px;
     color: rgba(255,170,80,0.65);
   }
+
+  /* ═══ PC・スマホ・タブレット体験（VR/AR機器なしで遊ぶモード） ═══ */
+  #btn-flat {
+    background: linear-gradient(135deg, #a87410, #4e3200);
+    box-shadow: 0 0 22px rgba(220,160,40,0.45), inset 0 1px 0 rgba(255,255,255,0.14);
+  }
+  #btn-flat small {
+    display: block; margin-top: 3px;
+    font-size: clamp(10px,1.3vw,12px); font-weight: 600; letter-spacing: 0.5px;
+    color: rgba(255,240,210,0.78);
+  }
+  body.flat-mode { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  body.flat-mode #canvas-container canvas { touch-action: none; }
+
+  #flatHud {
+    position: fixed; inset: 0; z-index: 20; pointer-events: none;
+    color: #ffe0b0; font-family: 'Helvetica Neue', Arial, sans-serif;
+  }
+  #flatHud[hidden], #flatHud [hidden] { display: none !important; }
+  #flatHud button { pointer-events: auto; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .flat-top {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+    padding: calc(10px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) 0 calc(12px + env(safe-area-inset-left));
+  }
+  .flat-top-right { display: flex; gap: 8px; }
+  .flat-btn {
+    min-height: 44px; padding: 10px 14px; border-radius: 12px; cursor: pointer;
+    border: 1px solid rgba(255,160,60,0.45); color: #fff;
+    font-size: 14px; font-weight: 800; letter-spacing: 0.5px; white-space: nowrap;
+    background: rgba(30,14,4,0.80);
+    -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  }
+  .flat-btn:active { transform: translateY(1px); opacity: 0.85; }
+  .flat-btn-sm { min-height: 40px; padding: 8px 12px; font-size: 13px; }
+  .flat-btn-a { background: linear-gradient(135deg, #c04a00, #7a2800); border-color: rgba(255,170,90,0.65); box-shadow: 0 0 14px rgba(200,70,10,0.45); }
+  .flat-btn-b { background: linear-gradient(135deg, #4a2a18, #2a160a); }
+  .flat-btn-x { background: linear-gradient(135deg, #006868, #003a3a); border-color: rgba(80,220,200,0.5); }
+  .flat-score {
+    position: absolute; left: 50%; top: calc(10px + env(safe-area-inset-top)); transform: translateX(-50%);
+    padding: 6px 14px; border-radius: 10px; white-space: pre-line; text-align: center;
+    font: bold 13px/1.45 monospace; color: #ffddaa;
+    background: rgba(10,0,0,0.74); border: 1px solid rgba(255,100,60,0.55);
+  }
+  #flatHud.is-panel .flat-score { display: none; }
+  .flat-bottom {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 0 calc(12px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
+  }
+  .flat-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
+  .flat-hint {
+    flex: 0 1 640px; min-width: 0;
+    padding: 8px 12px; border-radius: 12px; font-size: 13px; line-height: 1.55;
+    background: rgba(10,4,0,0.68); border: 1px solid rgba(255,150,50,0.25);
+  }
+  .flat-hint b { color: #ffcf80; }
+  .flat-hint small { display: block; margin-top: 2px; font-size: 11px; line-height: 1.4; color: rgba(160,196,228,0.88); }
+  .flat-actions { display: flex; gap: 8px; flex: 0 0 auto; }
+  .flat-power, .flat-note {
+    align-self: center; display: flex; align-items: center; gap: 8px;
+    padding: 5px 12px; border-radius: 10px; font-size: 12px; font-weight: 700;
+    background: rgba(0,0,0,0.60); border: 1px solid rgba(255,160,60,0.40);
+  }
+  .flat-power-bar { display: block; width: min(200px, 46vw); height: 10px; border-radius: 5px; overflow: hidden; background: rgba(255,255,255,0.10); }
+  #flat-power-fill { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #ffcc44, #ff5522); }
+  @media (max-width: 640px) {
+    .flat-row { flex-direction: column; align-items: stretch; }
+    .flat-hint { flex-basis: auto; font-size: 12px; }
+    .flat-actions { justify-content: flex-end; }
+    .flat-btn { padding: 9px 12px; font-size: 13px; }
+  }
+  @media (max-width: 560px) {
+    .flat-score { top: calc(60px + env(safe-area-inset-top)); }
+  }
+  @media (max-height: 480px) {
+    .flat-hint { padding: 6px 10px; font-size: 11.5px; line-height: 1.45; }
+    .flat-hint small { display: none; }
+    .flat-btn { min-height: 38px; padding: 7px 11px; }
+    .flat-btn-sm { min-height: 34px; padding: 6px 10px; }
+  }
 </style>
 </head>
 <body>
@@ -365,6 +446,8 @@
     <div id="vrButtonWrap">
       <button id="btn-vr" disabled>▶ VR スタート</button>
       <button id="btn-ar" disabled>▶ AR スタート</button>
+      <!-- VR/AR機器なしで体験（PC・スマホ・タブレット） -->
+      <button id="btn-flat" type="button">▶ PC・スマホ・タブレットで体験<small>VR機器なしで遊べます / Play without a headset</small></button>
     </div>
 
     <!-- 区切り線 -->
@@ -558,6 +641,16 @@
         <li><span class="tag">右Bボタン</span> 現在フェーズをリトライ / Retry current phase</li>
       </ul>
 
+      <h3>📱 PC・スマホ・タブレットで体験 / Without a headset</h3>
+      <ul>
+        <li><span class="tag">▶ PC・スマホ・タブレットで体験</span> から開始 / Start from the button below VR/AR</li>
+        <li>画面の <span class="tag">Ⓐ</span><span class="tag">Ⓑ</span><span class="tag">Ⓧ</span> がVRの A・B・X ボタンの代わり（キーボード：Space・R・F）/ On-screen buttons replace A, B, X</li>
+        <li>鍛造：鉄をドラッグして炉⇔作業台へ。タップ／クリックでハンマーを振る / Drag the iron, tap to hammer</li>
+        <li>成形：ゾーンをタップ／クリックで叩く（長押しで強く）。<span class="tag">Ⓧ</span>・右クリックで表裏反転 / Hold for a stronger hit</li>
+        <li>研ぎ：押したまま上下にスライドで研ぐ、左右で角度（PCはホイール・← → も可）/ Slide up-down, left-right for angle</li>
+        <li><span class="tag">📋 説明</span> で説明パネルを表示。スマホ縦向きでは左右スワイプで 日本語⇔English / Swipe to switch columns</li>
+      </ul>
+
       <h3>📊 スコア計算 / Score Breakdown</h3>
       <ul>
         <li>鍛造 × 0.3 ＋ 成形 × 0.4 ＋ 研ぎ × 0.3 ＝ 最終スコア（100点満点）</li>
@@ -565,6 +658,30 @@
         <li>90点以上：名人 / Master ／ 70点以上：職人 / Craftsman ／ それ未満：見習い / Apprentice</li>
       </ul>
 
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PC・スマホ・タブレット体験の操作画面（体験中のみ表示） ═══ -->
+<div id="flatHud" hidden>
+  <div class="flat-top">
+    <button class="flat-btn flat-btn-sm" id="flat-exit" type="button">✕ タイトルへ</button>
+    <div class="flat-score" id="flat-score" hidden></div>
+    <div class="flat-top-right">
+      <button class="flat-btn flat-btn-sm" id="flat-panel" type="button" hidden>📋 説明</button>
+      <button class="flat-btn flat-btn-sm" id="flat-fs" type="button" hidden aria-label="全画面表示 / Fullscreen">⛶</button>
+    </div>
+  </div>
+  <div class="flat-bottom">
+    <div class="flat-power" id="flat-power" hidden><span>力 / Power</span><span class="flat-power-bar"><span id="flat-power-fill"></span></span></div>
+    <div class="flat-note" id="flat-note" hidden></div>
+    <div class="flat-row">
+      <div class="flat-hint" id="flat-hint"></div>
+      <div class="flat-actions">
+        <button class="flat-btn flat-btn-x" id="flat-x" type="button" hidden>Ⓧ 裏返す</button>
+        <button class="flat-btn flat-btn-b" id="flat-b" type="button" hidden>Ⓑ やり直し</button>
+        <button class="flat-btn flat-btn-a" id="flat-a" type="button">Ⓐ 次へ</button>
+      </div>
     </div>
   </div>
 </div>
@@ -912,7 +1029,7 @@ function updateCvPanel(delta, idleOutsideXR = false) {
   // 内容が前フレームと変わらない状態：パーティクル非表示、または火の粉「停止」
   const _isStatic = !_showParticles || _embers === 'stop';
   // タイトル文字はXR中だけ描くため、XR中かどうかも内容の一部として扱う
-  const _xrNow = renderer.xr.isPresenting;
+  const _xrNow = renderer.xr.isPresenting || isFlatMode; // PC・スマホ・タブレット体験中もタイトル文字を描く
 
   // [負荷削減] 静止内容を描画・転送済みなら何もしない
   if (_isStatic && _cvStaticKey !== null &&
@@ -1707,6 +1824,7 @@ floor.rotation.x = -Math.PI / 2;
 floor.receiveShadow = true;
 scene.add(floor);
 let isARMode = false;
+let isFlatMode = false; // PC・スマホ・タブレットで体験中（VR/AR機器なし）
 
 /* 作業台の基準位置
    - すべての配置の中心となる座標 */
@@ -2250,6 +2368,7 @@ function _getScorePanel(lineCount) {
 }
 
 function updateScorePanel(text, worldPos) {
+  flatShowScoreText(text); // PC・スマホ・タブレット体験：画面上部にも同じ内容を表示
   /* 既存パネル削除
      - 毎回作り直すことで状態管理を単純化 */
   if (scorePanelMesh) scorePanelGroup.remove(scorePanelMesh);
@@ -2318,7 +2437,7 @@ function _renderIntro0TitleLayer(W, H) {
 function _drawIntro0Text(ctx, W, H) {
   /* XR判定
      - VR/AR時のみ描画 */
-  const isImmersive = renderer && renderer.xr && renderer.xr.isPresenting;
+  const isImmersive = (renderer && renderer.xr && renderer.xr.isPresenting) || isFlatMode; // PC・スマホ・タブレット体験中も表示
   if (!isImmersive) return;
   if (!_intro0TitleLayer || _intro0TitleLayer.width !== W || _intro0TitleLayer.height !== H) {
     _intro0TitleLayer = _renderIntro0TitleLayer(W, H);
@@ -5102,6 +5221,598 @@ setupUI();
 })();
 
 /* ================================================================
+   FLAT MODE（PC・スマホ・タブレットで体験）
+   - VR/AR機器がなくても、マウス・タッチ・キーボードで同じ3工程を体験できるモード
+   - 判定・スコア計算・演出は既存の処理をそのまま使う
+     → 「仮想の左右の手（コントローラーの代わり）」を用意し、画面操作をその手の
+        位置・向き・ボタン（トリガー／グリップ／A・B・X）に置き換えて既存の処理へ渡す
+   - 視点は工程ごとの固定カメラ（画面の縦横比に合わせ、全体が収まる距離に自動調整）
+   - 既存コード側の変更は「描画する条件」と「呼び出し」の数行のみ
+================================================================ */
+
+/* ---------- 1. 仮想の手（コントローラーの代わり） ----------
+   - 既存の入力関数（getRightGamepad 等）は rightController.gamepad を最初に参照するため、
+     同じ形のボタン情報を持たせれば、既存の判定処理がそのまま動く
+   - ボタン番号：0=トリガー / 1=グリップ / 4=A（右手）・X（左手） / 5=B（右手）
+   - 振動はスマホの振動機能で代用（対応端末のみ・右手のみ） */
+const FLAT_BTN = Object.freeze({ TRIGGER: 0, GRIP: 1, A: 4, X: 4, B: 5 });
+function _makeFlatGamepad(withHaptics) {
+  return {
+    buttons: Array.from({ length: 6 }, () => ({ pressed: false, touched: false, value: 0 })),
+    axes: [0, 0, 0, 0],
+    hapticActuators: withHaptics ? [{
+      pulse(strength, duration) {
+        try {
+          if (navigator.vibrate && strength >= 0.3) navigator.vibrate(Math.max(10, Math.round(Math.min(duration, 80) * strength)));
+        } catch (e) { /* 振動できない端末 */ }
+        return Promise.resolve(true);
+      },
+    }] : [],
+  };
+}
+const flatRightHand = new THREE.Group();
+const flatLeftHand  = new THREE.Group();
+flatRightHand.name = 'flatRightHand';
+flatLeftHand.name  = 'flatLeftHand';
+flatRightHand.gamepad = _makeFlatGamepad(true);
+flatLeftHand.gamepad  = _makeFlatGamepad(false);
+
+/* ---------- 2. 操作の設定値と状態 ---------- */
+const FLAT_SWING_TIME     = 0.10;  // 振り下ろしにかかる時間（秒）
+const FLAT_RECOVER_TIME   = 0.16;  // 振り上げ直しにかかる時間（秒）
+const FLAT_CHARGE_TIME    = 0.70;  // 長押しで最大まで振りかぶる時間（秒）
+const FLAT_HIT_INTERVAL   = 0.27;  // 打撃の最短間隔（鍛造0.25秒・成形0.18秒のクールタイムより長く）
+const FLAT_HAMMER_REACH   = 0.23;  // 手（握り）からハンマーヘッド中心まで（hammerGroup の配置0.05 ＋ ヘッド位置0.18）
+const FLAT_HAMMER_YAW     = THREE.MathUtils.degToRad(20); // 手前（やや右）から振り下ろす向き（柄がゾーン表示に重ならない）
+const FLAT_AIM_Y_FORGING  = 0.955;              // 鉄の上面付近（ヘッド中心がここに来た瞬間に当たる）
+const FLAT_AIM_Y_SHAPING  = BLADE_Y + 0.025;    // 刃物の上面付近
+const FLAT_IRON_HAND_Y    = 0.95;               // 鉄を掴んで動かすときの手の高さ（鉄は0.04m下＝作業台の上の高さ）
+const FLAT_SHARPEN_HAND_Y = workbenchPos.y + 0.13;
+const FLAT_SHARPEN_Z_REST = -1.04;              // 両手の中間（刃物はその0.06m奥＝砥石の中央）
+const FLAT_SHARPEN_Z_MIN  = -1.24;
+const FLAT_SHARPEN_Z_MAX  = -0.84;
+const FLAT_SHARPEN_STEP   = 0.012;              // 研ぎの移動を反映する最小量（フレームレートに左右されずストロークを判定するため）
+const _clamp = THREE.MathUtils.clamp;
+
+const _flat = {
+  pointerId: null, action: null,          // action: 'hammer' | 'iron' | 'sharpen' | 'panel'
+  downX: 0, downY: 0, lastX: 0, lastY: 0, moved: false,
+  overIron: false,
+  charging: false, charge: 0, c: 0, s: 1,  // c：振りかぶりの強さ（0〜1） / s：振り上げ位置（1=構え, 0=当たった瞬間）
+  swinging: false, swingC: 0, cooldown: 0,
+  aim: new THREE.Vector3(), swingAim: new THREE.Vector3(),
+  ironOffset: new THREE.Vector3(), ironHand: new THREE.Vector3(),
+  sharpHeld: false, sharpZ: FLAT_SHARPEN_Z_REST, sharpTargetZ: FLAT_SHARPEN_Z_REST, angle: 0,
+  panelView: false, panX: -1,              // panX：スマホ縦向きで説明パネルを左右に動かす位置（-1=日本語, +1=English）
+  lastState: null, lastShowing: null,
+  pulses: [],
+  camSnap: true,
+  coarse: false,                           // タッチ操作かどうか（案内文の切り替え用）
+  hudKey: '',
+};
+
+/* ボタンを短く押す（既存の処理は「押された瞬間」で判定するため、数フレームだけ押した状態にする） */
+function _flatPress(gamepad, idx, frames = 2) {
+  const b = gamepad.buttons[idx];
+  b.pressed = true; b.value = 1;
+  _flat.pulses.push({ b, frames });
+}
+function _flatReleaseAll() {
+  for (const gp of [flatRightHand.gamepad, flatLeftHand.gamepad]) {
+    for (const b of gp.buttons) { b.pressed = false; b.value = 0; }
+  }
+  _flat.pulses.length = 0;
+}
+function _flatIsGame(st) {
+  return st === State.FORGING || st === State.SHAPING || st === State.SHARPENING;
+}
+
+/* ---------- 3. ハンマーの構え・振り下ろし ----------
+   - 右手（仮想）を動かし、ハンマーヘッドが aim の位置に当たるように振り下ろす
+   - 既存の判定は「右手の速さ」を使うため、振りかぶりが大きいほど速く当たる（成形では強く叩ける）
+     ・素早いタップでも鍛造の速さ判定（0.8m/s）を超える速さで当たる */
+const _flatEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+function _flatPoseHammer(aim, s, c) {
+  const lift  = 0.07 + 0.18 * c;                         // 手の振り上げ高さ
+  const pitch = THREE.MathUtils.degToRad(12 + 38 * c);   // ハンマーの振り上げ角度
+  const e     = 2 * s - s * s;                           // 当たる瞬間に向かって加速
+  flatRightHand.position.set(
+    aim.x + Math.sin(FLAT_HAMMER_YAW) * FLAT_HAMMER_REACH,
+    aim.y + lift * e,
+    aim.z + Math.cos(FLAT_HAMMER_YAW) * FLAT_HAMMER_REACH
+  );
+  _flatEuler.set(pitch * e, FLAT_HAMMER_YAW, 0, 'YXZ');
+  flatRightHand.quaternion.setFromEuler(_flatEuler);
+}
+function _flatStartSwing() {
+  _flat.swinging = true;
+  _flat.swingC = _flat.c;
+  _flat.swingAim.copy(_flat.aim);
+  _flat.charge = 0;
+}
+
+/* ---------- 4. 画面上の位置 → 3D空間の位置 ---------- */
+const _flatRaycaster = new THREE.Raycaster();
+const _flatNdc   = new THREE.Vector2();
+const _flatPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const _flatHit   = new THREE.Vector3();
+function _flatRay(cx, cy) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  _flatNdc.set(((cx - rect.left) / Math.max(1, rect.width)) * 2 - 1, -((cy - rect.top) / Math.max(1, rect.height)) * 2 + 1);
+  camera.updateMatrixWorld();
+  _flatRaycaster.setFromCamera(_flatNdc, camera);
+  return _flatRaycaster.ray;
+}
+/* 高さ y の水平面との交点（_flatHit に入る。交わらなければ null） */
+function _flatOnPlaneY(cx, cy, y) {
+  _flatPlane.constant = -y;
+  return _flatRay(cx, cy).intersectPlane(_flatPlane, _flatHit);
+}
+function _flatAimAt(cx, cy) {
+  if (currentState === State.FORGING) {
+    if (_flatOnPlaneY(cx, cy, FLAT_AIM_Y_FORGING)) {
+      _flat.aim.set(_clamp(_flatHit.x, -0.6, 0.6), FLAT_AIM_Y_FORGING, _clamp(_flatHit.z, -1.45, -0.75));
+    }
+  } else if (currentState === State.SHAPING) {
+    if (_flatOnPlaneY(cx, cy, FLAT_AIM_Y_SHAPING)) {
+      _flat.aim.set(_clamp(_flatHit.x, -0.45, 0.35), FLAT_AIM_Y_SHAPING, _clamp(_flatHit.z, -1.4, -0.8));
+    }
+  }
+}
+function _flatDefaultAim() {
+  if (currentState === State.FORGING)      _flat.aim.set(0, FLAT_AIM_Y_FORGING, workbenchPos.z);
+  else if (currentState === State.SHAPING) _flat.aim.set(ZONE_POSITIONS[2], FLAT_AIM_Y_SHAPING, BLADE_WORLD_Z);
+}
+function _flatMoveIron(cx, cy) {
+  if (!_flatOnPlaneY(cx, cy, FLAT_IRON_HAND_Y)) return;
+  _flat.ironHand.set(
+    _clamp(_flatHit.x + _flat.ironOffset.x, -1.5, 0.6),
+    FLAT_IRON_HAND_Y,
+    _clamp(_flatHit.z + _flat.ironOffset.z, -1.5, -0.7)
+  );
+}
+function _flatResetInteraction() {
+  _flat.action = null;   // 押している指があっても、離すまで何もしない
+  _flat.charging = false; _flat.charge = 0; _flat.c = 0; _flat.s = 1;
+  _flat.swinging = false;
+  _flat.sharpHeld = false;
+  _flat.sharpZ = _flat.sharpTargetZ = FLAT_SHARPEN_Z_REST;
+}
+
+/* ---------- 5. マウス・タッチ操作 ----------
+   - 説明パネル表示中：タップで次へ（Aボタンと同じ）／スマホ縦向きは左右スワイプで日本語⇔English
+   - 鍛造：鉄の上からドラッグ → 鉄を掴んで移動（左手のグリップ）／それ以外の押して離す → ハンマー
+   - 成形：押して離す → ハンマー（長押しほど大きく振りかぶって強く当たる）
+   - 研ぎ：押している間は両手で保持。上下で前後に研ぎ、左右で刃の角度 */
+function _flatOnPointerDown(e) {
+  if (!isFlatMode || _flat.pointerId !== null) return;   // 2本目以降の指は使わない
+  if (e.pointerType === 'mouse' && e.button === 2) {     // 右クリック：成形の表裏反転（Xボタン）
+    if (currentState === State.SHAPING && !showingPhaseResult) _flatPress(flatLeftHand.gamepad, FLAT_BTN.X);
+    return;
+  }
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  e.preventDefault();
+  resumeAudio();
+  _flat.coarse = e.pointerType !== 'mouse';
+  _flat.pointerId = e.pointerId;
+  try { renderer.domElement.setPointerCapture(e.pointerId); } catch (err) { /* 未対応でも動作する */ }
+  _flat.downX = _flat.lastX = e.clientX;
+  _flat.downY = _flat.lastY = e.clientY;
+  _flat.moved = false;
+  _flat.action = null;
+
+  const view = _flatViewKey();
+  if (view === 'title' || view === 'panel' || view === 'result') { _flat.action = 'panel'; return; }
+
+  if (currentState === State.SHARPENING) {
+    _flat.action = 'sharpen';
+    _flat.sharpHeld = true;
+    _flat.sharpZ = _flat.sharpTargetZ = FLAT_SHARPEN_Z_REST;
+    return;
+  }
+  if (_flat.swinging) return;   // 振り下ろし中は受け付けない
+  _flat.action = 'hammer';
+  _flat.overIron = false;
+  if (currentState === State.FORGING) {
+    // 炉の中の鉄は見えないため、炉のあたりを押せば掴めるよう判定を広げる
+    _flat.overIron = _flatRay(e.clientX, e.clientY).distanceToPoint(ironMesh.position) < (ironInFurnace ? 0.24 : 0.11);
+  }
+  _flatAimAt(e.clientX, e.clientY);
+  _flat.charging = true;
+  _flat.charge = 0;
+}
+function _flatOnPointerMove(e) {
+  if (!isFlatMode) return;
+  if (_flat.pointerId === null) {
+    // PC：マウスの位置にハンマーを構える
+    if (e.pointerType === 'mouse' && !_flat.swinging) _flatAimAt(e.clientX, e.clientY);
+    return;
+  }
+  if (e.pointerId !== _flat.pointerId) return;
+  const dx = e.clientX - _flat.lastX, dy = e.clientY - _flat.lastY;
+  _flat.lastX = e.clientX; _flat.lastY = e.clientY;
+  if (!_flat.moved && Math.hypot(e.clientX - _flat.downX, e.clientY - _flat.downY) > 10) _flat.moved = true;
+  const W = Math.max(1, window.innerWidth), H = Math.max(1, window.innerHeight);
+
+  if (_flat.action === 'hammer') {
+    if (_flat.overIron && _flat.moved && currentState === State.FORGING) {
+      // 鉄の上から動かした → ハンマーはやめて、鉄を掴んで動かす
+      _flat.action = 'iron';
+      _flat.charging = false; _flat.charge = 0;
+      if (_flatOnPlaneY(_flat.downX, _flat.downY, FLAT_IRON_HAND_Y)) {
+        _flat.ironOffset.set(ironMesh.position.x - _flatHit.x, 0, ironMesh.position.z - _flatHit.z);
+      } else {
+        _flat.ironOffset.set(0, 0, 0);
+      }
+      _flat.ironHand.set(ironMesh.position.x, FLAT_IRON_HAND_Y, ironMesh.position.z);
+      _flatMoveIron(e.clientX, e.clientY);
+    } else if (!_flat.overIron && !_flat.swinging) {
+      _flatAimAt(e.clientX, e.clientY);
+    }
+  } else if (_flat.action === 'iron') {
+    _flatMoveIron(e.clientX, e.clientY);
+  } else if (_flat.action === 'sharpen') {
+    _flat.sharpTargetZ = _clamp(_flat.sharpTargetZ + dy * (0.75 / H), FLAT_SHARPEN_Z_MIN, FLAT_SHARPEN_Z_MAX);
+    _flat.angle = _clamp(_flat.angle + dx * (90 / W), -60, 40);
+  } else if (_flat.action === 'panel') {
+    if (_flat.moved && _flatUsesPan()) _flat.panX = _clamp(_flat.panX - dx / (W * 0.35), -1, 1);
+  }
+}
+function _flatOnPointerUp(e) {
+  if (e.pointerId !== _flat.pointerId) return;
+  const action = _flat.action, moved = _flat.moved;
+  const cancelled = e.type === 'pointercancel';
+  _flat.pointerId = null;
+  _flat.action = null;
+  try { renderer.domElement.releasePointerCapture(e.pointerId); } catch (err) { /* 既に解除済み */ }
+  if (!isFlatMode) return;
+  if (action === 'hammer') {
+    if (_flat.charging && !cancelled) _flatStartSwing();
+    _flat.charging = false;
+  } else if (action === 'sharpen') {
+    _flat.sharpHeld = false;
+  } else if (action === 'panel') {
+    if (!moved && !cancelled) _flatOnTap();
+  }
+}
+function _flatOnTap() {
+  const st = currentState;
+  if (isIntroState(st) || st === State.RESULT) _flatPress(flatRightHand.gamepad, FLAT_BTN.A);
+  else if (_flat.panelView && !showingPhaseResult) _flat.panelView = false; // 説明を閉じて作業に戻る
+}
+/* ---------- 6. カメラ（工程ごとの固定視点） ----------
+   - 見せたい範囲（幅 w × 高さ h、見下ろし角 pitch）が画面に収まる距離を、縦横比から毎フレーム計算
+   - 下部の操作ボタンにかからないよう、対象を画面のやや上に置く
+   - スマホ縦向きの説明パネルは半分（日本語 or English の列）を大きく映し、左右スワイプで移動 */
+const FLAT_VIEWS = Object.freeze({
+  title:      { x: 0,     y: 1.38, z: -2.2,  w: 2.9,  h: 1.5,  pitch: 0,  pan: false }, // INTRO_0（タイトル）
+  panel:      { x: 0,     y: 1.38, z: -2.2,  w: 2.7,  h: 1.5,  pitch: 0,  pan: true  }, // 説明・工程の結果
+  result:     { x: 0,     y: 1.55, z: -2.5,  w: 1.9,  h: 2.2,  pitch: 0,  pan: false }, // 最終結果
+  forging:    { x: -0.45, y: 0.98, z: -1.15, w: 2.2,  h: 1.0,  pitch: 40 },             // 炉と作業台（温度表示まで）
+  shaping:    { x: -0.05, y: 0.93, z: -1.1,  w: 1.0,  h: 0.78, pitch: 60 },             // 刃物とゾーン
+  sharpening: { x: 0.07,  y: 0.95, z: -1.1,  w: 0.9,  h: 0.62, pitch: 45 },             // 砥石と角度表示
+});
+function _flatViewKey() {
+  const st = currentState;
+  if (st === State.RESULT) return 'result';
+  if (isIntroState(st)) return st === State.INTRO_0 ? 'title' : 'panel';
+  if (showingPhaseResult || _flat.panelView) return 'panel';
+  if (st === State.FORGING) return 'forging';
+  if (st === State.SHAPING) return 'shaping';
+  return 'sharpening';
+}
+function _flatUsesPan(key = _flatViewKey()) {
+  return !!FLAT_VIEWS[key].pan && camera.aspect < 0.7;
+}
+const _flatCamPos   = new THREE.Vector3(0, 1.6, 0);
+const _flatCamLook  = new THREE.Vector3(0, 1.6, -1);
+const _flatWantPos  = new THREE.Vector3();
+const _flatWantLook = new THREE.Vector3();
+function _flatUpdateCamera(delta, key) {
+  const v = FLAT_VIEWS[key];
+  const aspect = Math.max(0.2, camera.aspect || 1);
+  const t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  const pan = _flatUsesPan(key);
+  const w = pan ? v.w * 0.52 : v.w;
+  const x = pan ? v.x + _flat.panX * v.w * 0.24 : v.x;
+  const d = Math.max(0.3, Math.max((v.h / 2) / t, (w / 2) / (t * aspect)) * 1.2);
+  const p = THREE.MathUtils.degToRad(v.pitch), sp = Math.sin(p), cp = Math.cos(p);
+  const shift = d * t * 0.15;
+  _flatWantPos.set(x, v.y + sp * d, v.z + cp * d);
+  _flatWantLook.set(x, v.y - cp * shift, v.z + sp * shift);
+  if (_flat.camSnap) {
+    _flatCamPos.copy(_flatWantPos); _flatCamLook.copy(_flatWantLook);
+    _flat.camSnap = false;
+  } else {
+    const k = 1 - Math.exp(-delta * 6);
+    _flatCamPos.lerp(_flatWantPos, k); _flatCamLook.lerp(_flatWantLook, k);
+  }
+  camera.position.copy(_flatCamPos);
+  camera.lookAt(_flatCamLook);
+}
+
+/* ---------- 7. 画面の操作ボタン・案内 ---------- */
+const _flatEls = {
+  hud:       document.getElementById('flatHud'),
+  hint:      document.getElementById('flat-hint'),
+  note:      document.getElementById('flat-note'),
+  power:     document.getElementById('flat-power'),
+  powerFill: document.getElementById('flat-power-fill'),
+  a:         document.getElementById('flat-a'),
+  b:         document.getElementById('flat-b'),
+  x:         document.getElementById('flat-x'),
+  panel:     document.getElementById('flat-panel'),
+  fs:        document.getElementById('flat-fs'),
+  exit:      document.getElementById('flat-exit'),
+};
+/* スコアパネルと同じ内容を画面上部にも表示（小さな画面でも読めるように）
+   - updateScorePanel から呼ばれる。体験中以外は画面ごと非表示のため表示されない */
+function flatShowScoreText(text) {
+  const el = document.getElementById('flat-score');
+  if (!el) return;
+  el.textContent = text || '';
+  el.hidden = !text;
+}
+function _flatShow(el, show) { if (el && el.hidden === show) el.hidden = !show; }
+function _flatHintHtml() {
+  const st = currentState, touch = _flat.coarse;
+  if (isIntroState(st)) {
+    return touch ? '画面をタップ または <b>Ⓐ</b> で次へ<small>Tap the screen or Ⓐ to continue</small>'
+                 : '画面をクリック・<b>Space</b> キー または <b>Ⓐ</b> で次へ<small>Click, press Space, or Ⓐ to continue</small>';
+  }
+  if (st === State.RESULT) {
+    return touch ? '画面をタップ または <b>Ⓐ</b> でもう一度<small>Tap or Ⓐ to play again</small>'
+                 : 'クリック・<b>Space</b> または <b>Ⓐ</b> でもう一度<small>Click, Space, or Ⓐ to play again</small>';
+  }
+  if (showingPhaseResult) return '<b>Ⓐ</b> 次の工程へ ／ <b>Ⓑ</b> この工程をやり直す<small>Ⓐ Next phase / Ⓑ Retry this phase</small>';
+  if (_flat.panelView) return (touch ? '画面をタップ' : 'クリック') + ' または <b>🔨 作業に戻る</b> で作業へ<small>Tap or “🔨 作業に戻る” to return</small>';
+  if (st === State.FORGING) {
+    return touch
+      ? '<b>鉄をドラッグ</b>：炉に入れて加熱 → 作業台に戻す ／ <b>タップ</b>：ハンマーで叩く<br>800〜900° が適温<small>Drag the iron into the furnace and back · Tap to hammer · 800–900° is ideal</small>'
+      : '<b>鉄をドラッグ</b>：炉⇔作業台へ移動 ／ <b>クリック</b>：ハンマーで叩く ／ 800〜900° が適温<small>Drag the iron to heat it · Click to hammer · Space = Ⓐ, R = Ⓑ</small>';
+  }
+  if (st === State.SHAPING) {
+    return touch
+      ? '<b>ゾーンをタップ</b>：叩く（長押しで強く）／ <b>Ⓧ</b>：表裏反転<br>＋は表から、−は裏から叩く<small>Tap zones to hammer (hold = stronger) · Ⓧ flips · + from front, − from back</small>'
+      : '<b>クリック</b>：叩く（長押しで強く）／ <b>右クリック・F</b>：表裏反転<br>＋は表から、−は裏から叩く<small>Click to hammer (hold = stronger) · Right-click or F flips</small>';
+  }
+  return touch
+    ? '<b>押したまま上下</b>：研ぐ ／ <b>左右</b>：刃の角度（目標 −15°）<small>Hold and slide up/down to sharpen · left/right sets the angle (target −15°)</small>'
+    : '<b>ドラッグ上下</b>：研ぐ ／ <b>左右・ホイール・← →</b>：刃の角度（目標 −15°）<small>Drag up/down to sharpen · left/right, wheel or ← → for the angle</small>';
+}
+function _flatUpdateHud(key) {
+  const st = currentState;
+  const isGame = _flatIsGame(st);
+  const pan = _flatUsesPan(key);
+  _flatEls.hud.classList.toggle('is-panel', key === 'panel' || key === 'title' || key === 'result'); // パネル表示中はスコア表示を隠す
+  _flatShow(_flatEls.b, isGame);
+  _flatShow(_flatEls.x, st === State.SHAPING && !showingPhaseResult);
+  _flatShow(_flatEls.panel, isGame && !showingPhaseResult);
+  const showPower = _flat.charging && _flat.action === 'hammer';
+  _flatShow(_flatEls.power, showPower);
+  if (showPower) _flatEls.powerFill.style.width = `${Math.round(_flat.charge * 100)}%`;
+  const portraitWork = !pan && camera.aspect < 0.7 && (key === 'forging' || key === 'shaping' || key === 'sharpening');
+  const note = pan ? '◀ ▶ 左右にスワイプで 日本語 / English' : portraitWork ? '📱 横向きで大きく表示 / Rotate' : '';
+  if (_flatEls.note.textContent !== note) _flatEls.note.textContent = note;
+  _flatShow(_flatEls.note, !!note);
+  const hudKey = [st, showingPhaseResult, _flat.panelView, _flat.coarse].join('|');
+  if (hudKey !== _flat.hudKey) {
+    _flat.hudKey = hudKey;
+    _flatEls.hint.innerHTML = _flatHintHtml();
+    _flatEls.a.textContent = st === State.RESULT ? 'Ⓐ もう一度' : (isGame && !showingPhaseResult ? 'Ⓐ 終了' : 'Ⓐ 次へ');
+    _flatEls.panel.textContent = _flat.panelView ? '🔨 作業に戻る' : '📋 説明';
+  }
+}
+
+/* ---------- 8. 毎フレームの更新（メインループの入力処理の直前に呼ぶ） ---------- */
+function updateFlatMode(delta) {
+  if (!isFlatMode) return;
+  const st = currentState;
+
+  // 押したボタンを規定フレーム後に離す
+  for (let i = _flat.pulses.length - 1; i >= 0; i--) {
+    const p = _flat.pulses[i];
+    if (--p.frames <= 0) { p.b.pressed = false; p.b.value = 0; _flat.pulses.splice(i, 1); }
+  }
+  _flat.cooldown = Math.max(0, _flat.cooldown - delta);
+
+  // 工程の切り替わり（暗転中に起きるため、カメラはすぐに切り替える）
+  if (_flat.lastState !== st) {
+    _flat.lastState = st;
+    _flatResetInteraction();
+    _flatDefaultAim();
+    _flat.panelView = false; _flat.panX = -1; _flat.camSnap = true;
+    if (st === State.SHARPENING) _flat.angle = 0;
+  }
+  // 工程の結果表示の切り替わり（結果は説明パネルに表示されるため、パネルを映す）
+  if (_flat.lastShowing !== showingPhaseResult) {
+    _flat.lastShowing = showingPhaseResult;
+    _flat.panelView = false; _flat.panX = -1;
+    if (showingPhaseResult) { _flat.charging = false; _flat.sharpHeld = false; _flat.action = null; }
+  }
+
+  // 仮想の手の位置・向き・グリップ
+  let lGrip = false, rGrip = false;
+  if (st === State.FORGING || st === State.SHAPING) {
+    if (_flat.swinging && _flat.cooldown > FLAT_SWING_TIME * _flat.s) {
+      // 前の打撃の直後：振り上げ直しを続け、間隔を空けられる所から振り下ろす
+      _flat.s = Math.min(1, _flat.s + delta / FLAT_RECOVER_TIME);
+      _flatPoseHammer(_flat.swingAim, _flat.s, _flat.swingC);
+    } else if (_flat.swinging) {
+      const step = delta / FLAT_SWING_TIME;
+      _flat.s -= step;
+      if (_flat.s <= step * 0.5) { // 端数（小数の誤差）で当たる瞬間が1フレーム遅れて速さが落ちないように
+        _flat.s = 0; _flat.swinging = false;
+        _flatPoseHammer(_flat.swingAim, 0, _flat.swingC);
+        _flatPress(flatRightHand.gamepad, FLAT_BTN.TRIGGER, 1); // 当たった瞬間だけトリガーを引く
+        _flat.c = 0;
+        _flat.cooldown = FLAT_HIT_INTERVAL;
+      } else {
+        _flatPoseHammer(_flat.swingAim, _flat.s, _flat.swingC);
+      }
+    } else {
+      _flat.s = Math.min(1, _flat.s + delta / FLAT_RECOVER_TIME);
+      if (_flat.charging) _flat.charge = Math.min(1, _flat.charge + delta / FLAT_CHARGE_TIME);
+      const cTarget = _flat.charging ? _flat.charge : 0;
+      _flat.c += (cTarget - _flat.c) * Math.min(1, delta * 12);
+      _flatPoseHammer(_flat.aim, _flat.s, _flat.c);
+    }
+    if (st === State.FORGING && _flat.action === 'iron') {
+      // 掴むまでは手を鉄の位置に置く（素早くドラッグしても既存の「手と鉄の距離」判定で確実に掴めるように）
+      if (ironHeld) flatLeftHand.position.copy(_flat.ironHand);
+      else          flatLeftHand.position.set(ironMesh.position.x, ironMesh.position.y + 0.04, ironMesh.position.z);
+      lGrip = true;
+    } else {
+      flatLeftHand.position.set(-0.3, 1.3, -0.6);
+    }
+    flatLeftHand.quaternion.identity();
+  } else if (st === State.SHARPENING) {
+    if (_flat.sharpHeld && !showingPhaseResult) {
+      if (Math.abs(_flat.sharpTargetZ - _flat.sharpZ) >= FLAT_SHARPEN_STEP) _flat.sharpZ = _flat.sharpTargetZ;
+      lGrip = rGrip = true;
+    } else {
+      _flat.sharpZ = _flat.sharpTargetZ = FLAT_SHARPEN_Z_REST;
+    }
+    flatLeftHand.position.set(-0.15, FLAT_SHARPEN_HAND_Y, _flat.sharpZ);
+    flatRightHand.position.set(0.15, FLAT_SHARPEN_HAND_Y, _flat.sharpZ);
+    _flatEuler.set(THREE.MathUtils.degToRad(_flat.angle), 0, 0, 'YXZ'); // 両手を同じ角度に傾ける
+    flatLeftHand.quaternion.setFromEuler(_flatEuler);
+    flatRightHand.quaternion.copy(flatLeftHand.quaternion);
+  } else {
+    flatRightHand.position.set(0.3, 1.3, -1.0);  flatRightHand.quaternion.identity();
+    flatLeftHand.position.set(-0.3, 1.3, -1.0);  flatLeftHand.quaternion.identity();
+    hammerGroup.visible = false;
+  }
+  const lb = flatLeftHand.gamepad.buttons, rb = flatRightHand.gamepad.buttons;
+  lb[FLAT_BTN.GRIP].pressed = lGrip; lb[FLAT_BTN.GRIP].value = lGrip ? 1 : 0;
+  rb[FLAT_BTN.GRIP].pressed = rGrip; rb[FLAT_BTN.GRIP].value = rGrip ? 1 : 0;
+
+  // 表示の切り替え（平面の画面向け）
+  //  - 作業中：説明パネルは画面上端で途切れて読めないため隠し、「📋 説明」で全体を映す
+  //  - スコアは画面上部の表示（flatShowScoreText）で見せるため、3Dのスコアパネルは出さない
+  //  - 説明パネルを映している間は、手前の角度表示で文字が隠れないようにする
+  const key = _flatViewKey();
+  const isGame = _flatIsGame(st);
+  infoPanel.visible       = st !== State.RESULT && !(isGame && key !== 'panel');
+  scorePanelGroup.visible = false;
+  angleHudMesh.visible    = st === State.SHARPENING && key !== 'panel';
+
+  _flatUpdateCamera(delta, key);
+  _flatUpdateHud(key);
+}
+
+/* ---------- 9. 開始・終了 ---------- */
+function enterFlatMode() {
+  if (isFlatMode || renderer.xr.isPresenting) return;
+  resumeAudio();
+  isFlatMode = true;
+  _flat.coarse = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  _flatReleaseAll();
+  _flatResetInteraction();
+  _flat.pointerId = null;
+  _flat.lastState = null; _flat.lastShowing = null; _flat.hudKey = '';
+  _flat.camSnap = true; _flat.cooldown = 0;
+  rightController = flatRightHand;
+  leftController  = flatLeftHand;
+  scene.add(flatRightHand);
+  scene.add(flatLeftHand);
+  document.getElementById('uiPanel').style.display = 'none';
+  stopUiParticles();
+  document.body.classList.add('flat-mode');
+  _flatEls.hud.hidden = false;
+  if (_fadeDir === 0) startFade(1, 0.8, null); // 暗転から明るく
+}
+function exitFlatMode() {
+  if (!isFlatMode) return;
+  isFlatMode = false;
+  _flatReleaseAll();
+  _flatResetInteraction();
+  _flat.pointerId = null;
+  if (rightController === flatRightHand) rightController = null;
+  if (leftController  === flatLeftHand)  leftController  = null;
+  scene.remove(flatRightHand);
+  scene.remove(flatLeftHand);
+  infoPanel.visible       = currentState !== State.RESULT;   // setVisibility と同じ表示状態に戻す
+  scorePanelGroup.visible = _flatIsGame(currentState);
+  angleHudMesh.visible    = currentState === State.SHARPENING;
+  camera.position.set(0, 1.6, 0);                             // 起動時と同じ視点に戻す
+  camera.quaternion.identity();
+  camera.updateMatrixWorld();
+  _flatEls.hud.hidden = true;
+  document.body.classList.remove('flat-mode');
+  document.getElementById('uiPanel').style.display = '';
+  startUiParticles();
+  try {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      const r = (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      if (r && r.catch) r.catch(() => {});
+    }
+  } catch (e) { /* 全画面を解除できない環境 */ }
+}
+
+/* ---------- 10. イベント登録 ---------- */
+(function initFlatMode() {
+  document.getElementById('btn-flat').addEventListener('click', enterFlatMode);
+  _flatEls.exit.addEventListener('click', exitFlatMode);
+
+  const tapBtn = (el, fn) => el.addEventListener('click', (e) => {
+    e.currentTarget.blur(); // キーボード操作（Space/Enter）がボタンに重ねて効かないように
+    resumeAudio();
+    fn();
+  });
+  tapBtn(_flatEls.a, () => _flatPress(flatRightHand.gamepad, FLAT_BTN.A));
+  tapBtn(_flatEls.b, () => _flatPress(flatRightHand.gamepad, FLAT_BTN.B));
+  tapBtn(_flatEls.x, () => _flatPress(flatLeftHand.gamepad, FLAT_BTN.X));
+  tapBtn(_flatEls.panel, () => { _flat.panelView = !_flat.panelView; _flat.panX = -1; });
+
+  // 全画面表示（対応ブラウザのみボタンを表示）
+  const root = document.documentElement;
+  const requestFs = root.requestFullscreen || root.webkitRequestFullscreen;
+  if (requestFs && (document.fullscreenEnabled || document.webkitFullscreenEnabled)) {
+    _flatEls.fs.hidden = false;
+    tapBtn(_flatEls.fs, () => {
+      try {
+        const r = (document.fullscreenElement || document.webkitFullscreenElement)
+          ? (document.exitFullscreen || document.webkitExitFullscreen).call(document)
+          : requestFs.call(root);
+        if (r && r.catch) r.catch(() => {});
+      } catch (e) { /* 全画面にできない環境 */ }
+    });
+  }
+
+  const cv = renderer.domElement;
+  cv.addEventListener('pointerdown',   _flatOnPointerDown);
+  cv.addEventListener('pointermove',   _flatOnPointerMove);
+  cv.addEventListener('pointerup',     _flatOnPointerUp);
+  cv.addEventListener('pointercancel', _flatOnPointerUp);
+  cv.addEventListener('contextmenu', (e) => { if (isFlatMode) e.preventDefault(); });
+  // 研ぎ：マウスホイールで刃の角度
+  cv.addEventListener('wheel', (e) => {
+    if (!isFlatMode || currentState !== State.SHARPENING) return;
+    e.preventDefault();
+    _flat.angle = _clamp(_flat.angle + _clamp(-e.deltaY * 0.02, -2, 2), -60, 40);
+  }, { passive: false });
+
+  // キーボード（PC）：Space/Enter=Ⓐ、R/Backspace=Ⓑ、F/X=Ⓧ、← →=研ぎの角度
+  window.addEventListener('keydown', (e) => {
+    if (!isFlatMode || e.ctrlKey || e.metaKey || e.altKey) return;
+    const k = e.key;
+    if (k === ' ' || k === 'Enter') {
+      e.preventDefault();
+      if (!e.repeat) _flatPress(flatRightHand.gamepad, FLAT_BTN.A);
+    } else if (k === 'r' || k === 'R' || k === 'Backspace') {
+      e.preventDefault();
+      if (!e.repeat) _flatPress(flatRightHand.gamepad, FLAT_BTN.B);
+    } else if (k === 'f' || k === 'F' || k === 'x' || k === 'X') {
+      if (!e.repeat) _flatPress(flatLeftHand.gamepad, FLAT_BTN.X);
+    } else if ((k === 'ArrowLeft' || k === 'ArrowRight') && currentState === State.SHARPENING) {
+      e.preventDefault();
+      _flat.angle = _clamp(_flat.angle + (k === 'ArrowRight' ? 1 : -1), -60, 40);
+    }
+  });
+})();
+
+/* ================================================================
    INITIAL STATE（初期状態設定）
 ================================================================ */
 /* 初期状態設定
@@ -5200,7 +5911,7 @@ renderer.setAnimationLoop((t) => {
      - XR外では常にスタート画面（または操作方法・スコア記録・個別設定の画面）が3D画面の全体を覆っている
      - その間は、見えない3D画面の描画・パネルの描画とGPU転送・影の計算を止める
      - 体験の進行（フェード・粒子の動き・状態の更新）はこれまでどおり毎フレーム進める */
-  const _idleOutsideXR = !renderer.xr.isPresenting;
+  const _idleOutsideXR = !renderer.xr.isPresenting && !isFlatMode; // PC・スマホ・タブレット体験中は描画する
   updateCvPanel(delta, _idleOutsideXR);
 
   /* 背景色切替
@@ -5215,6 +5926,9 @@ renderer.setAnimationLoop((t) => {
     scene.background = _bgColor;
     if (scene.fog) scene.fog.color.copy(_bgColor);
   }
+
+  /* PC・スマホ・タブレット体験：画面操作を仮想の手（コントローラー）とカメラに反映 */
+  updateFlatMode(delta);
 
   /* 入力処理
     - A/Bボタンなどの全体入力を処理 */
@@ -5235,7 +5949,7 @@ renderer.setAnimationLoop((t) => {
   }
 
   /* [設定②] 影のオン／オフを切り替えた後は、XR外（タイトル画面）でシェーダーの準備をやり直す */
-  if (_pendingWarmUp && !renderer.xr.isPresenting) {
+  if (_pendingWarmUp && !renderer.xr.isPresenting && !isFlatMode) {
     _pendingWarmUp = false;
     _warmUpGpu();
   }
