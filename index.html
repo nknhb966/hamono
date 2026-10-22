@@ -379,6 +379,9 @@
   .flat-btn-a { background: linear-gradient(135deg, #c04a00, #7a2800); border-color: rgba(255,170,90,0.65); box-shadow: 0 0 14px rgba(200,70,10,0.45); }
   .flat-btn-b { background: linear-gradient(135deg, #4a2a18, #2a160a); }
   .flat-btn-x { background: linear-gradient(135deg, #006868, #003a3a); border-color: rgba(80,220,200,0.5); }
+  .flat-btn-reset { position: relative; overflow: hidden; }
+  .flat-reset-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: rgba(255,120,40,0.6); pointer-events: none; }
+  .flat-reset-label { position: relative; pointer-events: none; }
   .flat-score {
     position: absolute; left: 50%; top: calc(10px + env(safe-area-inset-top)); transform: translateX(-50%);
     padding: 6px 14px; border-radius: 10px; white-space: pre-line; text-align: center;
@@ -638,13 +641,16 @@
       <h3>🎮 共通 / Common</h3>
       <ul>
         <li><span class="tag">右Aボタン</span> 次のフェーズへ進む（結果確認後） / Advance to next phase (after result)</li>
-        <li><span class="tag">右Bボタン</span> 現在フェーズをリトライ / Retry current phase</li>
+        <li><span class="tag">右Bボタン</span> 一つ前の画面に戻る（工程の結果表示中は、その工程をやり直す）/ Back to the previous screen (on a phase result: retry the phase)</li>
+        <li><span class="tag">左グリップ＋Yボタン</span> 2秒長押しでリセット：最初のイントロに戻り、点数を0にして、向いている方向の正面に表示 / Hold 2 s to reset and face the scene toward you</li>
+        <li>床の高さ：VR/AR開始時に自動で合わせます。ずれているときはコントローラーを床に当て、<span class="tag">スティック</span> を1秒押し込む / Floor auto-aligns; to fix it, touch the floor with a controller and hold the stick for 1 s</li>
       </ul>
 
       <h3>📱 PC・スマホ・タブレットで体験 / Without a headset</h3>
       <ul>
         <li><span class="tag">▶ PC・スマホ・タブレットで体験</span> から開始 / Start from the button below VR/AR</li>
-        <li>画面の <span class="tag">Ⓐ</span><span class="tag">Ⓑ</span><span class="tag">Ⓧ</span> がVRの A・B・X ボタンの代わり（キーボード：Space・R・F）/ On-screen buttons replace A, B, X</li>
+        <li>画面の <span class="tag">Ⓐ</span><span class="tag">Ⓑ</span><span class="tag">Ⓧ</span> がVRの A・B・X ボタンの代わり（キーボード：Space・R・F）。<span class="tag">Ⓑ</span> で一つ前の画面に戻る / On-screen buttons replace A, B, X; Ⓑ goes back</li>
+        <li><span class="tag">↺ リセット</span> を2秒長押しで最初のイントロに戻り、点数を0に / Hold “Reset” for 2 s</li>
         <li>鍛造：鉄をドラッグして炉⇔作業台へ。タップ／クリックでハンマーを振る / Drag the iron, tap to hammer</li>
         <li>成形：ゾーンをタップ／クリックで叩く（長押しで強く）。<span class="tag">Ⓧ</span>・右クリックで表裏反転 / Hold for a stronger hit</li>
         <li>研ぎ：押したまま上下にスライドで研ぐ、左右で角度（PCはホイール・← → も可）/ Slide up-down, left-right for angle</li>
@@ -668,6 +674,7 @@
     <button class="flat-btn flat-btn-sm" id="flat-exit" type="button">✕ タイトルへ</button>
     <div class="flat-score" id="flat-score" hidden></div>
     <div class="flat-top-right">
+      <button class="flat-btn flat-btn-sm flat-btn-reset" id="flat-reset" type="button" aria-label="リセット（2秒長押し）/ Reset (hold 2 s)"><span class="flat-reset-fill" id="flat-reset-fill"></span><span class="flat-reset-label">↺ リセット</span></button>
       <button class="flat-btn flat-btn-sm" id="flat-panel" type="button" hidden>📋 説明</button>
       <button class="flat-btn flat-btn-sm" id="flat-fs" type="button" hidden aria-label="全画面表示 / Fullscreen">⛶</button>
     </div>
@@ -2910,7 +2917,7 @@ function buildResultCanvas(score, bladeStateSnap, scores, savedId) {
   ctx.fillStyle = 'rgba(255,200,150,0.6)';
   ctx.font = '28px serif';
   ctx.textAlign = 'center';
-  ctx.fillText('Aボタンで再プレイ / Press A to Replay', W/2, H - 60);
+  ctx.fillText('Aボタンで再プレイ ／ Bボタンで戻る  —  A: Replay / B: Back', W/2, H - 60);
   return c;
 }
 
@@ -3373,7 +3380,9 @@ function onEnterState(state, prev) {
       Math.max(0, Math.min(100, fS * w.FORGING + sS * w.SHAPING + hS * w.SHARPENING))
     );
 
+    _scoresBeforeLastSave = loadScores();   // Bボタンで戻ったときに記録を取り消すため
     const { scores, rank, id } = saveScore(finalScore);
+    _lastSavedScoreId = id;
     showResultPanel(finalScore,
       { _forging: fS, _shaping: sS, _sharpening: hS },
       scores, id
@@ -3394,7 +3403,7 @@ const TEXT_DATA = {
 農民のために鎌を作ったことが起源です。
 600年以上にわたり、その技は受け継がれています。
 
-　　　Aボタン ▶ 次へ
+　　　Aボタン ▶ 次へ　／　Bボタン ◀ 戻る
 ---
 Echizen Uchihamono began in 1337.
 The swordsmith Chiyozuru Kuniyasu moved here from Kyoto
@@ -3402,7 +3411,7 @@ and started making sickles for local farmers.
 For over 600 years, this craft has been passed down
 from generation to generation.
 
-　　　Press A ▶ Next`
+　　　Press A ▶ Next  /  B ◀ Back`
     },
 
     [State.INTRO_2]: {
@@ -3420,7 +3429,7 @@ from generation to generation.
 一部は機械化されても、基本の作り方は
 700年前からほとんど変わっていません。
 
-　　　Aボタン ▶ 次へ
+　　　Aボタン ▶ 次へ　／　Bボタン ◀ 戻る
 ---
 Forged blades are created through many steps.
 They can be broadly divided into three main stages:
@@ -3436,7 +3445,7 @@ Some parts are mechanized today,
 but the fundamental method has remained
 nearly unchanged for 700 years.
 
-　　　Press A ▶ Next`
+　　　Press A ▶ Next  /  B ◀ Back`
     },
 
     [State.INTRO_3]: {
@@ -3454,7 +3463,7 @@ nearly unchanged for 700 years.
 この技法によって、軽くて薄く、
 切れ味が長く続く越前打刃物が生まれます。
 
-　　　Aボタン ▶ 次へ
+　　　Aボタン ▶ 次へ　／　Bボタン ◀ 戻る
 ---
 A defining feature of Echizen Uchihamono is the technique
 called “Nimai‑hiroge.”
@@ -3472,7 +3481,7 @@ reducing uneven results.
 This technique produces blades that are light, thin,
 and maintain sharpness for a long time.
 
-　　　Press A ▶ Next`
+　　　Press A ▶ Next  /  B ◀ Back`
     },
 
     [State.INTRO_4]: {
@@ -3489,7 +3498,7 @@ and maintain sharpness for a long time.
 ③ 研ぎ：
 刃の角度を保ちながら磨き上げ、仕上げる
 
-　　　Aボタン ▶ 次へ
+　　　Aボタン ▶ 次へ　／　Bボタン ◀ 戻る
 ---
 In this experience, you will recreate the steps
 a craftsman follows to make a blade.
@@ -3504,7 +3513,7 @@ Use the Nimai‑hiroge technique to thin and even the blade
 ③ Sharpening:
 Maintain the correct angle and polish the edge to finish it
 
-　　　Press A ▶ Next`
+　　　Press A ▶ Next  /  B ◀ Back`
     }
   },
 
@@ -3525,7 +3534,7 @@ Perfect：+5 ／ Good：+1 ／ Miss：−3
 30回叩くと終了
 
 Aボタン：次の工程へ（途中終了も可）
-Bボタン：この工程をやり直す
+Bボタン：一つ前の画面に戻る
 ---
 Forging is the first step of blade making.
 Heat the iron and increase its strength
@@ -3543,7 +3552,7 @@ Perfect: +5 / Good: +1 / Miss: −3
 30 hits to complete
 
 A Button: Next phase (can finish early)
-B Button: Retry this phase`
+B Button: Back to the previous screen`
   },
 
   shaping: {
@@ -3563,7 +3572,7 @@ B Button: Retry this phase`
 50回叩くと終了
 
 Aボタン：次の工程へ（途中終了も可）
-Bボタン：この工程をやり直す
+Bボタン：一つ前の画面に戻る
 ---
 "Nimai-hiroge" is a unique Echizen technique
 where two blades are hammered together.
@@ -3582,7 +3591,7 @@ Closer to zero distortion = higher score (better uniformity)
 50 hits to complete
 
 A Button: Next phase (can finish early)
-B Button: Retry this phase`
+B Button: Back to the previous screen`
   },
 
   sharpening: {
@@ -3604,7 +3613,7 @@ B Button: Retry this phase`
 30ストロークで終了
 
 Aボタン：結果へ
-Bボタン：この工程をやり直す
+Bボタン：一つ前の画面に戻る
 ---
 Sharpening is the final step that completes the blade.
 Sharpness and precision depend
@@ -3624,7 +3633,7 @@ Keep both hands aligned (NG if mismatched)
 30 strokes to complete
 
 A Button: View results
-B Button: Retry this phase`
+B Button: Back to the previous screen`
   }
 
 };
@@ -3772,10 +3781,9 @@ function handleGlobalInput() {
   wasAPressed = aPressed;
 
   /* Bボタン処理
-    - 現在フェーズをリトライ */
-  if (bPressed && !wasBPressed && !_inputLocked && _nowIsGame) {
-    showingPhaseResult = false;
-    retryState();
+    - 一つ前の画面に戻る（工程の結果表示中は、その工程を最初からやり直す）→ goBack */
+  if (bPressed && !wasBPressed && !_inputLocked) {
+    goBack();
   }
 
   wasBPressed = bPressed;
@@ -4770,7 +4778,10 @@ function _warmUpFonts() {
   try {
     const extra = '完成 ─ 越前打刃物 Echizen Blades Complete 点 / pts 【 名人 / Master 職人 Craftsman 見習い Apprentice 】' +
       '🥇🥈🥉★ NEW RECORD! TOP ① 鍛造 Forging ② 成形 Shaping ③ 研ぎ Sharpen ×0.3 pt ─ ランキング / Ranking ─ ' +
-      'Aボタンで再プレイ / Press A to Replay 打撃 強度: 均一度: ストローク 鋭利度: Perfect Good Miss ◎○△× NG +-° ' +
+      'Aボタンで再プレイ / Press A to Replay ／ Bボタンで戻る — A: Replay / B: Back 打撃 強度: 均一度: ストローク 鋭利度: Perfect Good Miss ◎○△× NG +-° ' +
+      '床の高さを自動で合わせました 床がずれているとき：コントローラーを床に当てて スティックを1秒押し込む 床合わせ：押し込む 床の高さを合わせています… ' +
+      'リセット：そのまま長押し リセットしました Floor aligned automatically cm Touch the floor & hold the stick Put the controller on the floor and hold ' +
+      'Aligning the floor — keep holding Reset — keep holding grip + Y ' +
       '△ 高温/HOT 〇 適温/GOOD × 低温/COLD 鍛造結果 成形結果 研ぎ結果（途中終了）完了 Phase Complete Early Finish ' +
       '強度（鍛造）均一度（成形）鋭利度（研ぎ）叩きの精度が仕上がりに影響します 均一さが刃の美しさと精度を左右します ' +
       '角度と安定性が刃の鋭さを決めます Strength Uniformity Sharpness Hammer accuracy shapes the result ' +
@@ -4994,7 +5005,7 @@ async function setupUI() {
         try {
           const session = await navigator.xr.requestSession('immersive-vr', {
             requiredFeatures: ['local-floor'],
-            optionalFeatures: ['bounded-floor', 'hand-tracking'],
+            optionalFeatures: ['bounded-floor', 'hand-tracking', 'hit-test', 'plane-detection'], // 後ろ2つ：床の自動補正用（対応端末のみ）
           });
           isARMode = false;
           renderer.xr.setSession(session);
@@ -5013,7 +5024,7 @@ async function setupUI() {
         try {
           const session = await navigator.xr.requestSession('immersive-ar', {
             requiredFeatures: ['local-floor'],
-            optionalFeatures: ['hit-test'],
+            optionalFeatures: ['hit-test', 'plane-detection'], // plane-detection：床の自動補正用（対応端末のみ）
           });
           isARMode = true;
           renderer.xr.setSession(session);
@@ -5221,6 +5232,320 @@ setupUI();
 })();
 
 /* ================================================================
+   XR SUPPORT（床の高さ合わせ・正面合わせ・一つ前に戻る・リセット）
+   - 床合わせ／正面合わせは、XRの基準空間（床基準）をずらして行う
+     → 作業台・炉・パネルの位置や、判定に使う座標の数値は一切変えない
+   - 床：VR/AR開始時に端末が検出した床で自動補正（対応端末のみ）
+         ＋ いつでも「コントローラーを床に当ててスティックを1秒押し込む」で手動補正
+   - Bボタン：一つ前の画面に戻る（工程の結果表示中は、その工程を最初からやり直す）
+   - 左グリップ（中指）＋Yボタン 2秒長押し：リセット
+     （最初のイントロへ・各工程の点数を0に・体験全体をプレイヤーの正面へ）
+================================================================ */
+
+/* ---------- 1. 基準空間のずらし ----------
+   - 体験の座標 p_world と端末の基準空間 p_base の関係：
+       p_base = (x, floorY, z) + RotY(yaw)・p_world
+   - floorY：基準空間で見た「実際の床」の高さ
+   - x, z, yaw：体験の中心（プレイヤーの立ち位置）と正面の向き */
+const _xrAlign = {
+  base: null, x: 0, floorY: 0, z: 0, yaw: 0,
+  autoDone: false, manual: false, startTime: 0, hitSource: null,
+  touchHold: 0, touchArmed: true,
+  resetHold: 0, resetArmed: true,
+};
+const _xrQ      = new THREE.Quaternion();
+const _xrYAxis  = new THREE.Vector3(0, 1, 0);
+const _xrHead   = new THREE.Vector3();
+const _xrDir    = new THREE.Vector3();
+const _xrCtrlP  = new THREE.Vector3();
+const _xrGripP  = new THREE.Vector3();
+function _xrApplyOffset() {
+  const a = _xrAlign;
+  if (!a.base || typeof XRRigidTransform === 'undefined') return;
+  _xrQ.setFromAxisAngle(_xrYAxis, a.yaw);
+  const t = new XRRigidTransform({ x: a.x, y: a.floorY, z: a.z }, { x: _xrQ.x, y: _xrQ.y, z: _xrQ.z, w: _xrQ.w });
+  renderer.xr.setReferenceSpace(a.base.getOffsetReferenceSpace(t));
+}
+/* 正面合わせ：今いる位置を体験の中心に、今向いている方向を体験の正面にする（床の高さはそのまま） */
+function _xrRecenter() {
+  const a = _xrAlign;
+  if (!a.base) return;
+  camera.getWorldPosition(_xrHead);
+  camera.getWorldDirection(_xrDir);
+  if (Math.hypot(_xrDir.x, _xrDir.z) < 1e-3) return;          // 真下・真上を向いているときは向きが決まらない
+  const yawW = Math.atan2(-_xrDir.x, -_xrDir.z);               // 体験の座標で見た顔の向き
+  const c = Math.cos(a.yaw), s = Math.sin(a.yaw);
+  const bx = a.x + c * _xrHead.x + s * _xrHead.z;              // 頭の位置（基準空間）
+  const bz = a.z - s * _xrHead.x + c * _xrHead.z;
+  a.x = bx; a.z = bz; a.yaw += yawW;
+  _xrApplyOffset();
+}
+
+/* ---------- 2. 頭の前に出す案内表示（VR/AR中のみ） ----------
+   - 床合わせ・リセットの進み具合やお知らせを表示（暗転中も見えるよう最前面に描く） */
+const _xrHudCanvas = document.createElement('canvas');
+_xrHudCanvas.width = 1024; _xrHudCanvas.height = 200;
+const _xrHudTex  = new THREE.CanvasTexture(_xrHudCanvas);
+const _xrHudMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.5, 0.5 * 200 / 1024),
+  new THREE.MeshBasicMaterial({ map: _xrHudTex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false })
+);
+_xrHudMesh.position.set(0, -0.13, -0.6);
+_xrHudMesh.renderOrder = 1000; // フェード板（999）より手前
+_xrHudMesh.visible = false;
+camera.add(_xrHudMesh);
+const _xrHud = { l1: '', l2: '', t: 0, live: null, key: '' };
+function xrHudMessage(l1, l2, seconds) { _xrHud.l1 = l1; _xrHud.l2 = l2 || ''; _xrHud.t = seconds; }
+function xrHudLive(l1, l2, progress) { _xrHud.live = { l1, l2: l2 || '', p: progress }; }
+function _xrHudRender(rd) {
+  let c = _xrHud.live;
+  _xrHud.live = null;
+  if (!c && _xrHud.t > 0) { _xrHud.t -= rd; c = { l1: _xrHud.l1, l2: _xrHud.l2, p: -1 }; }
+  if (!renderer.xr.isPresenting || !c) { _xrHudMesh.visible = false; return; }
+  const key = `${c.l1}|${c.l2}|${c.p >= 0 ? Math.round(c.p * 50) : -1}`;
+  if (key !== _xrHud.key) {
+    _xrHud.key = key;
+    const ctx = _xrHudCanvas.getContext('2d');
+    const W = _xrHudCanvas.width, H = _xrHudCanvas.height;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(12,5,0,0.88)';
+    ctx.beginPath(); ctx.roundRect(4, 4, W - 8, H - 8, 22); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,150,60,0.8)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.roundRect(4, 4, W - 8, H - 8, 22); ctx.stroke();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffd9a0'; ctx.font = 'bold 50px sans-serif';
+    ctx.fillText(c.l1, W / 2, c.l2 ? 62 : (c.p >= 0 ? 78 : H / 2));
+    if (c.l2) { ctx.fillStyle = '#a0c4e4'; ctx.font = '34px sans-serif'; ctx.fillText(c.l2, W / 2, 122); }
+    if (c.p >= 0) {
+      ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.beginPath(); ctx.roundRect(60, 158, W - 120, 18, 9); ctx.fill();
+      ctx.fillStyle = '#ff8a30'; ctx.beginPath(); ctx.roundRect(60, 158, Math.max(18, (W - 120) * Math.min(1, c.p)), 18, 9); ctx.fill();
+    }
+    _xrHudTex.needsUpdate = true;
+  }
+  _xrHudMesh.visible = true;
+}
+
+/* ---------- 3. 床の高さ：自動補正 ----------
+   - 端末が検出した床（平面検出の「床」→ 頭の真下へのヒットテスト → 最も低い大きな水平面 の順）を使う
+   - 開始後に1回だけ。頭の高さとして不自然な値（0.6m未満・2.4m超）は使わない
+   - 検出できない端末・設定では、床タッチの案内を表示する */
+const FLOOR_TOUCH_HOLD   = 1.0;   // 床タッチ：押し込み続ける時間（秒）
+const FLOOR_TOUCH_MARGIN = 0.02;  // 床に置いたコントローラーの一番低い点から床までの目安（m）
+const RESET_HOLD         = 2.0;   // リセット：長押しの時間（秒）
+function _xrPolyArea(poly) {
+  if (!poly || poly.length < 3) return 0;
+  let s = 0;
+  for (let i = 0; i < poly.length; i++) { const p = poly[i], q = poly[(i + 1) % poly.length]; s += p.x * q.z - q.x * p.z; }
+  return Math.abs(s) / 2;
+}
+function _xrDetectFloorY(frame, elapsed) {
+  const a = _xrAlign;
+  const planes = frame.detectedPlanes;
+  let labeled = null, lowest = null;
+  if (planes && planes.size) {
+    planes.forEach(p => {
+      if (p.orientation !== 'horizontal') return;
+      const pose = frame.getPose(p.planeSpace, a.base);
+      if (!pose) return;
+      const y = pose.transform.position.y, area = _xrPolyArea(p.polygon);
+      if (p.semanticLabel === 'floor' && (!labeled || area > labeled.area)) labeled = { y, area };
+      if (area >= 1.0 && (!lowest || y < lowest.y)) lowest = { y, area };
+    });
+  }
+  if (labeled) return labeled.y;
+  if (elapsed < 1500) return null;            // 平面の検出結果が届くのを少し待つ
+  if (a.hitSource) {
+    const res = frame.getHitTestResults(a.hitSource);
+    if (res.length) { const pose = res[0].getPose(a.base); if (pose) return pose.transform.position.y; }
+  }
+  return lowest ? lowest.y : null;
+}
+function _xrUpdateAutoFloor() {
+  const a = _xrAlign;
+  if (a.autoDone || !a.base) return;
+  const frame = renderer.xr.getFrame();
+  if (!frame) return;
+  const elapsed = performance.now() - a.startTime;
+  let found = null;
+  try { found = _xrDetectFloorY(frame, elapsed); } catch (e) { found = null; }
+  if (found !== null) {
+    camera.getWorldPosition(_xrHead);
+    const headAbove = (a.floorY + _xrHead.y) - found;  // 検出した床から頭までの高さ
+    if (headAbove >= 0.6 && headAbove <= 2.4) {
+      const change = found - a.floorY;
+      a.floorY = found;
+      a.autoDone = true;
+      _xrApplyOffset();
+      if (Math.abs(change) > 0.03) xrHudMessage('床の高さを自動で合わせました', `Floor aligned automatically (${change > 0 ? '+' : ''}${Math.round(change * 100)} cm)`, 4);
+      return;
+    }
+  }
+  const canDetect = !!a.hitSource || frame.detectedPlanes !== undefined;
+  if (elapsed > (canDetect ? 6000 : 1500)) {
+    a.autoDone = true;
+    xrHudMessage('床がずれているとき：コントローラーを床に当てて', 'スティックを1秒押し込む / Touch the floor & hold the stick', 7);
+  }
+}
+
+/* ---------- 4. 床の高さ：床タッチ（手動補正） ----------
+   - どちらかのコントローラーを実際の床に当て、スティックを1秒押し込むと、その高さを体験の床にする
+   - 誤操作防止：頭より0.5m以上低い位置でのみ受け付け、押し続けている間は進み具合を表示 */
+function _xrUpdateFloorTouch(rd) {
+  const a = _xrAlign;
+  if (!a.base) return;
+  let ctrl = null;
+  if (getRightGamepad()?.buttons[3]?.pressed) ctrl = rightController;
+  else if (getLeftGamepad()?.buttons[3]?.pressed) ctrl = leftController;
+  if (!ctrl) { a.touchHold = 0; a.touchArmed = true; return; }
+  if (!a.touchArmed) return;
+  ctrl.getWorldPosition(_xrCtrlP);
+  let y = _xrCtrlP.y;
+  const grip = ctrl === ctrl0 ? grip0 : ctrl === ctrl1 ? grip1 : null;
+  if (grip) { grip.getWorldPosition(_xrGripP); y = Math.min(y, _xrGripP.y); } // 握り・先端の低い方
+  camera.getWorldPosition(_xrHead);
+  if (_xrHead.y - y < 0.5) {
+    a.touchHold = 0;
+    xrHudLive('床合わせ：コントローラーを床に当てて押し込む', 'Put the controller on the floor and hold the stick', -1);
+    return;
+  }
+  a.touchHold += rd;
+  xrHudLive('床の高さを合わせています…', 'Aligning the floor — keep holding', a.touchHold / FLOOR_TOUCH_HOLD);
+  if (a.touchHold >= FLOOR_TOUCH_HOLD) {
+    const change = y - FLOOR_TOUCH_MARGIN;
+    a.floorY += change;
+    a.manual = true; a.autoDone = true;
+    a.touchArmed = false; a.touchHold = 0;
+    _xrApplyOffset();
+    xrHudMessage('床の高さを合わせました', `Floor aligned (${change > 0 ? '+' : ''}${Math.round(change * 100)} cm)`, 3);
+  }
+}
+
+/* ---------- 5. リセット ----------
+   - 最初のイントロ（INTRO_0）へ。onEnterState(INTRO_0) が各工程と点数（_phaseScores）を0に戻す
+   - recenter=true（VR/AR）：暗転中に体験全体をプレイヤーの正面へ移す
+   - 進行中の画面切り替え（暗転のコールバック）は取り消して、リセットを優先する */
+function resetExperience(recenter) {
+  playFadeSound();
+  startFade(-1, 0.4, () => {
+    if (recenter) _xrRecenter();
+    showingPhaseResult = false;
+    const prev = currentState;
+    currentState = State.INTRO_0;
+    setVisibility();
+    onEnterState(State.INTRO_0, prev);
+    hammerGroup.visible = false;
+    xrHudMessage('リセットしました', 'Reset', 2);
+    startFade(1, 0.8, null);
+  });
+}
+function _xrUpdateResetHold(rd) {
+  const a = _xrAlign;
+  const l = getLeftGamepad();
+  const held = !!(l?.buttons[1]?.pressed && l?.buttons[5]?.pressed); // 左グリップ（中指）＋Y
+  if (!held) { a.resetHold = 0; a.resetArmed = true; return; }
+  if (!a.resetArmed) return;
+  a.resetHold += rd;
+  xrHudLive('リセット：そのまま長押し', 'Reset — keep holding grip + Y', a.resetHold / RESET_HOLD);
+  if (a.resetHold >= RESET_HOLD) {
+    a.resetArmed = false; a.resetHold = 0;
+    resetExperience(true);
+  }
+}
+
+/* ---------- 6. Bボタン：一つ前の画面に戻る ----------
+   - 画面の順番：イントロ⓪→①→②→③→④→鍛造→（結果）→成形→（結果）→研ぎ→（結果）→最終結果
+   - 工程の結果表示中：その工程を最初からやり直す（従来のBボタンと同じ）
+   - 次の工程から戻る：前の工程の結果表示に戻る（前の工程の点数はそのまま）
+   - 最終結果から戻る：保存したランキングの記録を取り消す（もう一度結果に進むと保存し直す）
+   - 最初の画面（イントロ⓪）では何もしない */
+let _scoresBeforeLastSave = null; // 最終結果に入る直前のランキング
+let _lastSavedScoreId     = null; // 最終結果で保存した記録のID
+function goBack() {
+  if (_fadeDir !== 0) return;
+  const st = currentState;
+  const isGame = st === State.FORGING || st === State.SHAPING || st === State.SHARPENING;
+  if (isGame && showingPhaseResult) { showingPhaseResult = false; retryState(); return; }
+  if (st === State.INTRO_0) return;
+  playFadeSound();
+  startFade(-1, 1.0, () => {
+    _enterPrevState();
+    startFade(1, 1.0, null);
+  });
+}
+function _enterPrevState() {
+  const st = currentState;
+  const prevIntro = {
+    [State.INTRO_1]: State.INTRO_0, [State.INTRO_2]: State.INTRO_1, [State.INTRO_3]: State.INTRO_2,
+    [State.INTRO_4]: State.INTRO_3, [State.FORGING]: State.INTRO_4,
+  };
+  if (prevIntro[st]) {
+    showingPhaseResult = false;
+    currentState = prevIntro[st];
+    setVisibility();
+    onEnterState(currentState, st);
+    hammerGroup.visible = false;
+    return;
+  }
+  if (st === State.SHAPING) {
+    _phaseScores.shaping = 0;
+    currentState = State.FORGING;
+    setVisibility();
+    finishForging(forgingHitCount >= CONFIG.FORGING.TOTAL_HITS);           // 鍛造の結果表示（点数はそのまま）
+  } else if (st === State.SHARPENING) {
+    _phaseScores.sharpening = 0;
+    currentState = State.SHAPING;
+    setVisibility();
+    finishShaping(shapingHitCount >= CONFIG.SHAPING.MAX_HITS);              // 成形の結果表示
+  } else if (st === State.RESULT) {
+    if (_lastSavedScoreId !== null && _scoresBeforeLastSave &&
+        loadScores().some(s => s.id === _lastSavedScoreId)) {
+      try { localStorage.setItem(LS_KEY, JSON.stringify(_scoresBeforeLastSave)); } catch (e) { /* 保存できない環境 */ }
+    }
+    _lastSavedScoreId = null; _scoresBeforeLastSave = null;
+    currentState = State.SHARPENING;
+    setVisibility();
+    finishSharpening(strokeCount >= CONFIG.SHARPENING.TOTAL_STROKES);       // 研ぎの結果表示
+  }
+}
+
+/* ---------- 7. セッション開始・終了と毎フレームの更新 ---------- */
+renderer.xr.addEventListener('sessionstart', () => {
+  const a = _xrAlign;
+  a.base = renderer.xr.getReferenceSpace(); // three.js が開始時に取得した床基準の空間（ずらす前）
+  a.x = 0; a.z = 0; a.yaw = 0; a.floorY = 0;
+  a.autoDone = false; a.manual = false; a.startTime = performance.now();
+  a.touchHold = 0; a.touchArmed = true; a.resetHold = 0; a.resetArmed = true;
+  a.hitSource = null;
+  const session = renderer.xr.getSession();
+  try {
+    if (session && session.requestHitTestSource && typeof XRRay !== 'undefined') {
+      session.requestReferenceSpace('viewer')
+        .then(vs => session.requestHitTestSource({ space: vs, offsetRay: new XRRay({ x: 0, y: 0, z: 0, w: 1 }, { x: 0, y: -1, z: 0, w: 0 }) }))
+        .then(src => { if (renderer.xr.getSession() === session) a.hitSource = src; else src.cancel(); })
+        .catch(() => { /* ヒットテスト非対応：平面検出または床タッチで合わせる */ });
+    }
+  } catch (e) { /* 同上 */ }
+});
+renderer.xr.addEventListener('sessionend', () => {
+  const a = _xrAlign;
+  try { if (a.hitSource) a.hitSource.cancel(); } catch (e) { /* 終了済み */ }
+  a.hitSource = null; a.base = null;
+  _xrHud.t = 0; _xrHudMesh.visible = false;
+});
+let _xrSupportLast = 0;
+function updateXrSupport() {
+  const now = performance.now();
+  const rd = _xrSupportLast ? Math.min(0.1, (now - _xrSupportLast) / 1000) : 0; // 長押しは実時間で測る
+  _xrSupportLast = now;
+  if (renderer.xr.isPresenting) {
+    _xrUpdateAutoFloor();
+    _xrUpdateFloorTouch(rd);
+    _xrUpdateResetHold(rd);
+  }
+  _xrHudRender(rd);
+}
+
+/* ================================================================
    FLAT MODE（PC・スマホ・タブレットで体験）
    - VR/AR機器がなくても、マウス・タッチ・キーボードで同じ3工程を体験できるモード
    - 判定・スコア計算・演出は既存の処理をそのまま使う
@@ -5289,6 +5614,9 @@ const _flat = {
   camSnap: true,
   coarse: false,                           // タッチ操作かどうか（案内文の切り替え用）
   hudKey: '',
+  resetPressing: false, resetHold: 0,      // 「↺ リセット」の長押し
+  toast: '', toastT: 0,                    // 短いお知らせ（リセットしました 等）
+  lastNow: 0,
 };
 
 /* ボタンを短く押す（既存の処理は「押された瞬間」で判定するため、数フレームだけ押した状態にする） */
@@ -5544,6 +5872,8 @@ const _flatEls = {
   panel:     document.getElementById('flat-panel'),
   fs:        document.getElementById('flat-fs'),
   exit:      document.getElementById('flat-exit'),
+  reset:     document.getElementById('flat-reset'),
+  resetFill: document.getElementById('flat-reset-fill'),
 };
 /* スコアパネルと同じ内容を画面上部にも表示（小さな画面でも読めるように）
    - updateScorePanel から呼ばれる。体験中以外は画面ごと非表示のため表示されない */
@@ -5554,15 +5884,17 @@ function flatShowScoreText(text) {
   el.hidden = !text;
 }
 function _flatShow(el, show) { if (el && el.hidden === show) el.hidden = !show; }
+function _flatToast(text, seconds) { _flat.toast = text; _flat.toastT = seconds; }
 function _flatHintHtml() {
   const st = currentState, touch = _flat.coarse;
   if (isIntroState(st)) {
-    return touch ? '画面をタップ または <b>Ⓐ</b> で次へ<small>Tap the screen or Ⓐ to continue</small>'
-                 : '画面をクリック・<b>Space</b> キー または <b>Ⓐ</b> で次へ<small>Click, press Space, or Ⓐ to continue</small>';
+    const back = st === State.INTRO_0 ? '' : '　<b>Ⓑ</b> で戻る';
+    return touch ? `画面をタップ または <b>Ⓐ</b> で次へ${back}<small>Tap the screen or Ⓐ to continue${back ? ' · Ⓑ to go back' : ''}</small>`
+                 : `画面をクリック・<b>Space</b> キー または <b>Ⓐ</b> で次へ${back}<small>Click, press Space, or Ⓐ to continue${back ? ' · Ⓑ / R to go back' : ''}</small>`;
   }
   if (st === State.RESULT) {
-    return touch ? '画面をタップ または <b>Ⓐ</b> でもう一度<small>Tap or Ⓐ to play again</small>'
-                 : 'クリック・<b>Space</b> または <b>Ⓐ</b> でもう一度<small>Click, Space, or Ⓐ to play again</small>';
+    return touch ? '画面をタップ または <b>Ⓐ</b> でもう一度　<b>Ⓑ</b> で戻る<small>Tap or Ⓐ to play again · Ⓑ to go back</small>'
+                 : 'クリック・<b>Space</b> または <b>Ⓐ</b> でもう一度　<b>Ⓑ</b> で戻る<small>Click, Space, or Ⓐ to play again · Ⓑ / R to go back</small>';
   }
   if (showingPhaseResult) return '<b>Ⓐ</b> 次の工程へ ／ <b>Ⓑ</b> この工程をやり直す<small>Ⓐ Next phase / Ⓑ Retry this phase</small>';
   if (_flat.panelView) return (touch ? '画面をタップ' : 'クリック') + ' または <b>🔨 作業に戻る</b> で作業へ<small>Tap or “🔨 作業に戻る” to return</small>';
@@ -5585,14 +5917,15 @@ function _flatUpdateHud(key) {
   const isGame = _flatIsGame(st);
   const pan = _flatUsesPan(key);
   _flatEls.hud.classList.toggle('is-panel', key === 'panel' || key === 'title' || key === 'result'); // パネル表示中はスコア表示を隠す
-  _flatShow(_flatEls.b, isGame);
+  _flatShow(_flatEls.b, st !== State.INTRO_0); // 最初の画面以外は「戻る」
   _flatShow(_flatEls.x, st === State.SHAPING && !showingPhaseResult);
   _flatShow(_flatEls.panel, isGame && !showingPhaseResult);
   const showPower = _flat.charging && _flat.action === 'hammer';
   _flatShow(_flatEls.power, showPower);
   if (showPower) _flatEls.powerFill.style.width = `${Math.round(_flat.charge * 100)}%`;
   const portraitWork = !pan && camera.aspect < 0.7 && (key === 'forging' || key === 'shaping' || key === 'sharpening');
-  const note = pan ? '◀ ▶ 左右にスワイプで 日本語 / English' : portraitWork ? '📱 横向きで大きく表示 / Rotate' : '';
+  const note = _flat.toastT > 0 ? _flat.toast
+             : pan ? '◀ ▶ 左右にスワイプで 日本語 / English' : portraitWork ? '📱 横向きで大きく表示 / Rotate' : '';
   if (_flatEls.note.textContent !== note) _flatEls.note.textContent = note;
   _flatShow(_flatEls.note, !!note);
   const hudKey = [st, showingPhaseResult, _flat.panelView, _flat.coarse].join('|');
@@ -5600,6 +5933,7 @@ function _flatUpdateHud(key) {
     _flat.hudKey = hudKey;
     _flatEls.hint.innerHTML = _flatHintHtml();
     _flatEls.a.textContent = st === State.RESULT ? 'Ⓐ もう一度' : (isGame && !showingPhaseResult ? 'Ⓐ 終了' : 'Ⓐ 次へ');
+    _flatEls.b.textContent = isGame && showingPhaseResult ? 'Ⓑ やり直し' : 'Ⓑ 戻る';
     _flatEls.panel.textContent = _flat.panelView ? '🔨 作業に戻る' : '📋 説明';
   }
 }
@@ -5608,6 +5942,21 @@ function _flatUpdateHud(key) {
 function updateFlatMode(delta) {
   if (!isFlatMode) return;
   const st = currentState;
+
+  // 「↺ リセット」の長押し（実時間で2秒）とお知らせの表示時間
+  const now = performance.now();
+  const rd = _flat.lastNow ? Math.min(0.1, (now - _flat.lastNow) / 1000) : 0;
+  _flat.lastNow = now;
+  if (_flat.toastT > 0) _flat.toastT -= rd;
+  if (_flat.resetPressing) {
+    _flat.resetHold += rd;
+    if (_flat.resetHold >= RESET_HOLD) {
+      _flat.resetPressing = false; _flat.resetHold = 0;
+      resetExperience(false);
+      _flatToast('↺ リセットしました / Reset', 2);
+    }
+  }
+  _flatEls.resetFill.style.width = `${Math.round(Math.min(1, _flat.resetHold / RESET_HOLD) * 100)}%`;
 
   // 押したボタンを規定フレーム後に離す
   for (let i = _flat.pulses.length - 1; i >= 0; i--) {
@@ -5712,6 +6061,7 @@ function enterFlatMode() {
   _flat.pointerId = null;
   _flat.lastState = null; _flat.lastShowing = null; _flat.hudKey = '';
   _flat.camSnap = true; _flat.cooldown = 0;
+  _flat.resetPressing = false; _flat.resetHold = 0; _flat.toastT = 0; _flat.lastNow = 0;
   rightController = flatRightHand;
   leftController  = flatLeftHand;
   scene.add(flatRightHand);
@@ -5764,6 +6114,22 @@ function exitFlatMode() {
   tapBtn(_flatEls.b, () => _flatPress(flatRightHand.gamepad, FLAT_BTN.B));
   tapBtn(_flatEls.x, () => _flatPress(flatLeftHand.gamepad, FLAT_BTN.X));
   tapBtn(_flatEls.panel, () => { _flat.panelView = !_flat.panelView; _flat.panX = -1; });
+
+  // 「↺ リセット」：2秒長押しでリセット（短く押したときは案内だけ出す）
+  _flatEls.reset.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    resumeAudio();
+    try { _flatEls.reset.setPointerCapture(e.pointerId); } catch (err) { /* 未対応でも動作する */ }
+    _flat.resetPressing = true; _flat.resetHold = 0;
+  });
+  const resetRelease = () => {
+    if (_flat.resetPressing && _flat.resetHold < RESET_HOLD) _flatToast('2秒長押しでリセット / Hold 2 s to reset', 2);
+    _flat.resetPressing = false; _flat.resetHold = 0;
+  };
+  _flatEls.reset.addEventListener('pointerup', resetRelease);
+  _flatEls.reset.addEventListener('pointercancel', resetRelease);
+  _flatEls.reset.addEventListener('contextmenu', (e) => e.preventDefault());
 
   // 全画面表示（対応ブラウザのみボタンを表示）
   const root = document.documentElement;
@@ -5929,6 +6295,8 @@ renderer.setAnimationLoop((t) => {
 
   /* PC・スマホ・タブレット体験：画面操作を仮想の手（コントローラー）とカメラに反映 */
   updateFlatMode(delta);
+  /* 床の高さ合わせ・リセット（VR/AR）と案内表示 */
+  updateXrSupport();
 
   /* 入力処理
     - A/Bボタンなどの全体入力を処理 */
