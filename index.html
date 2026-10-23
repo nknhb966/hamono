@@ -408,6 +408,7 @@
     padding: 5px 12px; border-radius: 10px; font-size: 12px; font-weight: 700;
     background: rgba(0,0,0,0.60); border: 1px solid rgba(255,160,60,0.40);
   }
+  .flat-note.is-cue { font-size: 13px; color: #ffe2b0; border-color: rgba(255,190,90,0.9); box-shadow: 0 0 12px rgba(255,150,40,0.45); }
   .flat-power-bar { display: block; width: min(200px, 46vw); height: 10px; border-radius: 5px; overflow: hidden; background: rgba(255,255,255,0.10); }
   #flat-power-fill { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #ffcc44, #ff5522); }
   @media (max-width: 640px) {
@@ -642,6 +643,7 @@
       <ul>
         <li><span class="tag">右Aボタン</span> 次のフェーズへ進む（結果確認後） / Advance to next phase (after result)</li>
         <li><span class="tag">右Bボタン</span> 一つ前の画面に戻る（工程の結果表示中は、その工程をやり直す）/ Back to the previous screen (on a phase result: retry the phase)</li>
+        <li><span class="tag">左スティック</span> 倒すと前後左右に移動（見ている方向が前）/ Tilt to move (forward = where you look)</li>
         <li><span class="tag">左グリップ＋Yボタン</span> 2秒長押しでリセット：最初のイントロに戻り、点数を0にして、向いている方向の正面に表示 / Hold 2 s to reset and face the scene toward you</li>
         <li>床の高さ：VR/AR開始時に自動で合わせます。ずれているときはコントローラーを床に当て、<span class="tag">スティック</span> を1秒押し込む / Floor auto-aligns; to fix it, touch the floor with a controller and hold the stick for 1 s</li>
       </ul>
@@ -653,7 +655,7 @@
         <li><span class="tag">↺ リセット</span> を2秒長押しで最初のイントロに戻り、点数を0に / Hold “Reset” for 2 s</li>
         <li>鍛造：鉄をドラッグして炉⇔作業台へ。タップ／クリックでハンマーを振る / Drag the iron, tap to hammer</li>
         <li>成形：ゾーンをタップ／クリックで叩く（長押しで強く）。<span class="tag">Ⓧ</span>・右クリックで表裏反転 / Hold for a stronger hit</li>
-        <li>研ぎ：押したまま上下にスライドで研ぐ、左右で角度（PCはホイール・← → も可）/ Slide up-down, left-right for angle</li>
+        <li>研ぎ：① 左右に動かして刃の角度を −15° に → ② そのまま上下に動かして研ぐ（PCはホイール・← → でも角度を変えられる）/ ① Left-right: angle ② Up-down: sharpen</li>
         <li><span class="tag">📋 説明</span> で説明パネルを表示。スマホ縦向きでは左右スワイプで 日本語⇔English / Swipe to switch columns</li>
       </ul>
 
@@ -1236,16 +1238,24 @@ function playFadeSound() {
   try {
     resumeAudio();
     const ctx = audioCtx;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(80, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(55, ctx.currentTime + 0.6);
-    gain.gain.setValueAtTime(0.0, ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.22, ctx.currentTime + 0.05);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.7);
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.7);
+    const t = ctx.currentTime;
+    // [音量] 低い音の高さ（80→55Hz）はそのまま、倍音を重ねて他の効果音と同程度の音量にする
+    //   （低音だけでは、ヘッドセット・スマホの小さなスピーカーではほとんど聞こえないため）
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(0.0, t);
+    master.gain.linearRampToValueAtTime(0.20, t + 0.03);
+    master.gain.exponentialRampToValueAtTime(0.001, t + 0.8);
+    master.connect(ctx.destination);
+    for (const [mul, amp] of [[1, 0.8], [2, 0.8], [3, 0.8], [4, 0.6], [5, 0.45], [6, 0.3], [7, 0.2]]) {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(80 * mul, t);
+      osc.frequency.exponentialRampToValueAtTime(55 * mul, t + 0.6);
+      g.gain.value = amp;
+      osc.connect(g); g.connect(master);
+      osc.start(t); osc.stop(t + 0.8);
+    }
   } catch(e) {}
 }
 
@@ -5240,6 +5250,7 @@ setupUI();
    - Bボタン：一つ前の画面に戻る（工程の結果表示中は、その工程を最初からやり直す）
    - 左グリップ（中指）＋Yボタン 2秒長押し：リセット
      （最初のイントロへ・各工程の点数を0に・体験全体をプレイヤーの正面へ）
+   - 左スティック：前後左右に移動（見ている方向が前）
 ================================================================ */
 
 /* ---------- 1. 基準空間のずらし ----------
@@ -5284,10 +5295,10 @@ function _xrRecenter() {
 /* ---------- 2. 頭の前に出す案内表示（VR/AR中のみ） ----------
    - 床合わせ・リセットの進み具合やお知らせを表示（暗転中も見えるよう最前面に描く） */
 const _xrHudCanvas = document.createElement('canvas');
-_xrHudCanvas.width = 1024; _xrHudCanvas.height = 200;
+_xrHudCanvas.width = 1400; _xrHudCanvas.height = 200;   // 長い案内文も見切れない幅（文字の大きさは従来と同じ）
 const _xrHudTex  = new THREE.CanvasTexture(_xrHudCanvas);
 const _xrHudMesh = new THREE.Mesh(
-  new THREE.PlaneGeometry(0.5, 0.5 * 200 / 1024),
+  new THREE.PlaneGeometry(0.68, 0.68 * 200 / 1400),
   new THREE.MeshBasicMaterial({ map: _xrHudTex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false })
 );
 _xrHudMesh.position.set(0, -0.13, -0.6);
@@ -5313,9 +5324,13 @@ function _xrHudRender(rd) {
     ctx.strokeStyle = 'rgba(255,150,60,0.8)'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.roundRect(4, 4, W - 8, H - 8, 22); ctx.stroke();
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#ffd9a0'; ctx.font = 'bold 50px sans-serif';
+    // 万一それでも幅を超える文は、収まる大きさまで文字を小さくする
+    const fitFont = (text, weight, px) => {
+      for (; px > 20; px -= 2) { ctx.font = `${weight}${px}px sans-serif`; if (ctx.measureText(text).width <= W - 70) return; }
+    };
+    ctx.fillStyle = '#ffd9a0'; fitFont(c.l1, 'bold ', 50);
     ctx.fillText(c.l1, W / 2, c.l2 ? 62 : (c.p >= 0 ? 78 : H / 2));
-    if (c.l2) { ctx.fillStyle = '#a0c4e4'; ctx.font = '34px sans-serif'; ctx.fillText(c.l2, W / 2, 122); }
+    if (c.l2) { ctx.fillStyle = '#a0c4e4'; fitFont(c.l2, '', 34); ctx.fillText(c.l2, W / 2, 122); }
     if (c.p >= 0) {
       ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.beginPath(); ctx.roundRect(60, 158, W - 120, 18, 9); ctx.fill();
       ctx.fillStyle = '#ff8a30'; ctx.beginPath(); ctx.roundRect(60, 158, Math.max(18, (W - 120) * Math.min(1, c.p)), 18, 9); ctx.fill();
@@ -5389,7 +5404,8 @@ function _xrUpdateAutoFloor() {
 
 /* ---------- 4. 床の高さ：床タッチ（手動補正） ----------
    - どちらかのコントローラーを実際の床に当て、スティックを1秒押し込むと、その高さを体験の床にする
-   - 誤操作防止：頭より0.5m以上低い位置でのみ受け付け、押し続けている間は進み具合を表示 */
+   - 誤操作防止：頭より0.25m以上低い位置でのみ受け付け、押し続けている間は進み具合を表示 */
+const FLOOR_TOUCH_MIN_BELOW_HEAD = 0.25;
 function _xrUpdateFloorTouch(rd) {
   const a = _xrAlign;
   if (!a.base) return;
@@ -5403,7 +5419,7 @@ function _xrUpdateFloorTouch(rd) {
   const grip = ctrl === ctrl0 ? grip0 : ctrl === ctrl1 ? grip1 : null;
   if (grip) { grip.getWorldPosition(_xrGripP); y = Math.min(y, _xrGripP.y); } // 握り・先端の低い方
   camera.getWorldPosition(_xrHead);
-  if (_xrHead.y - y < 0.5) {
+  if (_xrHead.y - y < FLOOR_TOUCH_MIN_BELOW_HEAD) {
     a.touchHold = 0;
     xrHudLive('床合わせ：コントローラーを床に当てて押し込む', 'Put the controller on the floor and hold the stick', -1);
     return;
@@ -5418,6 +5434,42 @@ function _xrUpdateFloorTouch(rd) {
     _xrApplyOffset();
     xrHudMessage('床の高さを合わせました', `Floor aligned (${change > 0 ? '+' : ''}${Math.round(change * 100)} cm)`, 3);
   }
+}
+
+/* ---------- 4b. 左スティックで移動（前後左右） ----------
+   - 見ている方向（顔の向き）が「前」。倒した量に応じて最大 1.0m/秒 までなめらかに変わる
+   - 床合わせ・正面合わせと同じく基準空間をずらして移動する（体験の座標・判定はそのまま）
+   - スティックを押し込んでいる間（床合わせ中）は移動しない。体験の床（20m四方）の外へは出ない */
+const MOVE_SPEED    = 1.0;   // m/秒
+const MOVE_DEADZONE = 0.15;  // スティックの遊び
+const MOVE_LIMIT    = 9.5;   // 体験の中心からの移動範囲（m）
+function _xrUpdateLocomotion(rd) {
+  const a = _xrAlign;
+  if (!a.base || rd <= 0) return;
+  const gp = getLeftGamepad();
+  if (!gp || !gp.axes || gp.buttons[3]?.pressed) return;
+  const ax = gp.axes.length >= 4 ? gp.axes[2] : (gp.axes[0] || 0);   // 左右（右が＋）
+  const ay = gp.axes.length >= 4 ? gp.axes[3] : (gp.axes[1] || 0);   // 前後（手前に倒すと＋）
+  const mag = Math.hypot(ax, ay);
+  if (mag < MOVE_DEADZONE) return;
+  const k = Math.min(1, (mag - MOVE_DEADZONE) / (1 - MOVE_DEADZONE)) / mag; // 遊びの分を除いて 0〜1 に
+  const sx = ax * k, sy = ay * k;
+  camera.getWorldDirection(_xrDir);
+  const h = Math.hypot(_xrDir.x, _xrDir.z);
+  if (h < 1e-3) return;
+  const fx = _xrDir.x / h, fz = _xrDir.z / h;          // 前（水平）
+  const rx = -fz, rz = fx;                              // 右
+  let dx = (fx * -sy + rx * sx) * MOVE_SPEED * rd;      // 体験の座標での移動量
+  let dz = (fz * -sy + rz * sx) * MOVE_SPEED * rd;
+  camera.getWorldPosition(_xrHead);
+  if (Math.abs(_xrHead.x + dx) > MOVE_LIMIT) dx = 0;
+  if (Math.abs(_xrHead.z + dz) > MOVE_LIMIT) dz = 0;
+  if (!dx && !dz) return;
+  // プレイヤーを体験の座標で (dx, dz) 動かす ＝ 体験の中心を基準空間で逆向きにずらす
+  const c = Math.cos(a.yaw), s = Math.sin(a.yaw);
+  a.x -= c * dx + s * dz;
+  a.z -= -s * dx + c * dz;
+  _xrApplyOffset();
 }
 
 /* ---------- 5. リセット ----------
@@ -5540,6 +5592,7 @@ function updateXrSupport() {
   if (renderer.xr.isPresenting) {
     _xrUpdateAutoFloor();
     _xrUpdateFloorTouch(rd);
+    _xrUpdateLocomotion(rd);
     _xrUpdateResetHold(rd);
   }
   _xrHudRender(rd);
@@ -5616,6 +5669,7 @@ const _flat = {
   hudKey: '',
   resetPressing: false, resetHold: 0,      // 「↺ リセット」の長押し
   toast: '', toastT: 0,                    // 短いお知らせ（リセットしました 等）
+  angleCue: false, angleCueStart: 0,       // 研ぎ：最初だけ出す「まず左右で角度」の目印
   lastNow: 0,
 };
 
@@ -5909,8 +5963,8 @@ function _flatHintHtml() {
       : '<b>クリック</b>：叩く（長押しで強く）／ <b>右クリック・F</b>：表裏反転<br>＋は表から、−は裏から叩く<small>Click to hammer (hold = stronger) · Right-click or F flips</small>';
   }
   return touch
-    ? '<b>押したまま上下</b>：研ぐ ／ <b>左右</b>：刃の角度（目標 −15°）<small>Hold and slide up/down to sharpen · left/right sets the angle (target −15°)</small>'
-    : '<b>ドラッグ上下</b>：研ぐ ／ <b>左右・ホイール・← →</b>：刃の角度（目標 −15°）<small>Drag up/down to sharpen · left/right, wheel or ← → for the angle</small>';
+    ? '① <b>↔ 左右</b>に動かして刃の角度を −15° に<br>② <b>↕ そのまま上下</b>に動かして研ぐ<small>① Left/right: set the angle (−15°)  ② Up/down: sharpen</small>'
+    : '① <b>↔ 左右にドラッグ</b>（ホイール・← → でも可）で刃の角度を −15° に<br>② <b>↕ そのまま上下にドラッグ</b>して研ぐ<small>① Drag left/right (or wheel, ← →): angle −15°  ② Drag up/down: sharpen</small>';
 }
 function _flatUpdateHud(key) {
   const st = currentState;
@@ -5924,8 +5978,11 @@ function _flatUpdateHud(key) {
   _flatShow(_flatEls.power, showPower);
   if (showPower) _flatEls.powerFill.style.width = `${Math.round(_flat.charge * 100)}%`;
   const portraitWork = !pan && camera.aspect < 0.7 && (key === 'forging' || key === 'shaping' || key === 'sharpening');
+  const cue  = _flat.toastT <= 0 && _flat.angleCue && key === 'sharpening';
   const note = _flat.toastT > 0 ? _flat.toast
+             : cue ? '【 まず ↔ 左右で角度を −15° に 】'
              : pan ? '◀ ▶ 左右にスワイプで 日本語 / English' : portraitWork ? '📱 横向きで大きく表示 / Rotate' : '';
+  _flatEls.note.classList.toggle('is-cue', cue);
   if (_flatEls.note.textContent !== note) _flatEls.note.textContent = note;
   _flatShow(_flatEls.note, !!note);
   const hudKey = [st, showingPhaseResult, _flat.panelView, _flat.coarse].join('|');
@@ -5971,8 +6028,13 @@ function updateFlatMode(delta) {
     _flatResetInteraction();
     _flatDefaultAim();
     _flat.panelView = false; _flat.panX = -1; _flat.camSnap = true;
-    if (st === State.SHARPENING) _flat.angle = 0;
+    if (st === State.SHARPENING) {
+      _flat.angle = 0;
+      _flat.angleCue = true;              // 研ぎの開始時だけ「まず左右で角度」の目印を出す
+      _flat.angleCueStart = _flat.angle;
+    }
   }
+  if (_flat.angleCue && Math.abs(_flat.angle - _flat.angleCueStart) >= 1) _flat.angleCue = false; // 角度を動かしたら消す
   // 工程の結果表示の切り替わり（結果は説明パネルに表示されるため、パネルを映す）
   if (_flat.lastShowing !== showingPhaseResult) {
     _flat.lastShowing = showingPhaseResult;
